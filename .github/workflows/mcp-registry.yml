@@ -1,0 +1,29 @@
+name: MCP Registry
+
+# Publishes server.json to the official MCP Registry. Run it after the release
+# image is public: the registry pulls the image anonymously to check its label.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  MCP_PUBLISHER_VERSION: 1.8.4
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mcp-publisher
+        run: |
+          base="https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}"
+          curl -fsSLO "$base/mcp-publisher_linux_amd64.tar.gz"
+          curl -fsSL "$base/registry_${MCP_PUBLISHER_VERSION}_checksums.txt" | grep ' mcp-publisher_linux_amd64.tar.gz$' | sha256sum -c -
+          tar xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
+      - name: Check server.json matches the image tag
+        run: python3 -c 'import json, tomllib; s = json.load(open("server.json")); v = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]; assert s["version"] == v and s["packages"][0]["identifier"] == "ghcr.io/ocnai/kebivo:" + v, (s["version"], v)'
+      - run: ./mcp-publisher login github-oidc
+      - run: ./mcp-publisher publish

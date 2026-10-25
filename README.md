@@ -6,10 +6,8 @@ Kebivo collects unanswered questions and proposed knowledge corrections from AI 
 
 [![CI](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-<!-- Enable these once the first release and image are published:
 [![Release](https://img.shields.io/github/v/release/OCNAI/kebivo?sort=semver)](https://github.com/OCNAI/kebivo/releases)
 [![Container image](https://img.shields.io/badge/image-ghcr.io%2Focnai%2Fkebivo-2496ED?logo=docker&logoColor=white)](https://github.com/OCNAI/kebivo/pkgs/container/kebivo)
--->
 
 > Kebivo works alongside observability and tracing tools such as Langfuse and Phoenix. Those tools show engineers what happened during a run. Kebivo collects gaps reported by the agent and sends them to the people who maintain the knowledge. It is not a RAG engine: it does not score traces, retrieve documents or answer questions. See [What it does not do](#what-it-does-not-do).
 
@@ -17,7 +15,7 @@ Kebivo collects unanswered questions and proposed knowledge corrections from AI 
 
 In the demo, an agent calls `report_knowledge_gap` over MCP. The report appears at the top of the inbox. An earlier duplicate is merged into it, leaving 2 occurrences and a history entry. A routing rule then delivers it to the IT webhook.
 
-> **Status: release candidate 0.1.0. There is no tagged release or prebuilt image yet.** Build the image locally from this repository. Licensed under [Apache-2.0](LICENSE).
+> **Status: 0.1.0, the first release.** Run the published image `ghcr.io/ocnai/kebivo:0.1.0` (`linux/amd64`, `linux/arm64`) or build it from this repository. Licensed under [Apache-2.0](LICENSE).
 
 Start with the [Quickstart](#quickstart). For framework tutorials, see the [Kebivo Guides](https://kebivo.com/guides/). For deployment, API behavior and limits, use the [technical documentation](docs/index.md).
 
@@ -79,6 +77,18 @@ curl -fsS http://127.0.0.1:8000/health/ready
 ```
 
 `<REPOSITORY_URL>` is the address you cloned from. The first build takes a few minutes. Readiness returns `{"status":"ok",...}` once migrations are applied.
+
+**Or run the published image** instead of cloning and building. It is the same container; keep `kebivo.env` private and back it up apart from the data volume.
+
+```sh
+(umask 077; printf 'SECRET_KEY=%s\nENCRYPTION_KEY=%s\nALLOWED_ORIGINS=http://127.0.0.1:8000\n' \
+  "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > kebivo.env)
+docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 \
+  -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.1.0
+curl -fsS --retry 30 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/health/ready
+```
+
+With this container, run the step 2 command as `docker exec -it kebivo python -m kebivo.cli bootstrap --email admin@example.org`, and stop it with `docker stop kebivo`; data stays in the `kebivo-data` volume.
 
 **2. Create the administrator.** The command asks for a password (at least 12 characters).
 
@@ -156,7 +166,6 @@ Retention is **on by default**: feedback older than 180 days, finished delivery 
 - **Rate limits** are counted in memory and reset when the container restarts.
 - **Deleted feedback** cannot be recalled from destinations that already received it or from existing backups.
 - **No encryption at rest** for feedback content.
-- **Not yet published:** no public image, tag or release. Build locally.
 
 ## Documentation
 

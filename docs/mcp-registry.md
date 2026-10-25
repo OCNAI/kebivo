@@ -1,6 +1,6 @@
 # MCP Registry metadata
 
-`server.json` describes Kebivo for the [official MCP Registry](https://registry.modelcontextprotocol.io). Nothing has been published. Publishing needs owner approval (launch plan §7, item 11).
+`server.json` describes Kebivo for the [official MCP Registry](https://registry.modelcontextprotocol.io).
 
 ## How Kebivo is listed
 
@@ -14,9 +14,12 @@ The registry verifies that we own the image through the `io.modelcontextprotocol
 
 MCP clients can start the container from this entry, but Kebivo is not usable until an administrator has been bootstrapped, a project has been created and a project token has been issued (see the README quickstart). The token goes in the `Authorization` header variable.
 
-## Before publishing
+## Publishing
 
-1. OA-3 is complete: `server.json` and the `Dockerfile` label use `io.github.ocnai/kebivo`, and the image identifier uses the lower-case `ghcr.io/ocnai/kebivo` namespace.
-2. After OA-5, make sure `ghcr.io/ocnai/kebivo:<version>` is public and has the label. `version` and the identifier tag must equal the `pyproject.toml` version.
-3. Validate: `mcp-publisher validate server.json`. This needs no login, but it sends the file to the registry's validation endpoint.
-4. With approval only: `mcp-publisher login github`, then `mcp-publisher publish`.
+The **MCP Registry** workflow (`.github/workflows/mcp-registry.yml`) publishes `server.json`. Run it by hand after a release:
+
+1. `ghcr.io/ocnai/kebivo:<version>` must be public and carry the label. The registry pulls it anonymously and rejects private images.
+2. `version` and the image tag in `identifier` must equal the `pyproject.toml` version; the workflow checks this.
+3. The workflow signs in with GitHub OIDC (`mcp-publisher login github-oidc`), which proves ownership of the `io.github.ocnai` namespace without a stored secret, then runs `mcp-publisher publish`.
+
+To check the file before a release, `mcp-publisher validate server.json` needs no login, but it sends the file to the registry's validation endpoint.

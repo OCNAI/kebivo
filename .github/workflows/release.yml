@@ -1,5 +1,7 @@
-name: Release candidate (private artifact)
+name: Release
 
+# A v*.*.* tag runs the release checks, then pushes the image to GHCR.
+# Manual dispatch runs the checks only.
 on:
   workflow_dispatch:
     inputs:
@@ -7,8 +9,8 @@ on:
         description: Version from pyproject.toml (x.y.z)
         required: true
       previous_ref:
-        description: Previous release tag or Phase 6 gate commit
-        required: true
+        description: 'Previous release tag (default is the last v*.*.* tag, else the root commit)'
+        required: false
   push:
     tags:
       - 'v*.*.*'
@@ -16,8 +18,11 @@ on:
 permissions:
   contents: read
 
+env:
+  IMAGE: ghcr.io/ocnai/kebivo
+
 jobs:
-  candidate:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,25 +39,60 @@ jobs:
           node-version: '24.14.0'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Install Claude Code CLI for MCP configuration smoke
+        run: npm install --global @anthropic-ai/claude-code@2.1.301
       - run: make install
-      - name: Check candidate without publishing
+      - name: Release checks
         env:
           VERSION: ${{ github.event.inputs.version || github.ref_name }}
-          PREVIOUS_REF: ${{ github.event.inputs.previous_ref || vars.KEBIVO_PREVIOUS_REF }}
+          PREVIOUS_REF: ${{ github.event.inputs.previous_ref }}
         run: |
           VERSION="${VERSION#v}"
+          if [[ -z "$PREVIOUS_REF" ]]; then
+            PREVIOUS_REF="$(git describe --tags --abbrev=0 --match 'v*.*.*' HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+          fi
+          echo "Upgrade check from $PREVIOUS_REF"
           make release-check VERSION="$VERSION" PREVIOUS_REF="$PREVIOUS_REF"
-      - name: Save candidate image
-        run: docker save "kebivo:$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" -o kebivo-image.tar
-      - uses: actions/upload-artifact@v4
+
+  publish:
+    needs: check
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
-          name: kebivo-candidate-image
-          path: kebivo-image.tar
-          retention-days: 7
-      # Owner approval is required before setting KEBIVO_PUBLISH. No registry
-      # namespace or release assets are configured in this private workflow.
-      - name: Publishing is disabled pending owner approval
-        if: vars.KEBIVO_PUBLISH == 'true'
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image metadata
+        id: meta
         run: |
-          echo 'Publishing requires a separately reviewed workflow and owner-approved registry.' >&2
-          exit 1
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          build-args: |
+            KEBIVO_VERSION=${{ steps.meta.outputs.version }}
+            KEBIVO_REVISION=${{ github.sha }}
+            KEBIVO_CREATED=${{ steps.meta.outputs.created }}
+      - name: Check published labels
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          for platform in linux/amd64 linux/arm64; do
+            labels="$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format "{{ json (index .Image \"$platform\").Config.Labels }}")"
+            echo "$platform $labels"
+            python3 -c 'import json, sys; l = json.loads(sys.argv[1]); assert l["io.modelcontextprotocol.server.name"] == "io.github.ocnai/kebivo"; assert l["org.opencontainers.image.version"] == sys.argv[2]; assert l["org.opencontainers.image.source"] == "https://github.com/OCNAI/kebivo"' "$labels" "$VERSION"
+          done

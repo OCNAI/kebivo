@@ -1,5 +1,6 @@
 # Build the static frontend with Node, then copy its output into the Python image.
-FROM node:24-alpine AS frontend-build
+# The output is the same on every platform, so build it natively.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend-build
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci

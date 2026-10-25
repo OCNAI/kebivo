@@ -22,6 +22,18 @@ curl -fsS http://127.0.0.1:8000/health/ready
 
 Replace `<REPOSITORY_URL>` with the repository address. The first build takes a few minutes. Once migrations finish, readiness returns `{"status":"ok",...}`.
 
+**Or run the published image** instead of cloning and building. It is the same container; keep `kebivo.env` private and back it up apart from the data volume.
+
+```sh
+(umask 077; printf 'SECRET_KEY=%s\nENCRYPTION_KEY=%s\nALLOWED_ORIGINS=http://127.0.0.1:8000\n' \
+  "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > kebivo.env)
+docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 \
+  -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.1.0
+curl -fsS --retry 30 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/health/ready
+```
+
+With this container, run the step 2 command as `docker exec -it kebivo python -m kebivo.cli bootstrap --email admin@example.org`, and stop it with `docker stop kebivo`; data stays in the `kebivo-data` volume.
+
 **2. Create the administrator.** The command asks for a password (at least 12 characters).
 
 ```sh
