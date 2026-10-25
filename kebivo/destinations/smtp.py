@@ -18,29 +18,36 @@ from kebivo.security.outbound import allowed_address
 
 
 class _PinnedSMTP(smtplib.SMTP):
-    """Connect to the address that passed the outbound policy, never a fresh lookup.
+    """Connect only to addresses that passed the outbound policy, never a fresh lookup.
 
     smtplib keeps the configured host name for EHLO, STARTTLS and implicit TLS
-    certificate checks; only the TCP connection uses the pinned address.
+    certificate checks; only the TCP connection uses the pinned addresses, tried
+    in resolver order like socket.create_connection.
     """
 
     def __init__(
         self,
-        address: str,
+        addresses: list[str],
         host: str,
         port: int,
         *,
         timeout: int,
         context: ssl.SSLContext | None = None,
     ) -> None:
-        self._pinned_address = address
+        self._pinned_addresses = addresses
         self._implicit_tls = context
         super().__init__(host, port, timeout=timeout)
 
     def _get_socket(self, host: str, port: int, timeout: float) -> socket.socket:
-        sock = socket.create_connection(
-            (self._pinned_address, port), timeout, self.source_address
-        )
+        error: OSError | None = None
+        for address in self._pinned_addresses:
+            try:
+                sock = socket.create_connection((address, port), timeout, self.source_address)
+                break
+            except OSError as exc:
+                error = exc
+        else:
+            raise error or OSError("no pinned address")
         if self._implicit_tls is not None:
             sock = self._implicit_tls.wrap_socket(sock, server_hostname=host)
         return sock
@@ -126,7 +133,7 @@ class SmtpAdapter:
                 if config.get("username") and not secrets.get("password"):
                     raise ValueError
                 private = config.get("allow_private_network") is True
-                # Resolve once; every answer must pass, and the connection uses the first.
+                # Resolve once; every answer must pass, and only those answers are dialed.
                 results = socket.getaddrinfo(
                     config["host"], config["port"], type=socket.SOCK_STREAM
                 )
@@ -144,7 +151,7 @@ class SmtpAdapter:
                 tls = config.get("tls_mode", "starttls")
                 context = ssl.create_default_context() if tls == "implicit_tls" else None
                 with _PinnedSMTP(
-                    addresses[0], config["host"], config["port"], timeout=timeout, context=context
+                    addresses, config["host"], config["port"], timeout=timeout, context=context
                 ) as client:
                     if tls == "starttls":
                         code, _ = client.ehlo()

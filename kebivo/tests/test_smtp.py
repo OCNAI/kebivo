@@ -163,6 +163,26 @@ def parse(raw: bytes) -> Any:
     return BytesParser(policy=policy.default).parsebytes(raw)  # type: ignore[arg-type]
 
 
+def test_falls_back_to_next_checked_address(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Some resolvers list ::1 before 127.0.0.1 for localhost; the server only has IPv4.
+    original = socket.getaddrinfo
+
+    def ipv6_first(host: Any, *args: Any, **kwargs: Any) -> Any:
+        if host != "localhost":
+            return original(host, *args, **kwargs)
+        port = args[0] if args else kwargs["port"]
+        return [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::1", port, 0, 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", port)),
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", ipv6_first)
+    handler = MailHandler()
+    with server(handler) as port:
+        result = send(payload(), config(port, "none"))
+    assert result.outcome == "success" and len(handler.messages) == 1
+
+
 def test_starttls_rendering_and_no_plaintext_fallback(tls_contexts: ssl.SSLContext) -> None:
     handler = MailHandler()
     with server(handler, tls_context=tls_contexts) as port:
