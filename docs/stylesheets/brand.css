@@ -1,0 +1,7 @@
+/* Kebivo brand colors for the Material theme. */
+:root, [data-md-color-scheme="default"] {
+  --md-primary-fg-color: #285f4c;
+  --md-primary-fg-color--light: #35735e;
+  --md-primary-fg-color--dark: #263d35;
+  --md-accent-fg-color: #285f4c;
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/webhook-payload.schema.json",
+  "title": "Kebivo webhook payload v1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "delivery_id", "event_id", "group_id", "event_type", "project", "feedback", "tags", "occurrence_count", "created_at", "test"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "delivery_id": {"type": "string", "format": "uuid"},
+    "event_id": {"type": "string", "format": "uuid"},
+    "group_id": {"type": ["string", "null"], "format": "uuid"},
+    "event_type": {"enum": ["knowledge_gap", "knowledge_correction"]},
+    "project": {"type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": {"id": {"type": "string", "format": "uuid"}, "name": {"type": "string"}}},
+    "feedback": {"type": "object", "additionalProperties": false, "required": ["question", "correction", "context"], "properties": {"question": {"type": "string"}, "correction": {"type": ["string", "null"]}, "context": {"type": ["string", "null"]}}},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "occurrence_count": {"type": "integer", "minimum": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "test": {"type": "boolean"}
+  }
+}

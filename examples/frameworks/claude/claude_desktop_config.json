@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "kebivo": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@0.15.1",
+        "http://127.0.0.1:8000/mcp",
+        "--transport",
+        "http-only",
+        "--header",
+        "Authorization:${KEBIVO_AUTH_HEADER}"
+      ],
+      "env": {
+        "KEBIVO_AUTH_HEADER": "Bearer <PROJECT_TOKEN>"
+      }
+    }
+  }
+}

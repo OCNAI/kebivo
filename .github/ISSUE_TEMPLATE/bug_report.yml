@@ -1,0 +1,76 @@
+name: Bug report
+description: Something in Kebivo does not work as documented.
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. **Security problems do not belong here**: follow [SECURITY.md](../blob/main/SECURITY.md) instead.
+        Remove secrets, tokens, keys and personal data from everything you paste. Use synthetic values.
+  - type: input
+    id: version
+    attributes:
+      label: Kebivo version
+      description: Shown on the Settings page, or run `docker compose exec app python -m kebivo.cli version`. A commit hash is fine for `main`.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How do you run Kebivo?
+      options:
+        - Docker Compose (the shipped compose file)
+        - docker run
+        - From source (uv)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - REST API
+        - MCP server
+        - Inbox / web UI
+        - Grouping and deduplication
+        - Routing
+        - Webhook destination
+        - Email (SMTP) destination
+        - LLM provider
+        - Export or retention
+        - Install, upgrade or container
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps, requests or settings that shows the problem.
+      placeholder: |
+        1. Start Kebivo with ...
+        2. Send ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant container log lines (`docker compose logs app`). Secrets removed.
+      render: text
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Host OS, Docker version, reverse proxy, the agent framework or MCP client involved, and any setting you changed from the defaults.

@@ -1,0 +1,23 @@
+{
+  "name": "kebivo-vercel-ai-sdk-example",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node agent.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@ai-sdk/mcp": "^2.0.81",
+    "@ai-sdk/openai": "^4.0.99",
+    "@ai-sdk/openai-compatible": "^3.0.75",
+    "ai": "^7.0.148",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}

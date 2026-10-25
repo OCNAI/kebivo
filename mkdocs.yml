@@ -1,0 +1,48 @@
+site_name: Kebivo
+site_description: Collect unanswered AI agent questions and proposed corrections with Kebivo. Self-hosted feedback routing over REST or MCP, with an inbox, email and webhooks.
+site_url: https://docs.kebivo.com/
+repo_url: https://github.com/OCNAI/kebivo
+# `website:` links in docs resolve against this value.
+extra:
+  website_url: https://kebivo.com/
+docs_dir: docs
+site_dir: site
+strict: true
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+    - search.highlight
+extra_css:
+  - stylesheets/brand.css
+hooks:
+  - docs/hooks/repo_links.py
+exclude_docs: |
+  hooks/
+  assets/social-preview.html
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - REST API: rest-api.md
+  - MCP:
+      - Connecting clients: mcp.md
+      - MCP Registry metadata: mcp-registry.md
+  - Self-hosting: self-hosting.md
+  - Features:
+      - Routing: routing.md
+      - Destinations: destinations.md
+      - Deduplication: deduplication.md
+      - LLM providers: llm-providers.md
+      - Feedback management: feedback-management.md
+      - Retention: retention.md
+      - Export: export.md
+  - Releasing: releasing.md
+  - Licenses: licenses.md

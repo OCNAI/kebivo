@@ -1,0 +1,25 @@
+name: Question
+description: Ask how to set up or use Kebivo.
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open-ended questions and "how are others doing this?" fit best in [Discussions](../discussions). Use this form for a specific question about setup or behaviour.
+        Check the [documentation](../blob/main/README.md#documentation) first. Remove secrets and personal data from anything you paste.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Commands, settings, requests or documentation pages you have already looked at.
+  - type: input
+    id: version
+    attributes:
+      label: Kebivo version
+      description: Settings page, or `docker compose exec app python -m kebivo.cli version`.

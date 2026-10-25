@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/OCNAI/kebivo/security/policy
+    about: Do not open a public issue. Follow SECURITY.md to report privately.
+  - name: Ask the community
+    url: https://github.com/OCNAI/kebivo/discussions
+    about: Questions, ideas and show-and-tell in GitHub Discussions.

@@ -1,0 +1,23 @@
+services:
+  app:
+    environment:
+      DELIVERY_RETRY_SCHEDULE_SECONDS: ${DELIVERY_RETRY_SCHEDULE_SECONDS:-1,1,1,1,1}
+    networks:
+      - default
+      - smoke-private
+  webhook:
+    image: python:3.12.8-slim
+    command: ["python", "/smoke-webhook.py"]
+    volumes:
+      - ./scripts/smoke-webhook.py:/smoke-webhook.py:ro
+    networks:
+      smoke-private:
+        aliases: [smoke-webhook]
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    networks:
+      smoke-private:
+        aliases: [smoke-mailpit]
+networks:
+  smoke-private:
+    internal: true

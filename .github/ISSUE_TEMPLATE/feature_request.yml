@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest a change or a new capability.
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [roadmap](../blob/main/ROADMAP.md) and existing issues first. If your idea is already there, add a 👍 to it and describe your case in a comment instead of opening a new issue.
+        Kebivo stays small on purpose: one container, one SQLite file, no telemetry, and no outbound connection unless you configure one.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the situation, not the solution. Who runs into it, and how often?
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What do you do today?
+      description: Your current workaround, for example a webhook relay or a script over the export.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Kebivo to do?
+      description: The behaviour you want. Mention the API, MCP tool, setting or screen it would touch if you know.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Your setup
+      description: What you connect Kebivo to (agent framework, knowledge base, ticketing or chat tool) and roughly how many reports a week you expect.
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to work on this, and I will agree on the design in this issue before I open a pull request.

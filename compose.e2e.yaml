@@ -1,0 +1,37 @@
+# Acceptance suite overlay (scripts/e2e.sh). Use with compose.yaml:
+#   docker compose -f compose.yaml -f compose.e2e.yaml [-f compose.e2e-offline.yaml] ...
+# The app and the runner share one private network. The runner hosts every
+# test double (webhook receiver, SMTP sink, fake LLM, DNS sink) and runs pytest.
+services:
+  app:
+    ports: !reset []
+    dns:
+      - ${E2E_RUNNER_IP:-172.30.67.10}
+    environment:
+      # Production mode requires HTTPS origins except loopback; the runner
+      # sends this Origin header, as a browser on the host would.
+      ALLOWED_ORIGINS: http://127.0.0.1:8000
+      MCP_ALLOWED_HOSTS: app:8000
+      DELIVERY_RETRY_SCHEDULE_SECONDS: 1,1,1,1,1
+      FEEDBACK_RATE_LIMIT_PER_TOKEN: 1000
+      FEEDBACK_RATE_LIMIT_PER_IP: 3000
+    networks:
+      - e2e
+  runner:
+    build:
+      context: .
+      target: e2e
+    image: kebivo-e2e:${KEBIVO_VERSION:-local}
+    environment:
+      E2E_APP_URL: http://app:8000
+      E2E_STATE: /tmp/e2e
+    volumes:
+      - app-data:/appdata:ro
+    networks:
+      e2e:
+        ipv4_address: ${E2E_RUNNER_IP:-172.30.67.10}
+networks:
+  e2e:
+    ipam:
+      config:
+        - subnet: ${E2E_SUBNET:-172.30.67.0/24}

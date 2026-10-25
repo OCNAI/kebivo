@@ -1,0 +1,4 @@
+# Offline run (AC-15): no container on the e2e network can reach the internet.
+networks:
+  e2e:
+    internal: true

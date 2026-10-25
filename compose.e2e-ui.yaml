@@ -1,0 +1,13 @@
+# Browser-test overlay (scripts/e2e-ui.sh). Use with compose.yaml and
+# compose.e2e.yaml. Publishes the app and the runner's test doubles on the
+# loopback interface only, so Playwright on the host can drive a real browser.
+services:
+  app:
+    ports:
+      - "127.0.0.1:${E2E_UI_PORT:-18000}:8000"
+    environment:
+      ALLOWED_ORIGINS: http://127.0.0.1:${E2E_UI_PORT:-18000}
+  runner:
+    ports:
+      - "127.0.0.1:${E2E_UI_RECEIVER_PORT:-18080}:8080"
+      - "127.0.0.1:${E2E_UI_LLM_PORT:-18765}:8765"

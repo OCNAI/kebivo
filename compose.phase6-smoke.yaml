@@ -1,0 +1,9 @@
+services:
+  fake-llm:
+    image: kebivo:local
+    entrypoint: ["python", "/qa/fake_llm_server.py"]
+    command: ["--host", "0.0.0.0", "--port", "8765"]
+    volumes:
+      - ./scripts/fake_llm_server.py:/qa/fake_llm_server.py:ro
+    networks:
+      - default
