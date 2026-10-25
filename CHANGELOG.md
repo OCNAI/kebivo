@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 — 2026-10-25
+
+Packaging only; no application changes. The MCP Registry server name is now `io.github.OCNAI/kebivo`, in `server.json` and in the image's `io.modelcontextprotocol.server.name` label. The registry matches the GitHub account's letter case, so it refused the lower-case name used in 0.1.0.
+
 ## 0.1.0 — 2026-10-25
 
 Kebivo's first open-source release provides local administration, project-scoped REST and MCP feedback intake, exact and optional semantic grouping, inbox triage, routing to webhook, SMTP, and local inbox destinations, durable retry and restart recovery, retention, and project JSON Lines export. The default installation needs no external account or model.

@@ -20,7 +20,7 @@ LABEL org.opencontainers.image.title="Kebivo" \
       org.opencontainers.image.source="${KEBIVO_SOURCE}" \
       org.opencontainers.image.licenses="Apache-2.0"
 # MCP Registry ownership check: must equal "name" in server.json.
-LABEL io.modelcontextprotocol.server.name="io.github.ocnai/kebivo"
+LABEL io.modelcontextprotocol.server.name="io.github.OCNAI/kebivo"
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_ENV=production \

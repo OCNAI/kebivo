@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.ocnai/kebivo",
+  "name": "io.github.OCNAI/kebivo",
   "title": "Kebivo",
   "description": "Self-hosted inbox for questions your AI agents couldn't answer. Report knowledge gaps over MCP.",
   "repository": {
     "url": "https://github.com/OCNAI/kebivo",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/ocnai/kebivo:0.1.0",
+      "identifier": "ghcr.io/ocnai/kebivo:0.1.1",
       "runtimeHint": "docker",
       "runtimeArguments": [
         {

@@ -16,6 +16,12 @@ def test_oci_label_matches_server_name() -> None:
     assert labels == [SERVER["name"]]
 
 
+def test_namespace_keeps_github_owner_case() -> None:
+    # The registry grants io.github.OWNER/* using the GitHub owner's exact case.
+    owner = urlsplit(SERVER["repository"]["url"]).path.split("/")[1]
+    assert SERVER["name"].startswith(f"io.github.{owner}/")
+
+
 def test_versions_match_pyproject() -> None:
     version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
     (package,) = SERVER["packages"]

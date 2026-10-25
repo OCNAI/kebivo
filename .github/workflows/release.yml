@@ -94,5 +94,5 @@ jobs:
           for platform in linux/amd64 linux/arm64; do
             labels="$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format "{{ json (index .Image \"$platform\").Config.Labels }}")"
             echo "$platform $labels"
-            python3 -c 'import json, sys; l = json.loads(sys.argv[1]); assert l["io.modelcontextprotocol.server.name"] == "io.github.ocnai/kebivo"; assert l["org.opencontainers.image.version"] == sys.argv[2]; assert l["org.opencontainers.image.source"] == "https://github.com/OCNAI/kebivo"' "$labels" "$VERSION"
+            python3 -c 'import json, sys; l = json.loads(sys.argv[1]); assert l["io.modelcontextprotocol.server.name"] == "io.github.OCNAI/kebivo"; assert l["org.opencontainers.image.version"] == sys.argv[2]; assert l["org.opencontainers.image.source"] == "https://github.com/OCNAI/kebivo"' "$labels" "$VERSION"
           done

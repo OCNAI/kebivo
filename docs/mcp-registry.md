@@ -20,6 +20,6 @@ The **MCP Registry** workflow (`.github/workflows/mcp-registry.yml`) publishes `
 
 1. `ghcr.io/ocnai/kebivo:<version>` must be public and carry the label. The registry pulls it anonymously and rejects private images.
 2. `version` and the image tag in `identifier` must equal the `pyproject.toml` version; the workflow checks this.
-3. The workflow signs in with GitHub OIDC (`mcp-publisher login github-oidc`), which proves ownership of the `io.github.ocnai` namespace without a stored secret, then runs `mcp-publisher publish`.
+3. The workflow signs in with GitHub OIDC (`mcp-publisher login github-oidc`), which proves ownership of the `io.github.OCNAI` namespace (the registry keeps the GitHub account's letter case) without a stored secret, then runs `mcp-publisher publish`.
 
 To check the file before a release, `mcp-publisher validate server.json` needs no login, but it sends the file to the registry's validation endpoint.

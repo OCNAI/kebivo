@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Kebivo has not published a release yet. The first version will be 0.1.0. Until 1.0, only the latest release receives security fixes; upgrade to it before you report a problem that might already be fixed.
+Until 1.0, only the latest release receives security fixes; upgrade to it before you report a problem that might already be fixed.
 
 | Version | Supported |
 | --- | --- |
