@@ -29,10 +29,10 @@ Replace `<REPOSITORY_URL>` with the repository address. The first build takes a 
   "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > kebivo.env)
 docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 \
   -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.1.0
-curl -fsS --retry 30 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/health/ready
+curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
 ```
 
-With this container, run the step 2 command as `docker exec -it kebivo python -m kebivo.cli bootstrap --email admin@example.org`, and stop it with `docker stop kebivo`; data stays in the `kebivo-data` volume.
+curl may print a few `Connection reset` errors while migrations run, then readiness returns `{"status":"ok",...}`. With this container, run the step 2 command as `docker exec -it kebivo python -m kebivo.cli bootstrap --email admin@example.org`, and stop it with `docker stop kebivo`; data stays in the `kebivo-data` volume.
 
 **2. Create the administrator.** The command asks for a password (at least 12 characters).
 
