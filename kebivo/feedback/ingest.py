@@ -87,7 +87,8 @@ async def ingest(
     try:
         if submitted_via == "rest":
             limiter.check("ip", client_ip, settings.feedback_rate_limit_per_ip)
-        limiter.check("token", principal.token_id, settings.feedback_rate_limit_per_token)
+        if principal.token_id is not None:
+            limiter.check("token", principal.token_id, settings.feedback_rate_limit_per_token)
     except HTTPException as exc:
         raise RateLimited(int((exc.headers or {}).get("Retry-After", "1"))) from None
 

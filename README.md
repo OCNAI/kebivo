@@ -96,7 +96,7 @@ curl may print a few `Connection reset` errors while migrations run, then readin
 docker compose exec app python -m kebivo.cli bootstrap --email admin@example.org
 ```
 
-**3. Create a project and a token.** Open <http://127.0.0.1:8000/> (exactly this address: `localhost` is a different origin and sign-in would fail) and sign in. Create a project, then under **Project tokens** issue a token with the `feedback:gap` scope and copy it. It is shown only once.
+**3. Create a project and a token.** Open <http://127.0.0.1:8000/> and sign in. If you use `localhost` instead, sign-in explains that the page origin is outside `ALLOWED_ORIGINS` and shows the configured origin. Use that URL, or add your browser's origin to `ALLOWED_ORIGINS`. Create a project, then under **Project tokens** issue a token with the `feedback:gap` scope and copy it. It is shown only once.
 
 **4. Send your first event.**
 

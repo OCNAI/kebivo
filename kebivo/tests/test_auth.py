@@ -69,21 +69,20 @@ def test_login_session_cookie_csrf_logout_and_session_revocation(tmp_path: Path)
 
 def test_origin_is_required_and_no_signup_endpoint_exists(tmp_path: Path) -> None:
     client, app = make_client(tmp_path)
-    assert (
-        client.post(
-            "/api/v1/auth/login", json={"email": "x@y.test", "password": "anything"}
-        ).status_code
-        == 403
+    missing = client.post(
+        "/api/v1/auth/login", json={"email": "x@y.test", "password": "anything"}
     )
+    assert missing.status_code == 403
+    assert ORIGIN in missing.json()["error"]["message"]
     assert client.post("/api/v1/auth/signup", headers={"Origin": ORIGIN}).status_code >= 400
-    assert (
-        client.post(
-            "/api/v1/auth/login",
-            json={"email": "x@y.test", "password": "anything"},
-            headers={"Origin": "https://evil.example.test"},
-        ).status_code
-        == 403
+    wrong = client.post(
+        "/api/v1/auth/login",
+        json={"email": "x@y.test", "password": "anything"},
+        headers={"Origin": "https://evil.example.test"},
     )
+    assert wrong.status_code == 403
+    assert ORIGIN in wrong.json()["error"]["message"]
+    assert "evil.example.test" not in wrong.text
     app.state.engine.dispose()
 
 
@@ -106,16 +105,16 @@ def test_expired_session_and_wrong_origin_are_rejected(tmp_path: Path) -> None:
         headers={"Origin": ORIGIN},
     )
     assert login.status_code == 200
-    assert (
-        client.post(
-            "/api/v1/auth/logout",
-            headers={
-                "Origin": "https://evil.example.test",
-                "X-CSRF-Token": login.json()["csrf_token"],
-            },
-        ).status_code
-        == 403
+    wrong = client.post(
+        "/api/v1/auth/logout",
+        headers={
+            "Origin": "https://evil.example.test",
+            "X-CSRF-Token": login.json()["csrf_token"],
+        },
     )
+    assert wrong.status_code == 403
+    assert ORIGIN in wrong.json()["error"]["message"]
+    assert "evil.example.test" not in wrong.text
     login = client.post(
         "/api/v1/auth/login",
         json={"email": "admin@example.test", "password": "long-test-password"},

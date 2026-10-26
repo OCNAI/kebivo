@@ -67,6 +67,14 @@ def origin_allowed(request: Request) -> bool:
     return bool(origin and origin in request.app.state.settings.allowed_origins)
 
 
+def wrong_origin_error(request: Request) -> HTTPException:
+    configured = ", ".join(request.app.state.settings.allowed_origins) or "none"
+    return HTTPException(
+        status_code=403,
+        detail=f"Page origin is not in ALLOWED_ORIGINS. Configured origins: {configured}",
+    )
+
+
 def _peer_ip(request: Request) -> str:
     peer = request.client.host if request.client else "unknown"
     if peer not in request.app.state.settings.trusted_proxy_ips:
@@ -132,7 +140,7 @@ def require_admin(request: Request) -> tuple[AdminUser, AdminSession, str]:
         raise _auth_failure()
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         if not origin_allowed(request):
-            raise HTTPException(status_code=403, detail="Invalid Origin")
+            raise wrong_origin_error(request)
         supplied_csrf = request.headers.get("x-csrf-token", "")
         if not hmac.compare_digest(supplied_csrf, csrf_token(request.app.state.settings, token)):
             raise HTTPException(status_code=403, detail="Invalid CSRF token")
@@ -160,7 +168,7 @@ def install_auth_routes(app: Any) -> None:
     @router.post("/login")
     def login(body: LoginBody, request: Request) -> JSONResponse:
         if not origin_allowed(request):
-            raise HTTPException(status_code=403, detail="Invalid Origin")
+            raise wrong_origin_error(request)
         db: Session = request.state.db
         email = normalize_email(body.email)
         settings = request.app.state.settings
