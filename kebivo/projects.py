@@ -295,6 +295,8 @@ def install_project_routes(app: Any) -> None:
             )
         )
         assert group_id is not None
+        _audit_project(db, "project.test_event_sent", admin, project, {"event_id": result.event_id})
+        db.commit()
         if request.app.state.worker is not None:
             request.app.state.worker.wake()
         return {"event_id": result.event_id, "group_id": group_id}

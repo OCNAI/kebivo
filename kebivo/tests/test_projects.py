@@ -162,6 +162,10 @@ def test_admin_test_event_uses_ingest_and_limits_writes(
         assert len(db.scalars(select(FeedbackGroupMember)).all()) == 2
         tags = db.scalars(select(Tag.slug).join(FeedbackEventTag)).all()
         assert tags == ["kebivo-test", "kebivo-test"]
+        audits = db.scalars(
+            select(AuditEvent).where(AuditEvent.action == "project.test_event_sent")
+        ).all()
+        assert [audit.subject_id for audit in audits] == [project["id"], project["id"]]
     for _ in range(8):
         assert client.post(path, headers=headers).status_code == 202
     limited = client.post(path, headers=headers)
