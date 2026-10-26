@@ -15,7 +15,7 @@ Kebivo collects unanswered questions and proposed knowledge corrections from AI 
 
 In the demo, an agent calls `report_knowledge_gap` over MCP. The report appears at the top of the inbox. An earlier duplicate is merged into it, leaving 2 occurrences and a history entry. A routing rule then delivers it to the IT webhook.
 
-> **Status: 0.1.0, the first release.** Run the published image `ghcr.io/ocnai/kebivo:0.1.0` (`linux/amd64`, `linux/arm64`) or build it from this repository. Licensed under [Apache-2.0](LICENSE).
+> **Status: 0.1.1.** Run the published image `ghcr.io/ocnai/kebivo:0.1.1` (`linux/amd64`, `linux/arm64`) or build it from this repository. Licensed under [Apache-2.0](LICENSE).
 
 Start with the [Quickstart](#quickstart). For framework tutorials, see the [Kebivo Guides](https://kebivo.com/guides/). For deployment, API behavior and limits, use the [technical documentation](docs/index.md).
 
@@ -61,47 +61,32 @@ More: [destinations](docs/images/06-destinations.png), [settings](docs/images/08
 
 ## Quickstart
 
-You need Docker with Compose, OpenSSL and a free port 8000.
+You need Docker, OpenSSL, Python 3 and a free port 8000. The published image is typically ready in about 12 seconds after download.
 
-**1. Start Kebivo.**
-
-```sh
-git clone <REPOSITORY_URL> kebivo
-cd kebivo
-cp .env.example .env
-printf 'SECRET_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
-printf 'ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
-printf 'ALLOWED_ORIGINS=http://127.0.0.1:8000\n' >> .env
-docker compose up --build -d
-curl -fsS http://127.0.0.1:8000/health/ready
-```
-
-`<REPOSITORY_URL>` is the address you cloned from. The first build takes a few minutes. Readiness returns `{"status":"ok",...}` once migrations are applied.
-
-**Or run the published image** instead of cloning and building. It is the same container; keep `kebivo.env` private and back it up apart from the data volume.
+**1. Start Kebivo from the published image.** Keep `kebivo.env` private and back it up apart from the data volume.
 
 ```sh
 (umask 077; printf 'SECRET_KEY=%s\nENCRYPTION_KEY=%s\nALLOWED_ORIGINS=http://127.0.0.1:8000\n' \
   "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > kebivo.env)
 docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 \
-  -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.1.0
+  -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.1.1
 curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
 ```
 
-curl may print a few `Connection reset` errors while migrations run, then readiness returns `{"status":"ok",...}`. With this container, run the step 2 command as `docker exec -it kebivo python -m kebivo.cli bootstrap --email admin@example.org`, and stop it with `docker stop kebivo`; data stays in the `kebivo-data` volume.
+Curl may print a few `Connection reset` errors while migrations run. Readiness returns `{"status":"ok",...}`.
 
-**2. Create the administrator.** The command asks for a password (at least 12 characters).
+**2. Create an administrator and project token.** The password must have at least 12 characters. The token is issued once into `KEBIVO_TOKEN`; keep it private.
 
 ```sh
-docker compose exec app python -m kebivo.cli bootstrap --email admin@example.org
+read -rsp 'Admin password (12+ characters): ' KEBIVO_ADMIN_PASSWORD; printf '\n'
+printf '%s\n' "$KEBIVO_ADMIN_PASSWORD" | docker exec -i kebivo python -m kebivo.cli bootstrap --email admin@example.org --password-stdin
+unset KEBIVO_ADMIN_PASSWORD
+KEBIVO_TOKEN="$(docker exec kebivo python -m kebivo.cli project create --name 'Helpdesk bot' --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
 ```
 
-**3. Create a project and a token.** Open <http://127.0.0.1:8000/> (exactly this address: `localhost` is a different origin and sign-in would fail) and sign in. Create a project, then under **Project tokens** issue a token with the `feedback:gap` scope and copy it. It is shown only once.
-
-**4. Send your first event.**
+**3. Send your first event.**
 
 ```sh
-export KEBIVO_TOKEN='<PROJECT_TOKEN>'
 curl -i http://127.0.0.1:8000/api/v1/feedback \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $KEBIVO_TOKEN" \
@@ -109,9 +94,22 @@ curl -i http://127.0.0.1:8000/api/v1/feedback \
   --data '{"event_type":"knowledge_gap","question":"How do I reset my corporate VPN?","tags":["it"]}'
 ```
 
-The answer is `202 Accepted` with an `event_id`. **5. Open the Inbox** in the UI: the question is there in its own group. Add a destination and a routing rule to send the next ones to email or a webhook.
+The response is `202 Accepted` with an `event_id`. Open <http://127.0.0.1:8000/> to sign in and see the report in the Inbox. Use exactly `127.0.0.1`: `localhost` is a different origin. You can also create projects and tokens in the UI.
 
-To stop: `docker compose down` (data is kept). `docker compose down --volumes` **deletes all data**. For production (TLS, backups, upgrades, every setting), read the [self-hosting guide](docs/self-hosting.md).
+**Build from source instead.** Use this path if you want to change the code. After it starts, replace both `docker exec -i kebivo` and `docker exec kebivo` with `docker compose exec -T app` in step 2.
+
+```sh
+git clone https://github.com/OCNAI/kebivo.git
+cd kebivo
+cp .env.example .env
+printf 'SECRET_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
+printf 'ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
+printf 'ALLOWED_ORIGINS=http://127.0.0.1:8000\n' >> .env
+docker compose up --build -d
+curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
+```
+
+To stop the published image: `docker stop kebivo` (data stays in the volume). To stop a Compose build: `docker compose down` (data is kept). `docker compose down --volumes` **deletes all data**. For production (TLS, backups, upgrades, every setting), read the [self-hosting guide](docs/self-hosting.md).
 
 ## Collect AI agent feedback with REST
 

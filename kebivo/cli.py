@@ -1,30 +1,35 @@
-"""Container-local administration commands. Passwords are read only via getpass."""
+"""Container-local administration commands."""
 
 import argparse
 import json
+import re
+import secrets
 import sys
 from getpass import getpass
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from kebivo import version
 from kebivo.auth import create_admin
 from kebivo.db import make_engine
 from kebivo.feedback.groups import check_integrity
-from kebivo.models import Destination, LlmProviderConfig
+from kebivo.models import AdminUser, ApiToken, AuditEvent, Destination, LlmProviderConfig, Project
+from kebivo.projects import ProjectCreate
 from kebivo.retention import preview as retention_preview
 from kebivo.retention import run as retention_run
 from kebivo.security.secretbox import SecretBox, SecretError
 from kebivo.settings import Settings
+from kebivo.tokens import GAP_SCOPE, _token_digest
 
 
-def _password_pair(from_stdin: bool) -> str:
+def _password_pair(from_stdin: bool, *, confirm_stdin: bool) -> str:
     if from_stdin:
         password = sys.stdin.readline().rstrip("\r\n")
-        confirmation = sys.stdin.readline().rstrip("\r\n")
-        if not password or not confirmation:
-            raise SystemExit("Password input must contain two non-empty lines")
+        if not password:
+            raise SystemExit("Password input must contain a non-empty line")
+        confirmation = sys.stdin.readline().rstrip("\r\n") if confirm_stdin else password
     else:
         password = getpass("New administrator password: ")
         confirmation = getpass("Confirm password: ")
@@ -38,10 +43,16 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     bootstrap = commands.add_parser("bootstrap", help="create the first local administrator")
     bootstrap.add_argument("--email", required=True)
-    bootstrap.add_argument("--password-stdin", action="store_true", help=argparse.SUPPRESS)
+    bootstrap.add_argument("--password-stdin", action="store_true", help="read one password line")
     reset = commands.add_parser("reset-password", help="reset an administrator password")
     reset.add_argument("--email", required=True)
     reset.add_argument("--password-stdin", action="store_true", help=argparse.SUPPRESS)
+    project = commands.add_parser("project", help="manage projects")
+    project_commands = project.add_subparsers(dest="project_command", required=True)
+    project_create = project_commands.add_parser("create", help="create a project and gap token")
+    project_create.add_argument("--name", required=True)
+    project_create.add_argument("--slug")
+    project_create.add_argument("--json", action="store_true")
     commands.add_parser(
         "reencrypt-secrets", help="rewrite encrypted credentials with the current key"
     )
@@ -65,6 +76,72 @@ def main() -> None:
     )
     engine = make_engine(database_url)
     try:
+        if args.command == "project":
+            slug = (
+                args.slug
+                if args.slug is not None
+                else re.sub(r"[^a-z0-9]+", "-", args.name.strip().lower()).strip("-")
+            )
+            try:
+                body = ProjectCreate(name=args.name, slug=slug)
+            except ValueError as exc:
+                raise SystemExit(f"Invalid project: {exc}") from None
+            with Session(engine) as db:
+                admin_id = db.scalar(select(AdminUser.id).limit(1))
+                if admin_id is None:
+                    raise SystemExit("Bootstrap an administrator before creating a project")
+                row = Project(
+                    name=body.name,
+                    slug=body.slug,
+                    settings_json=json.dumps(body.settings, separators=(",", ":")),
+                    created_by_admin_id=admin_id,
+                )
+                prefix = "kebivo_pt_" + secrets.token_urlsafe(12).rstrip("=")
+                token = prefix + "." + secrets.token_urlsafe(32)
+                db.add(row)
+                try:
+                    db.flush()
+                    token_row = ApiToken(
+                        project_id=row.id,
+                        name="Quickstart",
+                        token_hash=_token_digest(configured, token),
+                        token_prefix=prefix,
+                        scopes_json=json.dumps([GAP_SCOPE]),
+                        created_by_admin_id=admin_id,
+                    )
+                    db.add(token_row)
+                    db.flush()
+                    db.add(
+                        AuditEvent(
+                            actor_type="admin",
+                            actor_ref=admin_id,
+                            action="project_token.created",
+                            subject_type="api_token",
+                            subject_id=token_row.id,
+                            details_json=json.dumps({"project_id": row.id, "scopes": [GAP_SCOPE]}),
+                        )
+                    )
+                    db.add(
+                        AuditEvent(
+                            actor_type="admin",
+                            actor_ref=admin_id,
+                            action="project.created",
+                            subject_type="project",
+                            subject_id=row.id,
+                            details_json='{"source":"cli"}',
+                        )
+                    )
+                    db.commit()
+                except IntegrityError:
+                    db.rollback()
+                    raise SystemExit("A project with this slug already exists") from None
+                result = {"id": row.id, "name": row.name, "slug": row.slug, "token": token}
+            print(
+                json.dumps(result)
+                if args.json
+                else f"Project {body.name} ({body.slug}) created.\nToken: {token}"
+            )
+            return
         if args.command == "retention":
             factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
             counts = (
@@ -122,7 +199,7 @@ def main() -> None:
             admin = create_admin(
                 db,
                 args.email,
-                _password_pair(args.password_stdin),
+                _password_pair(args.password_stdin, confirm_stdin=args.command == "reset-password"),
                 reset=args.command == "reset-password",
             )
             email = admin.email
