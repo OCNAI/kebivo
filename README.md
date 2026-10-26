@@ -11,9 +11,9 @@ Kebivo collects unanswered questions and proposed knowledge corrections from AI 
 
 > Kebivo works alongside observability and tracing tools such as Langfuse and Phoenix. Those tools show engineers what happened during a run. Kebivo collects gaps reported by the agent and sends them to the people who maintain the knowledge. It is not a RAG engine: it does not score traces, retrieve documents or answer questions. See [What it does not do](#what-it-does-not-do).
 
-![Demo: an AI agent reports a knowledge gap over MCP, the report lands in the Kebivo inbox, a duplicate question is merged into it, and the IT webhook delivers it. Four steps, about 20 seconds, on a loop.](docs/assets/demo.gif)
+![Demo: an AI assistant can't answer "Where is the VPN setup guide?" and the docs team never hears about it. The agent reports the gap to Kebivo over MCP, a routing rule delivers it to the docs owner by webhook, repeat questions join the same inbox entry and raise its count, and the owner marks it resolved. About 30 seconds, on a loop.](docs/assets/demo.gif)
 
-In the demo, an agent calls `report_knowledge_gap` over MCP. The report appears at the top of the inbox. An earlier duplicate is merged into it, leaving 2 occurrences and a history entry. A routing rule then delivers it to the IT webhook.
+In the demo, an assistant can't answer a question and the agent calls `report_knowledge_gap` over MCP. A routing rule delivers the report to the docs owner by webhook. Repeat questions join the same group, so the count goes up without a second alert. The owner adds a note and marks the group resolved. The product frames are screenshots of a real Kebivo container with synthetic data; the chat and end card are drawn. The source is in [`docs/assets/demo-src`](docs/assets/demo-src/README.md).
 
 > **Status: 0.1.0, the first release.** Run the published image `ghcr.io/ocnai/kebivo:0.1.0` (`linux/amd64`, `linux/arm64`) or build it from this repository. Licensed under [Apache-2.0](LICENSE).
 

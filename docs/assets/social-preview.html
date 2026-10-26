@@ -2,39 +2,22 @@
 <meta charset="utf-8">
 <title>Kebivo social preview (1280x640)</title>
 <style>
+  @font-face { font-family: Inter; font-weight: 700; src: url(demo-src/src/fonts/inter-latin-700-normal.woff2) format('woff2'); }
+  @font-face { font-family: Inter; font-weight: 800; src: url(demo-src/src/fonts/inter-latin-800-normal.woff2) format('woff2'); }
   * { box-sizing: border-box; margin: 0; }
-  body { width: 1280px; height: 640px; overflow: hidden; background: #f6f8f6; color: #202b28;
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; position: relative; }
-  .bar { position: absolute; left: 0; top: 0; bottom: 0; width: 24px; background: #35735e; }
-  .copy { position: absolute; left: 104px; top: 64px; width: 640px; }
-  .brand { display: flex; align-items: center; gap: 22px; }
-  .brand svg { width: 88px; height: 88px; }
-  .brand span { font-size: 80px; font-weight: 700; letter-spacing: -.04em; color: #263d35; }
-  h1 { margin-top: 56px; font-size: 52px; line-height: 1.12; font-weight: 700; letter-spacing: -.035em; color: #263d35; }
-  p { margin-top: 28px; font-size: 26px; line-height: 1.4; color: #476455; }
-  .tags { position: absolute; left: 104px; bottom: 64px; display: flex; gap: 12px; }
-  .tags b { font-size: 20px; font-weight: 600; padding: 8px 16px; border: 1px solid #dce5de; border-radius: 8px; background: #fff; color: #476455; }
-  .card { position: absolute; right: 80px; top: 50%; transform: translateY(-50%); width: 440px; background: #fff; border: 1px solid #dce5de;
-    border-radius: 12px; box-shadow: 0 18px 40px rgba(38,61,53,.12); padding: 28px; }
-  .card small { display: block; font-size: 17px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #38543f; }
-  .card code { display: block; margin-top: 10px; font: 600 22px ui-monospace, Menlo, monospace; color: #285f4c; }
-  .card q { display: block; margin-top: 12px; font-size: 25px; line-height: 1.3; quotes: none; color: #202b28; }
-  .row { margin-top: 18px; padding-top: 16px; border-top: 1px solid #e6ece8; display: flex; justify-content: space-between; align-items: center; font-size: 20px; color: #2f4a3c; }
-  .pill { padding: 4px 12px; border-radius: 999px; background: #e3f0ea; color: #285f4c; font-weight: 600; font-size: 18px; }
+  body { width: 1280px; height: 640px; overflow: hidden; background: #14201b; color: #fff; font-family: Inter, system-ui, sans-serif; position: relative; }
+  .brand { position: absolute; left: 80px; top: 52px; display: flex; align-items: center; gap: 18px; }
+  .brand img { width: 56px; height: 56px; }
+  .brand span { font-size: 44px; font-weight: 800; letter-spacing: -.04em; }
+  h1 { position: absolute; left: 80px; top: 150px; width: 1120px; font-size: 64px; line-height: 1.1; font-weight: 800; letter-spacing: -.035em; }
+  h1 em { font-style: normal; color: #bfe3d3; }
+  .card { position: absolute; left: 80px; top: 400px; width: 1120px; height: 112px; border-radius: 14px; overflow: hidden; background: #f6f8f6 url(demo-src/shots/inbox-4.png) no-repeat;
+    background-size: 1626px auto; background-position: -89px -510px; box-shadow: 0 18px 40px rgba(0,0,0,.35); }
+  .ring { position: absolute; left: 945px; top: 446px; width: 30px; height: 40px; border: 4px solid #35735e; border-radius: 12px; }
+  .tags { position: absolute; left: 80px; bottom: 56px; font-size: 24px; font-weight: 700; color: #7fa493; letter-spacing: .01em; }
 </style>
-<div class="bar"></div>
-<div class="copy">
-  <div class="brand">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#35735e"/><g fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 8v16"/><path d="M11.5 16.5 21 8.5"/><path d="M15.5 13.1 21.5 24"/></g></svg>
-    <span>Kebivo</span>
-  </div>
-  <h1>When your AI doesn't know, Kebivo makes sure someone does.</h1>
-  <p>Self-hosted feedback router for AI applications. REST and MCP in, inbox, webhook and email out.</p>
-</div>
-<div class="tags"><b>Self-hosted</b><b>MCP</b><b>REST</b><b>SQLite</b></div>
-<div class="card">
-  <small>Knowledge gap reported</small>
-  <code>report_knowledge_gap</code>
-  <q>Where is the VPN setup guide?</q>
-  <div class="row"><span>2 occurrences</span><span class="pill">Webhook delivered</span></div>
-</div>
+<div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="56" height="56"><rect width="32" height="32" rx="8" fill="#285f4c"/><path d="M11 7v18M11 17l9-10M14 14l7 11" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kebivo</span></div>
+<h1>When your AI doesn’t know, Kebivo<br><em>tells the people who can fix it.</em></h1>
+<div class="card"></div>
+<div class="ring"></div>
+<div class="tags">Open source · Self-hosted · MCP and REST · SQLite</div>
