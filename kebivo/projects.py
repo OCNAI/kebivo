@@ -7,24 +7,28 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from kebivo.auth import AdminAuth
+from kebivo.admin_groups import _reject_bearer
+from kebivo.auth import AdminAuth, _peer_ip
+from kebivo.feedback.ingest import ingest
 from kebivo.feedback.tags import normalize_tag_v1
 from kebivo.models import (
     AdminUser,
     AuditEvent,
     Destination,
+    FeedbackGroupMember,
     LlmProviderConfig,
     Project,
     Tag,
     now_utc,
 )
+from kebivo.tokens import GAP_SCOPE, ProjectTokenPrincipal
 
 SLUG = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$")
 DEFAULT_SETTINGS = {"corrections": {"enabled": False}, "deduplication": {"mode": "exact"}}
@@ -257,6 +261,43 @@ def _audit_project(
 
 def install_project_routes(app: Any) -> None:
     router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
+
+    @router.post(
+        "/{project_id}/test-event", status_code=202, dependencies=[Depends(_reject_bearer)]
+    )
+    async def send_test_event(project_id: str, request: Request, auth: AdminAuth) -> dict[str, str]:
+        admin, _, _ = auth
+        db: Session = request.state.db
+        project = _get_project(db, project_id)
+        if project.archived_at is not None or not project.is_active:
+            raise ProjectAPIError(
+                409, "project_inactive", "Project must be active to send a test event"
+            )
+        request.app.state.feedback_limiter.check("admin_test_event", admin.id, 10)
+        result = await ingest(
+            request.app.state.session_factory,
+            request.app.state.settings,
+            request.app.state.feedback_limiter,
+            ProjectTokenPrincipal(project.id, None, frozenset({GAP_SCOPE})),
+            {
+                "event_type": "knowledge_gap",
+                "question": "How do I reset my corporate VPN?",
+                "tags": ["kebivo-test"],
+                "agent_id": "kebivo-test",
+            },
+            None,
+            submitted_via="rest",
+            client_ip=_peer_ip(request),
+        )
+        group_id = db.scalar(
+            select(FeedbackGroupMember.group_id).where(
+                FeedbackGroupMember.event_id == result.event_id
+            )
+        )
+        assert group_id is not None
+        if request.app.state.worker is not None:
+            request.app.state.worker.wake()
+        return {"event_id": result.event_id, "group_id": group_id}
 
     @router.post("", status_code=201)
     def create_project(body: ProjectCreate, request: Request, auth: AdminAuth) -> dict[str, Any]:

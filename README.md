@@ -94,7 +94,7 @@ curl -i http://127.0.0.1:8000/api/v1/feedback \
   --data '{"event_type":"knowledge_gap","question":"How do I reset my corporate VPN?","tags":["it"]}'
 ```
 
-The response is `202 Accepted` with an `event_id`. Open <http://127.0.0.1:8000/> to sign in and see the report in the Inbox. Use exactly `127.0.0.1`: `localhost` is a different origin. You can also create projects and tokens in the UI.
+The response is `202 Accepted` with an `event_id`. Open <http://127.0.0.1:8000/> to sign in and see the report in the Inbox. Use exactly `127.0.0.1`: `localhost` is a different origin, and sign-in names the allowed origin if you use the wrong one. You can also create projects and tokens in the UI.
 
 **Build from source instead.** Use this path if you want to change the code. After it starts, replace both `docker exec -i kebivo` and `docker exec kebivo` with `docker compose exec -T app` in step 2.
 

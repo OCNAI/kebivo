@@ -24,7 +24,9 @@ Create a token in the admin UI (open a project, then **Project tokens**) or with
 | `feedback:gap` | `knowledge_gap` events. The default scope. |
 | `feedback:correction` | `knowledge_correction` events, and only while the project's corrections policy is enabled. Grant it explicitly. |
 
-Tokens can have an expiry date and can be revoked at any time. A token stops working when it expires or is revoked, or when its project is disabled or archived. Project tokens cannot call admin APIs, and an admin session cannot submit feedback. Keep tokens in a secret store or environment variable, never in source code or client-side JavaScript.
+Tokens can have an expiry date and can be revoked at any time. A token stops working when it expires or is revoked, or when its project is disabled or archived. Project tokens cannot call admin APIs, and an admin session cannot submit arbitrary feedback through `POST /api/v1/feedback`. Keep tokens in a secret store or environment variable, never in source code or client-side JavaScript.
+
+An administrator can send a sample gap with `POST /api/v1/projects/{project_id}/test-event` using the session cookie, an allowed `Origin`, and `X-CSRF-Token`. Project bearer tokens receive 401. The request has no body; a successful response is `202` with `event_id` and `group_id`. It adds the `kebivo-test` tag and follows the same ingestion, grouping, routing and delivery path as a REST report. Each administrator can send 10 test events per minute; excess requests return 429 with `Retry-After`. Archived or disabled projects return 409.
 
 ## Request
 

@@ -28,7 +28,7 @@ class ProjectTokenPrincipal:
     """Authenticated project identity and granted scopes, safe to pass to handlers."""
 
     project_id: str
-    token_id: str
+    token_id: str | None
     scopes: frozenset[str]
 
 
@@ -103,8 +103,10 @@ def authorize_feedback(principal: ProjectTokenPrincipal, project: Project, event
         raise HTTPException(status_code=403, detail="Project corrections are disabled")
 
 
-def touch_project_token(db: Session, token_id: str, *, now: datetime | None = None) -> None:
+def touch_project_token(db: Session, token_id: str | None, *, now: datetime | None = None) -> None:
     """Stage the last-use update in the caller's transaction at most once per minute."""
+    if token_id is None:
+        return
     row = db.get(ApiToken, token_id)
     if row is None:
         return

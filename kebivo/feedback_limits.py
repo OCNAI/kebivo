@@ -37,11 +37,12 @@ class FixedWindowLimiter:
             self._counts[(kind, key)] = (window, count + 1)
 
 
-def check_feedback_rate_limit(request: Request, token_id: str) -> None:
+def check_feedback_rate_limit(request: Request, token_id: str | None) -> None:
     settings: Any = request.app.state.settings
     limiter: FixedWindowLimiter = request.app.state.feedback_limiter
     limiter.check("ip", _peer_ip(request), settings.feedback_rate_limit_per_ip)
-    limiter.check("token", token_id, settings.feedback_rate_limit_per_token)
+    if token_id is not None:
+        limiter.check("token", token_id, settings.feedback_rate_limit_per_token)
 
 
 def record_feedback_auth_failure(request: Request) -> None:

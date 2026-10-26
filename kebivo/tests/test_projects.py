@@ -1,12 +1,23 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlalchemy import select
 
 from kebivo.app import create_app
 from kebivo.auth import COOKIE_NAME, create_admin
-from kebivo.models import AdminUser, AuditEvent, Base, Tag
+from kebivo.models import (
+    AdminUser,
+    AuditEvent,
+    Base,
+    FeedbackEvent,
+    FeedbackEventTag,
+    FeedbackGroupMember,
+    ProcessingJob,
+    Tag,
+)
 from kebivo.settings import Settings
 
 ORIGIN = "https://admin.example.test"
@@ -116,6 +127,49 @@ def test_projects_require_admin_and_csrf_for_writes(tmp_path: Path) -> None:
     )
     client.cookies.clear()
     assert client.get("/api/v1/projects").status_code == 401
+    app.state.engine.dispose()
+
+
+def test_admin_test_event_uses_ingest_and_limits_writes(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr("kebivo.feedback_limits.time", SimpleNamespace(monotonic=lambda: 120.0))
+    client, app = make_client(tmp_path / "test-event.db")
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Research", "slug": "research"},
+        headers=write_headers(client),
+    ).json()
+    path = f"/api/v1/projects/{project['id']}/test-event"
+    assert client.post(path).status_code == 403
+    assert (
+        client.post(
+            path, headers={**write_headers(client), "Authorization": "Bearer bad"}
+        ).status_code
+        == 401
+    )
+    headers = write_headers(client)
+    first = client.post(path, headers=headers)
+    second = client.post(path, headers=headers)
+    assert first.status_code == second.status_code == 202
+    assert first.json()["event_id"] != second.json()["event_id"]
+    assert first.json()["group_id"] == second.json()["group_id"]
+    with app.state.session_factory() as db:
+        events = db.scalars(select(FeedbackEvent).order_by(FeedbackEvent.created_at)).all()
+        assert len(events) == 2
+        assert all(event.api_token_id is None and event.submitted_via == "rest" for event in events)
+        assert len(db.scalars(select(ProcessingJob)).all()) == 2
+        assert len(db.scalars(select(FeedbackGroupMember)).all()) == 2
+        tags = db.scalars(select(Tag.slug).join(FeedbackEventTag)).all()
+        assert tags == ["kebivo-test", "kebivo-test"]
+    for _ in range(8):
+        assert client.post(path, headers=headers).status_code == 202
+    limited = client.post(path, headers=headers)
+    assert limited.status_code == 429
+    assert int(limited.headers["Retry-After"]) > 0
+    client.post(f"/api/v1/projects/{project['id']}/archive", headers=headers)
+    archived = client.post(path, headers=headers)
+    assert archived.status_code == 409
     app.state.engine.dispose()
 
 
