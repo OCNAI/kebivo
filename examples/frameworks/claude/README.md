@@ -43,6 +43,15 @@ Use the bridge for a Kebivo on your machine or private network.
 Then add the [agent instructions](../../agent-instructions.md) to a project's
 instructions so Claude knows when to report.
 
+## Cursor
+
+Cursor uses the same Kebivo HTTP endpoint and bearer header, with its own
+`${env:KEBIVO_TOKEN}` interpolation syntax. Copy [`cursor_mcp.json`](cursor_mcp.json)
+to `.cursor/mcp.json` in your project or merge its entry into your existing file.
+Set `KEBIVO_TOKEN` in Cursor's environment. Cursor should list
+`report_knowledge_gap` under available MCP tools. See the
+[Cursor MCP docs](https://cursor.com/docs/mcp). The Cursor UI was not run for this example.
+
 ## Dependencies
 
 - Claude Code: nothing besides Claude Code.
@@ -57,5 +66,5 @@ Against a local Kebivo on 2026-10-21:
 - `claude_desktop_config.json`: ran the configured `npx mcp-remote@0.15.1`
   command, sent MCP `initialize`, `tools/list` and a `tools/call` of
   `report_knowledge_gap` over stdio, and the event was accepted.
-- **Untested:** the Claude Desktop app itself and a model-initiated tool call in
-  either app (no desktop session or paid model use in this run).
+- On 2026-10-26, the same bridge command was run against `ghcr.io/ocnai/kebivo:0.1.1`; `initialize`, `tools/list`, and `report_knowledge_gap` returned an accepted event.
+- **Untested:** the Claude Desktop and Cursor apps themselves and a model-initiated tool call in either app (no desktop session or paid model use in this run).

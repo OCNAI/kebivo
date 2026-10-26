@@ -7,6 +7,8 @@ an SDK and are not part of the `make e2e` acceptance suite.
 
 | Folder | Framework | Connects over | Model in the example |
 | --- | --- | --- | --- |
+| [`langchain/`](langchain/) | LangChain (Python) | REST | None; local keyword matching |
+| [`llamaindex/`](llamaindex/) | LlamaIndex (Python) | REST | None; local keyword matching |
 | [`claude/`](claude/) | Claude Code, Claude Desktop | MCP | Claude |
 | [`openai-agents/`](openai-agents/) | OpenAI Agents SDK (Python) | MCP | OpenAI or any OpenAI-compatible server |
 | [`langgraph/`](langgraph/) | LangGraph via LangChain `create_agent` | MCP | OpenAI or any OpenAI-compatible server |
@@ -16,8 +18,7 @@ an SDK and are not part of the `make e2e` acceptance suite.
 
 Every example needs a running Kebivo and a project token (create one on the
 project page in the admin UI). The scripts read `KEBIVO_URL` (default
-`http://127.0.0.1:8000`) and `KEBIVO_TOKEN`. Each script also takes
-`--list-tools`, which checks the connection without calling a model.
+`http://127.0.0.1:8000`) and `KEBIVO_TOKEN`. The MCP agent scripts take `--list-tools`, which checks the connection without calling a model. The LangChain and LlamaIndex scripts instead run a known and an unmatched question.
 
 A model may not call the tool when it should. Pair the tool with the
 [agent instructions](../agent-instructions.md), and use REST from your own code
