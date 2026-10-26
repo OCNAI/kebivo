@@ -104,6 +104,54 @@ project_token="$(printf '%s' "$token_body" | python3 -c 'import json,sys; print(
 printf '%s' "$token_body" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert isinstance(p["token"], str) and p["token"]'
 token_list="$(curl --fail --silent --show-error -b "$cookie_jar" "$api/projects/$project_id/tokens")"
 printf '%s' "$token_list" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert len(p["items"]) == 1 and "token" not in p["items"][0]'
+
+# Run the quickstart's signed receiver on the app container's loopback address.
+"${compose[@]}" cp examples/webhook_receiver.py app:/tmp/webhook_receiver.py
+"${compose[@]}" cp docs/webhook-payload.schema.json app:/tmp/webhook-payload.schema.json
+quickstart_destination="$(curl --fail --silent --show-error -b "$cookie_jar" -H 'Content-Type: application/json' \
+  "${write_headers[@]}" --data '{"name":"Quickstart local webhook","type":"webhook","allow_private_network":true,"config":{"url":"http://127.0.0.1:9000/hook","signing":true,"auth":{"type":"none"}}}' \
+  "$api/destinations")"
+quickstart_destination_id="$(printf '%s' "$quickstart_destination" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+quickstart_secret="$(printf '%s' "$quickstart_destination" | python3 -c 'import json,sys; print(json.load(sys.stdin)["signing_secret"])')"
+"${compose[@]}" exec -T -e WEBHOOK_SECRET="$quickstart_secret" app sh -c \
+  'python /tmp/webhook_receiver.py --schema /tmp/webhook-payload.schema.json --exit-after 1 > /tmp/quickstart-webhook.log 2>&1 &'
+quickstart_rule="$(curl --fail --silent --show-error -b "$cookie_jar" -H 'Content-Type: application/json' \
+  "${write_headers[@]}" --data "{\"name\":\"Route IT locally\",\"event_types\":[\"knowledge_gap\"],\"tags\":[\"it\"],\"match_mode\":\"any\",\"priority\":1,\"destination_ids\":[\"$quickstart_destination_id\"],\"match_behavior\":\"stop\"}" \
+  "$api/projects/$project_id/routing-rules")"
+quickstart_rule_id="$(printf '%s' "$quickstart_rule" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+quickstart_event="$(curl --fail --silent --show-error -H "Authorization: Bearer $project_token" \
+  -H 'Content-Type: application/json' -H 'Idempotency-Key: quickstart-routed-event' \
+  --data '{"event_type":"knowledge_gap","question":"Where is the quickstart VPN reset guide?","tags":["it"]}' "$api/feedback")"
+quickstart_event_id="$(printf '%s' "$quickstart_event" | python3 -c 'import json,sys; print(json.load(sys.stdin)["event_id"])')"
+quickstart_verified=0
+for attempt in $(seq 1 30); do
+  if "${compose[@]}" exec -T -e EXPECTED_EVENT_ID="$quickstart_event_id" app python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+lines = Path("/tmp/quickstart-webhook.log").read_text().splitlines()
+assert any(
+    (row := json.loads(line)).get("event_id") == os.environ["EXPECTED_EVENT_ID"]
+    and row.get("signature") == "valid" and row.get("schema") == "valid"
+    for line in lines if line.startswith("{")
+)
+PY
+  then
+    quickstart_verified=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$quickstart_verified" != 1 ]]; then
+  "${compose[@]}" exec -T app cat /tmp/quickstart-webhook.log
+  echo 'quickstart signed delivery was not verified' >&2
+  exit 1
+fi
+echo '{"quickstart_signed_delivery":"passed"}'
+curl --fail --silent --show-error -X DELETE -b "$cookie_jar" "${write_headers[@]}" \
+  "$api/projects/$project_id/routing-rules/$quickstart_rule_id" >/dev/null
+
 phase5_evidence="$("${compose[@]}" exec -T -e SMOKE_API="http://127.0.0.1:8000/api/v1" \
   -e SMOKE_ORIGIN="http://127.0.0.1:${port}" -e SMOKE_UI_ORIGIN=http://127.0.0.1:8000 \
   -e SMOKE_COOKIE_JAR=/tmp/smoke-cookies -e SMOKE_CSRF="$csrf_token" \
