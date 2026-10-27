@@ -37,6 +37,21 @@ test("gap and correction use the same API surface and token", async () => {
   assert.notEqual(seen[0].headers["idempotency-key"], seen[1].headers["idempotency-key"]);
 });
 
+test("null options are omitted and a null key is generated", async () => {
+  const seen = [];
+  handler = (request, response, body) => {
+    seen.push({ key: request.headers["idempotency-key"], body });
+    response.writeHead(202, { "Content-Type": "application/json" });
+    response.end('{"event_id":"event-4"}');
+  };
+  const client = new Kebivo(url, "secret");
+  await client.report_gap("Q", { idempotency_key: null, tags: null, context: undefined });
+  await client.report_gap("Q", { idempotency_key: null });
+  assert.deepEqual(seen[0].body, { event_type: "knowledge_gap", question: "Q" });
+  assert.notEqual(seen[0].key, "null");
+  assert.notEqual(seen[0].key, seen[1].key);
+});
+
 test("retries 429 and 5xx with one key and body", async () => {
   const seen = [];
   handler = (request, response, body) => {

@@ -48,12 +48,14 @@ export class Kebivo {
   }
 
   async _submit(event_type, question, options) {
-    const { idempotency_key = crypto.randomUUID(), ...fields } = options;
-    const body = JSON.stringify({ ...fields, event_type, question });
+    const { idempotency_key, ...fields } = options;
+    // Like the Python SDK, null means "not set" rather than a literal value.
+    const present = Object.entries(fields).filter(([, value]) => value != null);
+    const body = JSON.stringify({ ...Object.fromEntries(present), event_type, question });
     const headers = {
       Authorization: `Bearer ${this.token}`,
       "Content-Type": "application/json",
-      "Idempotency-Key": idempotency_key,
+      "Idempotency-Key": idempotency_key ?? crypto.randomUUID(),
     };
     for (let attempt = 0; attempt < 4; attempt++) {
       let response;
