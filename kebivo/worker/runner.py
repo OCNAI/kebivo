@@ -14,12 +14,20 @@ from uuid import uuid4
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from kebivo.dedup.semantic import SYSTEM_PROMPT, Candidate, candidates, prompt
+from kebivo.dedup.embeddings import normalize, store
+from kebivo.dedup.semantic import (
+    SYSTEM_PROMPT,
+    Candidate,
+    candidates,
+    embedding_candidates,
+    prompt,
+    score_embeddings,
+)
 from kebivo.destinations.base import ERRORS, REGISTRY, DeliveryResult, failure
 from kebivo.destinations.payload import payload_v1
 from kebivo.destinations.validation import ConfigError, validate_config
 from kebivo.feedback.groups import associate
-from kebivo.llm.adapter import LlmResult, complete
+from kebivo.llm.adapter import EmbedResult, LlmResult, complete, embed
 from kebivo.models import (
     DedupEvaluation,
     Delivery,
@@ -41,6 +49,7 @@ from kebivo.models import (
     Tag,
     now_utc,
 )
+from kebivo.projects import EMBEDDING_MAX_SCAN_DEFAULT, EMBEDDING_SIMILARITY_DEFAULT
 from kebivo.retention import RetentionCancelled
 from kebivo.retention import due as retention_due
 from kebivo.retention import run as retention_run
@@ -70,6 +79,11 @@ class SemanticWork:
     outcome: str = "provider_unavailable"
     attempts: int = 0
     latency_ms: int = 0
+    method: str = "judge"
+    vector: list[float] | None = None
+    scores: list[tuple[str, str, float]] = field(default_factory=list)
+    scanned_count: int = 0
+    embed_result: EmbedResult | None = None
 
 
 def _log(name: str, **fields: Any) -> None:
@@ -325,9 +339,16 @@ class Worker:
         started = time.monotonic()
         try:
             work = await asyncio.to_thread(self._prepare_semantic, identifier)
-            if work is not None and work.provider is not None and work.candidates:
+            if (
+                work is not None
+                and work.provider is not None
+                and (work.method == "embeddings" or work.candidates)
+            ):
                 try:
-                    await self._ask_semantic(work)
+                    if work.method == "embeddings":
+                        await self._ask_embedding(work)
+                    else:
+                        await self._ask_semantic(work)
                 except Exception:
                     work.outcome = "provider_error"
                     work.result = None
@@ -403,18 +424,20 @@ class Worker:
                 return None
             settings = dedup.get("semantic", {})
             work = SemanticWork(event.id, project.id, group.id, event.question, settings)
+            work.method = settings.get("method", "judge")
             try:
-                work.candidates = candidates(
-                    db,
-                    project.id,
-                    event.event_type,
-                    event.question,
-                    group.id,
-                    settings.get("candidate_count", 5),
-                )
-                if not work.candidates:
-                    work.outcome = "no_candidates"
-                    return work
+                if work.method == "judge":
+                    work.candidates = candidates(
+                        db,
+                        project.id,
+                        event.event_type,
+                        event.question,
+                        group.id,
+                        settings.get("candidate_count", 5),
+                    )
+                    if not work.candidates:
+                        work.outcome = "no_candidates"
+                        return work
                 provider = db.get(LlmProviderConfig, settings.get("provider_id"))
                 if provider is None or not provider.enabled:
                     return work
@@ -428,6 +451,97 @@ class Worker:
             except Exception:
                 work.outcome = "provider_error"
             return work
+
+    def _score_embedding(self, work: SemanticWork) -> None:
+        assert work.vector is not None
+        with self.factory() as db:
+            event = db.get(FeedbackEvent, work.event_id)
+            assert event is not None
+            rows = embedding_candidates(
+                db,
+                work.project_id,
+                event.event_type,
+                work.settings["embedding_model"],
+                len(work.vector),
+                work.group_id,
+                work.settings.get("max_scan", EMBEDDING_MAX_SCAN_DEFAULT),
+            )
+        work.scanned_count = len(rows)
+        work.scores = score_embeddings(work.vector, rows)
+        work.outcome = (
+            "no_candidates"
+            if not rows
+            else "matched"
+            if work.scores[0][2]
+            >= work.settings.get("similarity_threshold", EMBEDDING_SIMILARITY_DEFAULT)
+            else "no_match"
+        )
+
+    async def _ask_embedding(self, work: SemanticWork) -> None:
+        assert work.provider is not None
+        provider = work.provider
+        if self.provider_failures.get(provider.id, (0, 0.0))[1] > time.monotonic():
+            return
+        deadline = time.monotonic() + 45
+        acquired = False
+        try:
+            await asyncio.wait_for(self.llm_semaphore.acquire(), timeout=45)
+            acquired = True
+            for attempt in range(work.settings.get("max_attempts", 2)):
+                if self.provider_failures.get(provider.id, (0, 0.0))[1] > time.monotonic():
+                    work.outcome = "provider_unavailable"
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    work.outcome = "timeout"
+                    break
+                work.attempts += 1
+                try:
+                    result = await asyncio.wait_for(
+                        embed(
+                            provider,
+                            work.secrets,
+                            work.settings["embedding_model"],
+                            [work.question[:2000]],
+                            work.settings.get("embedding_dimensions", 1536),
+                        ),
+                        timeout=remaining,
+                    )
+                except TimeoutError:
+                    result = EmbedResult(error_category="timeout")
+                work.embed_result = result
+                work.latency_ms += result.latency_ms
+                if result.vectors:
+                    try:
+                        work.vector = normalize(result.vectors[0])
+                    except ValueError:
+                        work.outcome = "provider_error"
+                        break
+                    self.provider_failures.pop(provider.id, None)
+                    await asyncio.to_thread(self._score_embedding, work)
+                    break
+                category = result.error_category
+                work.outcome = "timeout" if category == "timeout" else "provider_error"
+                if category in TRANSPORT_FAILURES | {"http_429"}:
+                    failures = self.provider_failures.get(provider.id, (0, 0.0))[0] + 1
+                    self.provider_failures[provider.id] = (
+                        failures,
+                        time.monotonic() + PROVIDER_COOLDOWN_SECONDS
+                        if failures >= PROVIDER_FAILURE_THRESHOLD
+                        else 0.0,
+                    )
+                    if attempt + 1 < work.settings.get("max_attempts", 2):
+                        await asyncio.sleep(
+                            min(1 if attempt == 0 else 3, max(0, deadline - time.monotonic()))
+                        )
+                else:
+                    self.provider_failures.pop(provider.id, None)
+                    break
+        except TimeoutError:
+            work.outcome = "timeout"
+        finally:
+            if acquired:
+                self.llm_semaphore.release()
 
     async def _ask_semantic(self, work: SemanticWork) -> None:
         assert work.provider is not None
@@ -508,6 +622,9 @@ class Worker:
             provider.model, provider.timeout_seconds = original_model, original_timeout
 
     def _commit_semantic(self, db: Session, event: FeedbackEvent, work: SemanticWork) -> None:
+        if work.method == "embeddings":
+            self._commit_embedding(db, event, work)
+            return
         group = db.get(FeedbackGroup, work.group_id)
         outcome = work.outcome
         answer = work.result.answer if work.result else None
@@ -582,6 +699,57 @@ class Worker:
             attempts=work.attempts,
             latency_ms=work.latency_ms,
         )
+
+    def _commit_embedding(self, db: Session, event: FeedbackEvent, work: SemanticWork) -> None:
+        group = db.get(FeedbackGroup, work.group_id)
+        outcome = work.outcome
+        matched_group = None
+        if group is None or not self._untouched(db, event.id, group):
+            outcome = "skipped_group_changed"
+        elif outcome == "matched" and work.scores:
+            matched_group = db.get(FeedbackGroup, work.scores[0][0])
+            if (
+                matched_group is None
+                or matched_group.project_id != event.project_id
+                or matched_group.event_type != event.event_type
+            ):
+                outcome = "skipped_group_changed"
+                matched_group = None
+            else:
+                member = db.get(FeedbackGroupMember, event.id)
+                assert member is not None
+                db.delete(member)
+                db.flush()
+                db.delete(group)
+                db.flush()
+                associate(db, event, matched_group, "semantic", work.scores[0][2])
+        if work.vector is not None:
+            store(
+                db,
+                event_id=event.id,
+                project_id=event.project_id,
+                event_type=event.event_type,
+                provider_id=work.provider.id if work.provider else None,
+                model=work.settings["embedding_model"],
+                values=work.vector,
+            )
+        evaluation = DedupEvaluation(
+            event_id=event.id,
+            project_id=event.project_id,
+            provider_id=work.provider.id if work.provider else None,
+            model=work.settings["embedding_model"],
+            method="embeddings",
+            outcome=outcome,
+            candidate_count=work.scanned_count,
+            matched_group_id=matched_group.id if outcome == "matched" and matched_group else None,
+            confidence=work.scores[0][2] if work.scores else None,
+            reason=None,
+            error_category=work.embed_result.error_category if work.embed_result else None,
+            http_status=work.embed_result.http_status if work.embed_result else None,
+            attempts=work.attempts,
+            latency_ms=work.latency_ms,
+        )
+        db.add(evaluation)
 
     def _process_sync(self, identifier: str, work: SemanticWork | None = None) -> None:
         with self.factory() as db, db.begin():

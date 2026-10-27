@@ -13,10 +13,17 @@ from sqlalchemy.orm import Session
 
 from kebivo.admin_groups import _reject_bearer
 from kebivo.auth import AdminAuth
+from kebivo.dedup.embeddings import normalize
 from kebivo.dedup.normalize import question_hash
-from kebivo.dedup.semantic import SYSTEM_PROMPT, candidates, prompt
+from kebivo.dedup.semantic import (
+    SYSTEM_PROMPT,
+    candidates,
+    embedding_candidates,
+    prompt,
+    score_embeddings,
+)
 from kebivo.errors import error_response
-from kebivo.llm.adapter import complete
+from kebivo.llm.adapter import complete, embed
 from kebivo.models import (
     AuditEvent,
     FeedbackEvent,
@@ -25,6 +32,7 @@ from kebivo.models import (
     LlmProviderConfig,
     Project,
 )
+from kebivo.projects import EMBEDDING_MAX_SCAN_DEFAULT, EMBEDDING_SIMILARITY_DEFAULT
 from kebivo.security.secretbox import SecretBox, SecretError
 
 
@@ -115,6 +123,99 @@ def install_dedup_routes(app: Any) -> None:
         exact_group_id = member.group_id if member else None
         settings = json.loads(project.settings_json).get("deduplication", {})
         semantic = settings.get("semantic", {})
+        if settings.get("mode") == "semantic" and semantic.get("method") == "embeddings":
+            embedding_response: dict[str, Any] = {
+                "method": "embeddings",
+                "exact_match_group_id": exact_group_id,
+                "similarities": [],
+                "verdict": None,
+                "similarity_threshold": semantic.get(
+                    "similarity_threshold", EMBEDDING_SIMILARITY_DEFAULT
+                ),
+            }
+            if exact_group_id:
+                return embedding_response
+            provider = db.get(LlmProviderConfig, semantic.get("provider_id"))
+            if provider is None or not provider.enabled:
+                embedding_response["verdict"] = {"outcome": "provider_unavailable"}
+                return embedding_response
+            try:
+                secrets = (
+                    SecretBox.from_settings(request.app.state.settings).decrypt(
+                        provider.id, provider.secrets_ciphertext, purpose="llm-provider-secrets"
+                    )
+                    if provider.secrets_ciphertext
+                    else {}
+                )
+            except SecretError:
+                embedding_response["verdict"] = {"outcome": "provider_unavailable"}
+                return embedding_response
+            db.expunge(provider)
+            db.rollback()
+            acquired = False
+            try:
+                await asyncio.wait_for(request.app.state.llm_semaphore.acquire(), timeout=2)
+                acquired = True
+                embedding_result = await asyncio.wait_for(
+                    embed(
+                        provider,
+                        secrets,
+                        semantic["embedding_model"],
+                        [body.question[:2000]],
+                        semantic.get("embedding_dimensions", 1536),
+                    ),
+                    timeout=45,
+                )
+            except TimeoutError:
+                embedding_response["verdict"] = {"outcome": "timeout"}
+                return embedding_response
+            finally:
+                if acquired:
+                    request.app.state.llm_semaphore.release()
+            if not embedding_result.vectors:
+                embedding_response["verdict"] = {
+                    "outcome": "provider_error",
+                    "error_category": embedding_result.error_category,
+                }
+                return embedding_response
+            try:
+                vector = normalize(embedding_result.vectors[0])
+            except ValueError:
+                embedding_response["verdict"] = {"outcome": "provider_error"}
+                return embedding_response
+
+            def scan() -> list[tuple[str, str, float]]:
+                with request.app.state.session_factory() as scan_db:
+                    rows = embedding_candidates(
+                        scan_db,
+                        project.id,
+                        body.event_type,
+                        semantic["embedding_model"],
+                        len(vector),
+                        None,
+                        semantic.get("max_scan", EMBEDDING_MAX_SCAN_DEFAULT),
+                    )
+                return score_embeddings(vector, rows)
+
+            scores = await asyncio.to_thread(scan)
+            embedding_response["similarities"] = [
+                {
+                    "group_id": group_id,
+                    "representative_event_id": event_id,
+                    "similarity": score,
+                    "threshold_met": score >= embedding_response["similarity_threshold"],
+                }
+                for group_id, event_id, score in scores
+            ]
+            embedding_response["verdict"] = {
+                "outcome": "no_candidates"
+                if not scores
+                else "matched"
+                if scores[0][2] >= embedding_response["similarity_threshold"]
+                else "no_match",
+                "confidence": scores[0][2] if scores else None,
+            }
+            return embedding_response
         offered = candidates(
             db,
             project.id,

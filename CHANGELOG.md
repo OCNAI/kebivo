@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Optional embeddings semantic grouping scores recent same-model group representatives in the worker. Project settings and the audited preview now support `semantic.method: embeddings`; the admin defaults endpoint exposes the similarity threshold and scan limit. Failed embedding calls leave the provisional group intact and routing continues.
+
 ## 0.2.0 — 2026-10-27
 
 A new installation now gets from `docker run` to a routed, signed delivery by copy-paste, with no UI step and no model key.

@@ -32,6 +32,9 @@ from kebivo.tokens import GAP_SCOPE, ProjectTokenPrincipal
 
 SLUG = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$")
 DEFAULT_SETTINGS = {"corrections": {"enabled": False}, "deduplication": {"mode": "exact"}}
+EMBEDDING_SIMILARITY_DEFAULT = 0.88
+EMBEDDING_MAX_SCAN_DEFAULT = 2000
+EMBEDDING_MAX_SCAN_CAP = 5000
 MAX_PAGE_SIZE = 100
 
 
@@ -46,7 +49,27 @@ class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=5000)
-    settings: dict[str, Any] = Field(default_factory=lambda: dict(DEFAULT_SETTINGS))
+    settings: dict[str, Any] = Field(
+        default_factory=lambda: dict(DEFAULT_SETTINGS),
+        json_schema_extra={
+            "examples": [
+                {
+                    "deduplication": {
+                        "mode": "semantic",
+                        "semantic": {
+                            "method": "embeddings",
+                            "provider_id": "00000000-0000-0000-0000-000000000000",
+                            "embedding_model": "text-embedding-3-small",
+                            "embedding_dimensions": 1536,
+                            "similarity_threshold": EMBEDDING_SIMILARITY_DEFAULT,
+                            "max_scan": EMBEDDING_MAX_SCAN_DEFAULT,
+                        },
+                        "privacy_acknowledged": True,
+                    }
+                }
+            ]
+        },
+    )
 
     @field_validator("settings")
     @classmethod
@@ -128,41 +151,61 @@ def _settings(value: dict[str, Any]) -> dict[str, Any]:
         ):
             raise ValueError("semantic mode requires privacy acknowledgement")
         semantic = dedup["semantic"]
-        if not isinstance(semantic, dict) or set(semantic) - {
+        if not isinstance(semantic, dict):
+            raise ValueError("invalid semantic settings")
+        method = semantic.get("method", "judge")
+        allowed = {
             "provider_id",
-            "model",
-            "candidate_count",
-            "min_confidence",
             "timeout_seconds",
             "max_attempts",
-        }:
+            "method",
+        } | (
+            {"model", "candidate_count", "min_confidence"}
+            if method == "judge"
+            else {"embedding_model", "embedding_dimensions", "similarity_threshold", "max_scan"}
+        )
+        if method not in {"judge", "embeddings"} or set(semantic) - allowed:
             raise ValueError("invalid semantic settings")
         try:
             provider_id = str(UUID(semantic["provider_id"]))
         except (KeyError, TypeError, ValueError):
             raise ValueError("semantic provider_id must be a UUID") from None
-        model = semantic.get("model")
-        if model is not None and (not isinstance(model, str) or not 1 <= len(model) <= 200):
-            raise ValueError("invalid semantic model")
         fields = {
-            "candidate_count": (5, 1, 10),
             "timeout_seconds": (15, 1, 30),
             "max_attempts": (2, 1, 3),
         }
-        normalized = {"provider_id": provider_id, "model": model}
+        if method == "judge":
+            fields["candidate_count"] = (5, 1, 10)
+        else:
+            fields["embedding_dimensions"] = (1536, 1, 8192)
+            fields["max_scan"] = (EMBEDDING_MAX_SCAN_DEFAULT, 1, EMBEDDING_MAX_SCAN_CAP)
+        normalized = {"provider_id": provider_id, "method": method}
+        if method == "judge":
+            model = semantic.get("model")
+            if model is not None and (not isinstance(model, str) or not 1 <= len(model) <= 200):
+                raise ValueError("invalid semantic model")
+            normalized["model"] = model
+        else:
+            model = semantic.get("embedding_model")
+            if not isinstance(model, str) or not 1 <= len(model) <= 200:
+                raise ValueError("invalid semantic embedding_model")
+            normalized["embedding_model"] = model
         for name, (default, low, high) in fields.items():
             number = semantic.get(name, default)
             if isinstance(number, bool) or not isinstance(number, int) or not low <= number <= high:
                 raise ValueError(f"invalid semantic {name}")
             normalized[name] = number
-        confidence = semantic.get("min_confidence", 0.85)
+        confidence_name = "min_confidence" if method == "judge" else "similarity_threshold"
+        confidence = semantic.get(
+            confidence_name, 0.85 if method == "judge" else EMBEDDING_SIMILARITY_DEFAULT
+        )
         if (
             isinstance(confidence, bool)
             or not isinstance(confidence, int | float)
-            or not 0.5 <= confidence <= 1
+            or not 0.5 <= confidence <= (1 if method == "judge" else 0.99)
         ):
-            raise ValueError("invalid semantic min_confidence")
-        normalized["min_confidence"] = confidence
+            raise ValueError(f"invalid semantic {confidence_name}")
+        normalized[confidence_name] = confidence
         value = {
             **value,
             "deduplication": {
@@ -186,6 +229,11 @@ def _require_provider(db: Session, settings: dict[str, Any]) -> None:
         raise ProjectAPIError(
             422, "invalid_provider", "Semantic provider must exist and be enabled"
         )
+    if dedup["semantic"].get("method") == "embeddings" and provider.provider_type not in {
+        "openai_compatible",
+        "local",
+    }:
+        raise ProjectAPIError(422, "invalid_provider", "Provider does not support embeddings")
 
 
 class DefaultTagsUpdate(BaseModel):
@@ -261,6 +309,18 @@ def _audit_project(
 
 def install_project_routes(app: Any) -> None:
     router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
+
+    @router.get("/dedup/defaults", dependencies=[Depends(_reject_bearer)])
+    def dedup_defaults(auth: AdminAuth) -> dict[str, Any]:
+        del auth
+        return {
+            "embeddings": {
+                "similarity_threshold": EMBEDDING_SIMILARITY_DEFAULT,
+                "max_scan": EMBEDDING_MAX_SCAN_DEFAULT,
+                "max_scan_cap": EMBEDDING_MAX_SCAN_CAP,
+                "embedding_dimensions": 1536,
+            }
+        }
 
     @router.post(
         "/{project_id}/test-event", status_code=202, dependencies=[Depends(_reject_bearer)]
