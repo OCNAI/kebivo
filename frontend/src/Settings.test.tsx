@@ -28,6 +28,7 @@ describe('P7 settings and integration',()=>{
     host=document.createElement('div');document.body.append(host);root=createRoot(host);
     const fetch=vi.fn(async()=>new Response(JSON.stringify({event_id:'e1',group_id:'g1'}),{status:202}));globalThis.fetch=fetch as typeof globalThis.fetch;
     await act(async()=>root.render(<ConnectPanel correctionsEnabled projectId="p1"/>));
+    expect(host.textContent).toContain('Sent like a real report. Matching routing rules deliver it to their destinations.');
     await act(async()=>{host.querySelector<HTMLButtonElement>('button')!.click();await new Promise(resolve=>setTimeout(resolve,0));});
     expect(fetch).toHaveBeenCalledWith('/api/v1/projects/p1/test-event',expect.objectContaining({method:'POST'}));
     expect(host.textContent).toContain('Test event sent.');

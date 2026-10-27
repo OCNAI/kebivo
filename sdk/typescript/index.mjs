@@ -12,6 +12,19 @@ export class KebivoHTTPError extends KebivoError {
 
 export class KebivoConnectionError extends KebivoError {}
 
+let warnedAboutInsecureHttp = false;
+
+function containsNonFiniteNumber(value) {
+  if (typeof value === "number") return !Number.isFinite(value);
+  if (Array.isArray(value)) return value.some(containsNonFiniteNumber);
+  if (value && typeof value === "object") return Object.values(value).some(containsNonFiniteNumber);
+  return false;
+}
+
+function isTimeout(error) {
+  return error?.name === "TimeoutError";
+}
+
 function retryAfter(value) {
   if (!value) return 0;
   const numeric = Number(value);
@@ -34,6 +47,10 @@ export class Kebivo {
     }
     if (!token) throw new TypeError("token is required");
     if (!Number.isFinite(timeout) || timeout <= 0) throw new TypeError("timeout must be positive");
+    if (parsed.protocol === "http:" && !["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname) && !warnedAboutInsecureHttp) {
+      warnedAboutInsecureHttp = true;
+      console.warn("Kebivo SDK is using http:// for a non-loopback host; use https:// to protect the project token.");
+    }
     this.url = `${url.replace(/\/+$/, "")}/api/v1/feedback`;
     this.token = token;
     this.timeout = timeout;
@@ -49,9 +66,14 @@ export class Kebivo {
 
   async _submit(event_type, question, options) {
     const { idempotency_key, ...fields } = options;
+    if (idempotency_key != null && (typeof idempotency_key !== "string" || idempotency_key.length < 1 || idempotency_key.length > 255 || !/^[\x21-\x7e]+$/.test(idempotency_key))) {
+      throw new KebivoError("idempotency_key must contain 1 to 255 printable ASCII characters");
+    }
     // Like the Python SDK, null means "not set" rather than a literal value.
     const present = Object.entries(fields).filter(([, value]) => value != null);
-    const body = JSON.stringify({ ...Object.fromEntries(present), event_type, question });
+    const payload = { ...Object.fromEntries(present), event_type, question };
+    if (containsNonFiniteNumber(payload)) throw new KebivoError("Feedback payload numbers must be finite");
+    const body = JSON.stringify(payload);
     const headers = {
       Authorization: `Bearer ${this.token}`,
       "Content-Type": "application/json",
@@ -64,17 +86,19 @@ export class Kebivo {
           method: "POST", headers, body, redirect: "manual",
           signal: AbortSignal.timeout(this.timeout * 1000),
         });
+        if (response.ok) {
+          try {
+            return await response.json();
+          } catch (error) {
+            if (!isTimeout(error)) throw new KebivoError("Kebivo returned a response that is not JSON", { cause: error });
+            throw error;
+          }
+        }
       } catch (error) {
+        if (response && !isTimeout(error)) throw error;
         if (attempt === 3) throw new KebivoConnectionError(String(error), { cause: error });
         await sleep(2 ** attempt);
         continue;
-      }
-      if (response.ok) {
-        try {
-          return await response.json();
-        } catch (error) {
-          throw new KebivoError("Kebivo returned a response that is not JSON", { cause: error });
-        }
       }
       let envelope = {};
       try {

@@ -118,6 +118,58 @@ test("bad success JSON is a Kebivo error", async () => {
   await assert.rejects(new Kebivo(url, "secret").report_gap("Q"), KebivoError);
 });
 
+test("validates idempotency keys and rejects non-finite payload numbers before sending", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; throw new Error("must not send"); };
+  try {
+    const client = new Kebivo(url, "secret");
+    for (const key of ["", "space key", "line\nbreak", "é", "a".repeat(256), 12]) {
+      await assert.rejects(client.report_gap("Q", { idempotency_key: key }), KebivoError);
+    }
+    await assert.rejects(client.report_gap("Q", { metadata: { score: Number.NaN } }), KebivoError);
+    await assert.rejects(client.report_gap("Q", { tags: [Infinity] }), KebivoError);
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("timeouts reading a successful response body retry", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => {
+      calls++;
+      if (calls === 1) throw new DOMException("timed out", "TimeoutError");
+      return { event_id: "retried" };
+    },
+  });
+  try {
+    assert.equal((await new Kebivo(url, "secret").report_gap("Q")).event_id, "retried");
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rejects URL userinfo and warns once for non-loopback HTTP", () => {
+  assert.throws(() => new Kebivo("https://user:pass@example.com", "secret"), TypeError);
+  const warn = console.warn;
+  const warnings = [];
+  console.warn = (message) => warnings.push(message);
+  try {
+    new Kebivo("http://example.com", "secret");
+    new Kebivo("http://another.example", "secret");
+    new Kebivo("http://127.0.0.1", "secret");
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /https:\/\//);
+});
+
 test("connection failures exhaust into a typed error", async () => {
   const unused = await new Promise((resolve) => {
     const socket = createServer();
