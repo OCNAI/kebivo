@@ -161,10 +161,10 @@ To stop the published image: `docker stop kebivo` (data stays in the volume). To
 
 Send `POST /api/v1/feedback` with a project token. A `202` means the report is stored durably; routing and delivery happen in the background. Send an `Idempotency-Key` and reuse it on retries. Retry `429` and `5xx` responses with backoff; do not retry other `4xx` errors.
 
-For Python applications, install the [standalone Python SDK](sdk/python/README.md) directly from GitHub with `pip install "git+https://github.com/OCNAI/kebivo#subdirectory=sdk/python"` (not published to PyPI):
+For Python applications, install the `kebivo-client` distribution from the [standalone Python SDK](sdk/python/README.md) directly from GitHub with `pip install "git+https://github.com/OCNAI/kebivo#subdirectory=sdk/python"` (not published to PyPI):
 
 ```python
-from kebivo import Kebivo
+from kebivo_client import Kebivo
 
 client = Kebivo("https://your-kebivo.example", "<PROJECT_TOKEN>")
 accepted = client.report_gap("How do I reset my VPN?", tags=["it"])

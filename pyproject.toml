@@ -21,6 +21,7 @@ dependencies = [
 dev = [
   "aiosmtpd==1.4.6",
   "langchain-core==1.7.0",
+  "kebivo-client",
   "mypy==1.15.0",
   "pytest==8.3.5",
   "ruff==0.11.8",
@@ -48,3 +49,6 @@ packages = ["kebivo"]
 [tool.pytest.ini_options]
 testpaths = ["kebivo/tests"]
 addopts = "-q"
+
+[tool.uv.sources]
+kebivo-client = { path = "sdk/python", editable = true }

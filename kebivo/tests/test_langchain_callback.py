@@ -1,36 +1,14 @@
 """The optional callback works with a retriever and no model or network."""
 
-import importlib.util
-import sys
 import threading
-from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import Mock
 
+from kebivo_client import Kebivo
+from kebivo_client import langchain as callback_module
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import RunnableConfig
-
-SDK_DIR = Path(__file__).resolve().parents[2] / "sdk/python/kebivo"
-package_spec = importlib.util.spec_from_file_location(
-    "kebivo_sdk_test", SDK_DIR / "__init__.py", submodule_search_locations=[str(SDK_DIR)]
-)
-assert package_spec and package_spec.loader
-package = importlib.util.module_from_spec(package_spec)
-sys.modules[package_spec.name] = package
-package_spec.loader.exec_module(package)
-callback_spec = importlib.util.spec_from_file_location(
-    "kebivo_sdk_test.langchain", SDK_DIR / "langchain.py"
-)
-assert callback_spec and callback_spec.loader
-callback_module = importlib.util.module_from_spec(callback_spec)
-callback_spec.loader.exec_module(callback_module)
-
-
-def wait_for_reports() -> None:
-    for thread in threading.enumerate():
-        if thread.name == "kebivo-report":
-            thread.join(timeout=5)
 
 
 class FakeRetriever(BaseRetriever):
@@ -53,25 +31,25 @@ class FakeClient:
 
 def test_reports_only_empty_retrieval_and_uses_query() -> None:
     client = FakeClient()
-    handler = callback_module.KebivoCallbackHandler(client, project_tags=["support"])
+    handler = callback_module.KebivoCallbackHandler(cast(Kebivo, client), project_tags=["support"])
     config: RunnableConfig = {"callbacks": [handler]}
     assert FakeRetriever(documents=[]).invoke("Where is the VPN guide?", config=config) == []
     assert FakeRetriever(documents=[Document(page_content="Guide")]).invoke(
         "Where is the handbook?", config=config
     ) == [Document(page_content="Guide")]
-    wait_for_reports()
+    assert handler.flush(5)
     assert client.calls == [("Where is the VPN guide?", ["support"])]
     assert handler._queries == {}
 
 
 def test_reporting_failure_does_not_break_retriever(monkeypatch: Any) -> None:
     client = FakeClient(fails=True)
-    handler = callback_module.KebivoCallbackHandler(client)
+    handler = callback_module.KebivoCallbackHandler(cast(Kebivo, client))
     logged = Mock()
     monkeypatch.setattr(callback_module.logger, "exception", logged)
     result = FakeRetriever(documents=[]).invoke("Missing answer", config={"callbacks": [handler]})
     assert result == []
-    wait_for_reports()
+    assert handler.flush(5)
     assert client.calls == [("Missing answer", None)]
     logged.assert_called_once_with("Could not report Kebivo retrieval gap")
 
@@ -80,8 +58,40 @@ def test_slow_reporting_does_not_delay_retriever() -> None:
     release = threading.Event()
     client = Mock()
     client.report_gap.side_effect = lambda *args, **kwargs: release.wait(5)
-    handler = callback_module.KebivoCallbackHandler(client)
+    handler = callback_module.KebivoCallbackHandler(cast(Kebivo, client))
     assert FakeRetriever(documents=[]).invoke("Slow", config={"callbacks": [handler]}) == []
     release.set()
-    wait_for_reports()
+    assert handler.flush(5)
     client.report_gap.assert_called_once_with("Slow", tags=None)
+
+
+def test_queue_drops_without_blocking(monkeypatch: Any) -> None:
+    from uuid import uuid4
+
+    release = threading.Event()
+    started = threading.Event()
+    client = Mock()
+
+    def block(*_args: Any, **_kwargs: Any) -> None:
+        started.set()
+        release.wait(5)
+
+    client.report_gap.side_effect = block
+    handler = callback_module.KebivoCallbackHandler(cast(Kebivo, client))
+    warning = Mock()
+    monkeypatch.setattr(callback_module.logger, "warning", warning)
+    try:
+        first = uuid4()
+        handler.on_retriever_start({}, "first", run_id=first)
+        handler.on_retriever_end([], run_id=first)
+        assert started.wait(1)
+        for index in range(101):
+            run_id = uuid4()
+            handler.on_retriever_start({}, str(index), run_id=run_id)
+            handler.on_retriever_end([], run_id=run_id)
+        warning.assert_called_once_with("Kebivo report queue full; dropping retrieval gap")
+        assert not handler.flush(0.01)
+    finally:
+        release.set()
+        assert handler.flush(5)
+    assert client.report_gap.call_count == 101
