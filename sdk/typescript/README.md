@@ -2,6 +2,8 @@
 
 An ESM client for the [Kebivo REST feedback API](../../docs/rest-api.md). Node 20+ and global `fetch` are required. It has zero runtime dependencies and is not published to npm.
 
+Use a project token with `feedback:gap` scope. Create one token per service, keep it on the server, send requests over HTTPS, and revoke it if it leaks. Corrections additionally need `feedback:correction` scope and an enabled corrections policy.
+
 Install from a local checkout with `npm install ./sdk/typescript`, or copy `sdk/typescript/index.mjs` into your application and import it by relative path. The optional `index.d.mts` supplies TypeScript declarations when installing the package; copy it alongside `index.mjs` if you want types with the single-file route.
 
 ```js
