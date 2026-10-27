@@ -111,6 +111,10 @@ Reporting feedback should never break your user's conversation. Send it in the b
 
 The [standalone Python SDK](../sdk/python/README.md) provides `Kebivo(url, token, timeout=10)`, `report_gap(...)`, and `submit_correction(...)`. It creates and reuses an idempotency key across retries, handles `Retry-After`, and raises typed errors. Install it directly from GitHub; it is not published to PyPI.
 
+## TypeScript SDK
+
+The [standalone TypeScript SDK](../sdk/typescript/README.md) provides the same calls and retry behavior for Node 20+ using global `fetch`, with no runtime dependencies. Install it by local path or copy its ESM file. It is not published to npm. Keep project tokens on the server; never embed them in browser code.
+
 ## Examples
 
 Each example sends one knowledge gap, reuses one idempotency key across retries, retries `429` and `5xx` with backoff, and stops on other errors. They read `KEBIVO_URL` (default `http://127.0.0.1:8000`) and `KEBIVO_TOKEN`. The acceptance suite (`make e2e`) runs every file in [`examples/`](../examples/) against a built container, and the project page in the admin UI shows the same snippets with your project's endpoint.
