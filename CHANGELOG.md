@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 — unreleased
+## 0.2.0 — 2026-10-27
 
 A new installation now gets from `docker run` to a routed, signed delivery by copy-paste, with no UI step and no model key.
 

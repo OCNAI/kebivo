@@ -7,11 +7,11 @@
     "url": "https://github.com/OCNAI/kebivo",
     "source": "github"
   },
-  "version": "0.1.1",
+  "version": "0.2.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/ocnai/kebivo:0.1.1",
+      "identifier": "ghcr.io/ocnai/kebivo:0.2.0",
       "runtimeHint": "docker",
       "runtimeArguments": [
         {

@@ -2,7 +2,7 @@
 
 `agent.py` keeps two sample policy notes as LangChain `Document` objects. A `RunnableLambda` retrieves notes with shared keywords. When none match, Python's standard HTTP client sends a `knowledge_gap` event to Kebivo's REST API. No model or embedding service is needed.
 
-From the repository root, run `ghcr.io/ocnai/kebivo:0.1.1` (the [quickstart](../../../docs/quickstart.md) explains setup with a source build), create a project token with `feedback:gap`, and run:
+From the repository root, run `ghcr.io/ocnai/kebivo:0.2.0` (the [quickstart](../../../docs/quickstart.md) explains setup with a source build), create a project token with `feedback:gap`, and run:
 
 ```sh
 export KEBIVO_URL=http://127.0.0.1:8000

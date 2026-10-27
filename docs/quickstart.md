@@ -13,7 +13,7 @@ You need Docker, OpenSSL, Python 3 and a free port 8000. The published image is 
 (umask 077; printf 'SECRET_KEY=%s\nENCRYPTION_KEY=%s\nALLOWED_ORIGINS=http://127.0.0.1:8000\n' \
   "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > kebivo.env)
 docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 \
-  -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.1.1
+  -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.2.0
 curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
 ```
 
@@ -62,8 +62,8 @@ Get the [stdlib receiver](../examples/webhook_receiver.py) and its [payload sche
 
 ```sh
 mkdir -p examples docs
-curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.1.1/examples/webhook_receiver.py -o examples/webhook_receiver.py
-curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.1.1/docs/webhook-payload.schema.json -o docs/webhook-payload.schema.json
+curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.2.0/examples/webhook_receiver.py -o examples/webhook_receiver.py
+curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.2.0/docs/webhook-payload.schema.json -o docs/webhook-payload.schema.json
 docker cp examples/webhook_receiver.py kebivo:/tmp/webhook_receiver.py
 docker cp docs/webhook-payload.schema.json kebivo:/tmp/webhook-payload.schema.json
 WEBHOOK_SECRET="$WEBHOOK_SECRET" docker exec -e WEBHOOK_SECRET kebivo python /tmp/webhook_receiver.py \

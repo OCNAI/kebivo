@@ -312,7 +312,7 @@ def test_dry_run_and_settings_disclose_no_secret(tmp_path: Path) -> None:
     assert hashlib.sha256(db_path.read_bytes()).hexdigest() == before
     assert client.get("/api/v1/admin/settings").status_code == 200
     payload = client.get("/api/v1/admin/settings").json()
-    assert payload["version"] == "0.1.1"
+    assert payload["version"] == "0.2.0"
     assert payload["retention"]["feedback_days"] == 180
     assert "secret" not in json.dumps(payload).lower()
     assert "version" not in client.get("/health/live").text
@@ -557,7 +557,7 @@ def test_cli_version_reads_project_version(
 ) -> None:
     monkeypatch.setattr("sys.argv", ["kebivo.cli", "version"])
     cli_main()
-    assert capsys.readouterr().out.strip() == "0.1.1"
+    assert capsys.readouterr().out.strip() == "0.2.0"
 
 
 def test_orphan_event_is_skipped_without_stopping_the_run(tmp_path: Path) -> None:

@@ -459,7 +459,7 @@ wheels = [
 
 [[package]]
 name = "kebivo"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
@@ -505,7 +505,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "kebivo-client"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "sdk/python" }
 
 [package.metadata]
