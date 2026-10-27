@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from threading import Lock
+from threading import Lock, Thread
 from typing import Any
 from uuid import UUID
 
@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 class KebivoCallbackHandler(BaseCallbackHandler):
-    """Report a gap when a retriever returns no documents."""
+    """Report a gap when a retriever returns no documents.
+
+    Reports are sent from a background thread so client retries never delay retrieval.
+    """
 
     def __init__(self, client: Kebivo, project_tags: list[str] | None = None) -> None:
         self.client = client
@@ -41,7 +44,15 @@ class KebivoCallbackHandler(BaseCallbackHandler):
             with self._lock:
                 query = self._queries.pop(run_id, None)
             if not documents and query:
-                self.client.report_gap(query, tags=self.project_tags)
+                Thread(
+                    target=self._report, args=(query,), name="kebivo-report", daemon=True
+                ).start()
+        except Exception:
+            logger.exception("Could not report Kebivo retrieval gap")
+
+    def _report(self, query: str) -> None:
+        try:
+            self.client.report_gap(query, tags=self.project_tags)
         except Exception:
             logger.exception("Could not report Kebivo retrieval gap")
 

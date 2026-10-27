@@ -2,6 +2,7 @@
 
 import importlib.util
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -24,6 +25,12 @@ callback_spec = importlib.util.spec_from_file_location(
 assert callback_spec and callback_spec.loader
 callback_module = importlib.util.module_from_spec(callback_spec)
 callback_spec.loader.exec_module(callback_module)
+
+
+def wait_for_reports() -> None:
+    for thread in threading.enumerate():
+        if thread.name == "kebivo-report":
+            thread.join(timeout=5)
 
 
 class FakeRetriever(BaseRetriever):
@@ -52,6 +59,7 @@ def test_reports_only_empty_retrieval_and_uses_query() -> None:
     assert FakeRetriever(documents=[Document(page_content="Guide")]).invoke(
         "Where is the handbook?", config=config
     ) == [Document(page_content="Guide")]
+    wait_for_reports()
     assert client.calls == [("Where is the VPN guide?", ["support"])]
     assert handler._queries == {}
 
@@ -63,5 +71,17 @@ def test_reporting_failure_does_not_break_retriever(monkeypatch: Any) -> None:
     monkeypatch.setattr(callback_module.logger, "exception", logged)
     result = FakeRetriever(documents=[]).invoke("Missing answer", config={"callbacks": [handler]})
     assert result == []
+    wait_for_reports()
     assert client.calls == [("Missing answer", None)]
     logged.assert_called_once_with("Could not report Kebivo retrieval gap")
+
+
+def test_slow_reporting_does_not_delay_retriever() -> None:
+    release = threading.Event()
+    client = Mock()
+    client.report_gap.side_effect = lambda *args, **kwargs: release.wait(5)
+    handler = callback_module.KebivoCallbackHandler(client)
+    assert FakeRetriever(documents=[]).invoke("Slow", config={"callbacks": [handler]}) == []
+    release.set()
+    wait_for_reports()
+    client.report_gap.assert_called_once_with("Slow", tags=None)

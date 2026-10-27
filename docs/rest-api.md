@@ -119,7 +119,7 @@ Install the SDK with its optional callback dependency from a repository checkout
 pip install './sdk/python[langchain]'
 ```
 
-Attach the handler to a LangChain retriever. An empty document list reports the retriever query as a knowledge gap. A nonempty result does not report. Kebivo errors are logged and never interrupt retrieval.
+Attach the handler to a LangChain retriever. An empty document list reports the retriever query as a knowledge gap. A nonempty result does not report. The report is sent from a background thread, so Kebivo retries never delay retrieval, and errors are logged rather than raised.
 
 ```python
 import os

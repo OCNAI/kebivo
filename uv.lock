@@ -476,14 +476,10 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "aiosmtpd" },
+    { name = "langchain-core" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "ruff" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "langchain-core" },
 ]
 
 [package.metadata]
@@ -494,6 +490,7 @@ requires-dist = [
     { name = "cryptography", specifier = "==50.0.2" },
     { name = "fastapi", specifier = "==0.143.3" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "langchain-core", marker = "extra == 'dev'", specifier = "==1.7.0" },
     { name = "mcp", specifier = "==2.3.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.15.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==8.3.5" },
@@ -503,9 +500,6 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = "==0.34.2" },
 ]
 provides-extras = ["dev"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "langchain-core", specifier = ">=1.0,<2" }]
 
 [[package]]
 name = "langchain-core"
