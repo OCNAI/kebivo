@@ -30,4 +30,4 @@ Each call generates an idempotency key unless you provide one. The key and body 
 
 For LangChain or LangGraph retrieval callbacks, install the `kebivo-client[langchain]` optional extra and see the [integration examples](../../docs/rest-api.md#langchain-and-langgraph).
 
-The LangChain callback buffers at most 100 pending reports and sends them with one daemon worker. When the queue is full it drops new reports with a warning. Call `handler.flush(timeout=1)` before shutdown when delivery matters; it returns whether all accepted reports finished. Process exit also makes a best-effort one-second flush.
+The LangChain callback buffers at most 100 pending reports and sends them with one daemon worker. When the queue is full it drops new reports with a warning. Call `handler.flush(timeout=1)` before shutdown when delivery matters; it returns whether all accepted reports finished. Process exit also makes a best-effort one-second flush. Create one handler and reuse it; each handler starts its own worker.

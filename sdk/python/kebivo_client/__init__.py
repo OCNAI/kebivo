@@ -268,6 +268,8 @@ class Kebivo:
                     "Idempotency-Key": key,
                 },
             )
+            if expired.is_set():
+                raise TimeoutError("Kebivo request deadline exceeded")
             active_socket = connection.sock
             response = connection.getresponse()
             raw = response.read()
