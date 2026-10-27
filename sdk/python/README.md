@@ -27,3 +27,5 @@ except KebivoError as error:
 Each call generates an idempotency key unless you provide one. The key and body stay the same across up to four attempts. The client retries HTTP 429, HTTP 5xx, and connection failures with 1, 2, and 4 second backoff, waiting at least the server's `Retry-After` value (capped at 60 seconds) when present. Other HTTP 4xx errors fail immediately. Redirects are not followed, so the token is never sent to another URL.
 
 `KebivoHTTPError` provides `status_code`, `code`, `message`, `details`, and `request_id`. `KebivoConnectionError` means no response arrived after retries. Both inherit `KebivoError`. Catch these errors at your application boundary so feedback failure does not interrupt the user's answer.
+
+For LangChain or LangGraph retrieval callbacks, install the optional extra and see the [integration examples](../../docs/rest-api.md#langchain-and-langgraph).
