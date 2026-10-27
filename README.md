@@ -122,7 +122,7 @@ curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.1.1/examples/webhook
 curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.1.1/docs/webhook-payload.schema.json -o docs/webhook-payload.schema.json
 docker cp examples/webhook_receiver.py kebivo:/tmp/webhook_receiver.py
 docker cp docs/webhook-payload.schema.json kebivo:/tmp/webhook-payload.schema.json
-docker exec -e WEBHOOK_SECRET="$WEBHOOK_SECRET" kebivo python /tmp/webhook_receiver.py \
+WEBHOOK_SECRET="$WEBHOOK_SECRET" docker exec -e WEBHOOK_SECRET kebivo python /tmp/webhook_receiver.py \
   --schema /tmp/webhook-payload.schema.json --exit-after 1 > kebivo-webhook.log 2>&1 &
 ```
 
