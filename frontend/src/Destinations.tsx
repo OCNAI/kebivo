@@ -36,6 +36,7 @@ type SmtpConfig = DestinationConfig & {
   to?: string[];
 };
 type InboxConfig = DestinationConfig;
+type SlackConfig = DestinationConfig;
 type ConfigUpdate = Record<string, unknown>;
 
 type DestinationBase = {
@@ -49,8 +50,10 @@ type DestinationBase = {
 };
 type Destination =
   | (DestinationBase & { type: "webhook"; config: WebhookConfig })
+  | (DestinationBase & { type: "slack"; config: SlackConfig })
   | (DestinationBase & { type: "smtp"; config: SmtpConfig })
   | (DestinationBase & { type: "inbox"; config: InboxConfig });
+type DestinationKind = "webhook" | "slack" | "smtp";
 type FormData = {
   name: string;
   type: string;
@@ -67,7 +70,7 @@ export function Destinations() {
   const [items, setItems] = React.useState<Destination[]>([]);
   const [selected, setSelected] = React.useState<Destination | null>(null);
   const [creating, setCreating] = React.useState(false);
-  const [kind, setKind] = React.useState<"webhook" | "smtp">("webhook");
+  const [kind, setKind] = React.useState<DestinationKind>("webhook");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [fields, setFields] = React.useState<Record<string, string>>({});
@@ -100,7 +103,7 @@ export function Destinations() {
       live = false;
     };
   }, []);
-  function startCreate(type: "webhook" | "smtp") {
+  function startCreate(type: DestinationKind) {
     setPendingPrivate(false);
     setSelected(null);
     setCreating(true);
@@ -119,7 +122,7 @@ export function Destinations() {
       const fresh = await apiRequest<Destination>(`destinations/${item.id}`);
       setSelected(fresh);
       setCreating(true);
-      setKind(fresh.type as "webhook" | "smtp");
+      setKind(fresh.type as DestinationKind);
       setTlsNone(fresh.config.tls_mode === "none");
       setNotice("");
       setOnceSecret("");
@@ -129,7 +132,7 @@ export function Destinations() {
   }
   function parseForm(
     form: HTMLFormElement,
-    type: "webhook" | "smtp",
+    type: DestinationKind,
   ): FormData {
     const d = new window.FormData(form);
     const get = (key: string) => String(d.get(key) ?? "");
@@ -169,6 +172,9 @@ export function Destinations() {
       if (auth === "header") {
         if (get("header_value")) secrets.header_value = get("header_value");
       }
+    } else if (type === "slack") {
+      if (get("url")) secrets.url = get("url");
+      config.timeout_seconds = Number(get("timeout_seconds"));
     } else {
       config.host = get("host");
       config.port = Number(get("port"));
@@ -398,6 +404,12 @@ export function Destinations() {
             <button onClick={() => startCreate("webhook")}>New webhook</button>
             <button
               className="quiet-button"
+              onClick={() => startCreate("slack")}
+            >
+              New Slack
+            </button>
+            <button
+              className="quiet-button"
               onClick={() => startCreate("smtp")}
             >
               New SMTP
@@ -421,7 +433,7 @@ export function Destinations() {
                   <th>Type</th>
                   <th>State</th>
                   <th>Delivery mode</th>
-                  <th>Webhook origin</th>
+                  <th>Endpoint origin</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -437,6 +449,8 @@ export function Destinations() {
                     <td>
                       {item.type === "webhook"
                         ? "Webhook"
+                        : item.type === "slack"
+                          ? "Slack"
                         : item.type === "smtp"
                           ? "SMTP"
                           : "Built-in inbox"}
@@ -444,7 +458,7 @@ export function Destinations() {
                     <td>{item.enabled ? "Enabled" : "Disabled"}</td>
                     <td>{modeLabel(item.delivery_mode)}</td>
                     <td>
-                      {item.type === "webhook"
+                      {item.type === "webhook" || item.type === "slack"
                         ? `${item.config.url_origin ?? ""}${item.config.url_has_path ? " · path hidden" : ""}`
                         : "—"}
                     </td>
@@ -520,7 +534,7 @@ export function Destinations() {
               </div>
             </div>
             <p>
-              {selected.type === "webhook"
+              {selected.type === "webhook" || selected.type === "slack"
                 ? `${selected.config.url_origin ?? ""} · path hidden`
                 : selected.type.toUpperCase()}{" "}
               · {modeLabel(selected.delivery_mode)}
@@ -567,7 +581,7 @@ export function Destinations() {
             <h2 id="destination-form-title">
               {selected
                 ? "Edit destination"
-                : `Create ${kind === "smtp" ? "SMTP" : "webhook"} destination`}
+                : `Create ${kind === "smtp" ? "SMTP" : kind === "slack" ? "Slack" : "webhook"} destination`}
             </h2>
             <form
               ref={formRef}
@@ -599,7 +613,34 @@ export function Destinations() {
                 <option value="every_occurrence">Every occurrence</option>
               </select>
               <p className="help-text">New groups only sends for new or reopened groups; every occurrence sends each report. Reopening a group sends a new notification in either mode.</p>
-              {kind === "webhook" ? (
+              {kind === "slack" ? (
+                <>
+                  <Field
+                    name="url"
+                    label="Slack incoming-webhook URL"
+                    type="url"
+                    initial=""
+                    placeholder={
+                      selected
+                        ? `${selected.config.url_origin ?? ""} · path hidden`
+                        : "https://hooks.slack.com/services/..."
+                    }
+                    error={fields.url}
+                    help={
+                      selected
+                        ? "The saved URL is masked. Enter a replacement URL to change it."
+                        : "Use an incoming-webhook URL from Slack. It is encrypted and never shown again."
+                    }
+                  />
+                  <Field
+                    name="timeout_seconds"
+                    label="Timeout (seconds)"
+                    type="number"
+                    initial={selected?.config.timeout_seconds ?? 10}
+                    error={fields.timeout_seconds}
+                  />
+                </>
+              ) : kind === "webhook" ? (
                 <>
                   <Field
                     name="url"
@@ -817,25 +858,29 @@ export function Destinations() {
                   />
                 </>
               )}
-              <label className="checkbox-row">
-                <input
-                  name="allow_private_network"
-                  type="checkbox"
-                  defaultChecked={selected?.allow_private_network ?? false}
-                  onChange={(e) => {
-                    if (e.target.checked && !pendingPrivate) {
-                      e.target.checked = false;
-                      openPrivate();
-                    }
-                  }}
-                />{" "}
-                Allow private network
-              </label>
-              <p className="help-text">
-                {kind === "smtp"
-                  ? "Needed for a relay on a private or loopback address, a non-standard port, or TLS None."
-                  : "Only enable for a trusted private endpoint."}
-              </p>
+              {kind !== "slack" && (
+                <>
+                  <label className="checkbox-row">
+                    <input
+                      name="allow_private_network"
+                      type="checkbox"
+                      defaultChecked={selected?.allow_private_network ?? false}
+                      onChange={(e) => {
+                        if (e.target.checked && !pendingPrivate) {
+                          e.target.checked = false;
+                          openPrivate();
+                        }
+                      }}
+                    />{" "}
+                    Allow private network
+                  </label>
+                  <p className="help-text">
+                    {kind === "smtp"
+                      ? "Needed for a relay on a private or loopback address, a non-standard port, or TLS None."
+                      : "Only enable for a trusted private endpoint."}
+                  </p>
+                </>
+              )}
               <div className="button-row">
                 <button disabled={busy}>
                   {busy
