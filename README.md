@@ -117,6 +117,16 @@ To stop: `docker compose down` (data is kept). `docker compose down --volumes` *
 
 Send `POST /api/v1/feedback` with a project token. A `202` means the report is stored durably; routing and delivery happen in the background. Send an `Idempotency-Key` and reuse it on retries. Retry `429` and `5xx` responses with backoff; do not retry other `4xx` errors.
 
+For Python applications, install the [standalone Python SDK](sdk/python/README.md) directly from GitHub with `pip install "git+https://github.com/OCNAI/kebivo#subdirectory=sdk/python"` (not published to PyPI):
+
+```python
+from kebivo import Kebivo
+
+client = Kebivo("https://your-kebivo.example", "<PROJECT_TOKEN>")
+accepted = client.report_gap("How do I reset my VPN?", tags=["it"])
+print(accepted["event_id"])
+```
+
 Runnable clients for [cURL](examples/rest_curl.sh), [Python](examples/rest_python.py) (standard library) and [TypeScript](examples/rest_typescript.ts) (Node.js 24, no build step) are in [`examples/`](examples/), and the project page in the UI shows the same snippets with your endpoint. The [REST integration guide](docs/rest-api.md) covers fields, authentication, idempotency, errors, retries and rate limits.
 
 ## Report knowledge gaps with MCP

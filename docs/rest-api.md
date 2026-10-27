@@ -105,6 +105,10 @@ Default limits are per one-minute window: 120 submissions per token (`FEEDBACK_R
 
 Reporting feedback should never break your user's conversation. Send it in the background, or catch errors and log them, so a failed report does not fail the answer.
 
+## Python SDK
+
+The [standalone Python SDK](../sdk/python/README.md) provides `Kebivo(url, token, timeout=10)`, `report_gap(...)`, and `submit_correction(...)`. It creates and reuses an idempotency key across retries, handles `Retry-After`, and raises typed errors. Install it directly from GitHub; it is not published to PyPI.
+
 ## Examples
 
 Each example sends one knowledge gap, reuses one idempotency key across retries, retries `429` and `5xx` with backoff, and stops on other errors. They read `KEBIVO_URL` (default `http://127.0.0.1:8000`) and `KEBIVO_TOKEN`. The acceptance suite (`make e2e`) runs every file in [`examples/`](../examples/) against a built container, and the project page in the admin UI shows the same snippets with your project's endpoint.
