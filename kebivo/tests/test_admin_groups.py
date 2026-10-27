@@ -214,6 +214,7 @@ def test_group_read_routes_are_admin_only(tmp_path: Path) -> None:
     events = client.get(f"/api/v1/admin/groups/{group_id}/events").json()["items"]
     assert next(tag for tag in events[0]["tags"] if tag["slug"] == "it")["from_admin"] is True
     assert events[0]["agent_reported"]["question"] == "alpha record 0"
+    assert events[0]["system"]["received_at"] == "2026-01-01T00:00:00+00:00"
     assert (
         client.get(f"/api/v1/admin/groups/{group_id}/history").json()["items"][0]["action"]
         == "created"

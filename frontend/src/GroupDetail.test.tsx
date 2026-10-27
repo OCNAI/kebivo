@@ -26,7 +26,7 @@ describe("group detail safety and sections", () => {
                   correction: "<img onerror=alert(1)>",
                   metadata: { note: "<script>meta</script>" },
                 },
-                system: { submitted_via: "rest" },
+                system: { submitted_via: "rest", received_at: "2026-01-02T03:04:05Z" },
                 tags: [
                   {
                     slug: "it",
@@ -87,6 +87,9 @@ describe("group detail safety and sections", () => {
     expect(container.textContent).toContain("1 occurrence");
     expect(container.textContent).toContain("Exact match");
     expect(container.textContent).toContain("Reopened this group");
+    const reportedAt = container.querySelector("#event-e1 time");
+    expect(reportedAt?.getAttribute("datetime")).toBe("2026-01-02T03:04:05Z");
+    expect(reportedAt?.textContent).toBe(new Date("2026-01-02T03:04:05Z").toLocaleString());
     expect(container.querySelector("details")?.open).toBe(false);
     expect(container.textContent).toContain("<script>alert(1)</script>");
     expect(container.textContent).not.toContain("<img onerror=alert(1)>");

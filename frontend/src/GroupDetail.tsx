@@ -6,7 +6,7 @@ type Event = {
   event_type: string;
   agent_reported: Record<string, unknown>;
   submitted_correction?: Record<string, unknown>;
-  system: Record<string, unknown>;
+  system: Record<string, unknown> & { received_at: string };
   tags: {
     slug: string;
     name: string;
@@ -14,7 +14,6 @@ type Event = {
     from_submission: boolean;
     from_admin: boolean;
   }[];
-  created_at?: string;
   match?: { method: "initial" | "exact" | "semantic" | "manual_merge" | "manual_split"; triggered_reopen: boolean };
   semantic?: { outcome: string; confidence?: number | null; reason?: string | null; error_category?: string | null } | null;
 };
@@ -269,7 +268,7 @@ export function GroupDetail({
                 {Boolean(ev.agent_reported.question) && <div><dt>Question</dt><dd>{String(ev.agent_reported.question)}</dd></div>}
                 <div><dt>Reported via</dt><dd>{String(ev.system.submitted_via ?? "unknown")}</dd></div>
                 {Boolean(ev.system.token_name) && <div><dt>Token</dt><dd>{String(ev.system.token_name)}</dd></div>}
-                <div><dt>Reported</dt><dd>{ev.created_at ? <time dateTime={ev.created_at}>{new Date(ev.created_at).toLocaleString()}</time> : "Time unavailable"}</dd></div>
+                <div><dt>Reported</dt><dd>{ev.system.received_at ? <time dateTime={ev.system.received_at}>{new Date(ev.system.received_at).toLocaleString()}</time> : "Time unavailable"}</dd></div>
                 {Boolean(ev.agent_reported.agent_id) && <div><dt>Agent</dt><dd>{String(ev.agent_reported.agent_id)}</dd></div>}
                 {Boolean(ev.agent_reported.previous_answer) && <div><dt>Previous answer</dt><dd>{String(ev.agent_reported.previous_answer)}</dd></div>}
                 {Boolean(ev.agent_reported.context) && <div><dt>Context</dt><dd>{String(ev.agent_reported.context)}</dd></div>}

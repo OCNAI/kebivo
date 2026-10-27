@@ -1,0 +1,5 @@
+@font-face { font-family: Inter; font-weight: 400; src: url(./fonts/inter-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: Inter; font-weight: 700; src: url(./fonts/inter-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: Inter; font-weight: 800; src: url(./fonts/inter-latin-800-normal.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 500; src: url(./fonts/jetbrains-mono-latin-500-normal.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 700; src: url(./fonts/jetbrains-mono-latin-700-normal.woff2) format('woff2'); }
