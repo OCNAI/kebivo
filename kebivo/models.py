@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -188,6 +189,9 @@ class DedupEvaluation(Base):
         ForeignKey("llm_provider_configs.id", ondelete="SET NULL")
     )
     model: Mapped[str | None] = mapped_column(String(200))
+    method: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="judge", server_default="judge"
+    )
     outcome: Mapped[str] = mapped_column(String(30), nullable=False)
     candidate_count: Mapped[int] = mapped_column(Integer, nullable=False)
     matched_group_id: Mapped[str | None] = mapped_column(
@@ -218,6 +222,25 @@ class DedupEvaluation(Base):
         ),
         Index("ix_dedup_evaluations_project_created", "project_id", "created_at"),
     )
+
+
+class QuestionEmbedding(Base):
+    __tablename__ = "question_embeddings"
+    event_id: Mapped[str] = mapped_column(
+        ForeignKey("feedback_events.id", ondelete="CASCADE"), primary_key=True
+    )
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_id: Mapped[str | None] = mapped_column(
+        ForeignKey("llm_provider_configs.id", ondelete="SET NULL")
+    )
+    model: Mapped[str] = mapped_column(String(200), nullable=False)
+    dims: Mapped[int] = mapped_column(Integer, nullable=False)
+    vector: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now_utc, nullable=False
+    )
+    __table_args__ = (Index("ix_question_embeddings_lookup", "project_id", "event_type", "model"),)
 
 
 class RoutingRule(Base):

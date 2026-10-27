@@ -1,6 +1,7 @@
 """Single bounded chat-completion adapter for configured providers."""
 
 import json
+import math
 import os
 import socket
 import ssl
@@ -33,6 +34,47 @@ class LlmResult:
     error_category: str | None = None
     http_status: int | None = None
     latency_ms: int = 0
+
+
+@dataclass(frozen=True)
+class EmbedResult:
+    vectors: list[list[float]] | None = None
+    error_category: str | None = None
+    http_status: int | None = None
+    latency_ms: int = 0
+
+
+def validate_embeddings(value: Any, count: int, dims: int) -> list[list[float]] | None:
+    if not isinstance(value, dict) or not isinstance(value.get("data"), list):
+        return None
+    data = value["data"]
+    if len(data) != count or not 1 <= dims <= 8192:
+        return None
+    ordered: list[list[float] | None] = [None] * count
+    for position, item in enumerate(data):
+        if not isinstance(item, dict):
+            return None
+        index = item.get("index", position)
+        vector = item.get("embedding")
+        if (
+            isinstance(index, bool)
+            or not isinstance(index, int)
+            or not 0 <= index < count
+            or ordered[index] is not None
+            or not isinstance(vector, list)
+            or len(vector) != dims
+            or any(
+                isinstance(x, bool) or not isinstance(x, int | float) or not math.isfinite(x)
+                for x in vector
+            )
+        ):
+            return None
+        ordered[index] = vector
+    return (
+        [item for item in ordered if item is not None]
+        if all(item is not None for item in ordered)
+        else None
+    )
 
 
 def validate_answer(value: Any, offered: set[str]) -> str | None:
@@ -79,6 +121,65 @@ def _error(exc: Exception) -> str:
                 return "tls"
             cause = cause.__cause__
     return "connect"
+
+
+async def embed(
+    provider: LlmProviderConfig,
+    secrets: dict[str, str],
+    embedding_model: str,
+    inputs: list[str],
+    dims: int,
+) -> EmbedResult:
+    if provider.provider_type == "azure_openai":
+        raise ValueError("Azure OpenAI embeddings are unsupported in v1")
+    if provider.provider_type not in {"openai_compatible", "local"}:
+        raise ValueError("Unsupported embedding provider")
+    if not 1 <= len(inputs) <= 16 or not 1 <= dims <= 8192:
+        raise ValueError("Invalid embedding batch or dimensions")
+    started = time.monotonic()
+    headers = {"Content-Type": "application/json"}
+    for name in json.loads(provider.headers_json):
+        headers[name] = secrets[f"header:{name}"]
+    key = secrets.get("api_key") or (
+        os.environ.get(provider.api_key_env) if provider.api_key_env else None
+    )
+    if key:
+        headers["Authorization"] = "Bearer " + key
+    payload = {"model": embedding_model, "input": [value[:2000] for value in inputs]}
+    try:
+        status, _, body = await post_pinned(
+            provider.base_url.rstrip("/") + "/embeddings",
+            headers,
+            json.dumps(payload, separators=(",", ":")).encode(),
+            private=provider.allow_private_network,
+            timeout=provider.timeout_seconds,
+            max_response_bytes=4 * 1024 * 1024,
+            return_body=True,
+        )
+    except ResponseTooLarge:
+        return EmbedResult(
+            error_category="invalid_response", latency_ms=int((time.monotonic() - started) * 1000)
+        )
+    except (BlockedDestination, TimeoutError, httpx.HTTPError, socket.gaierror, OSError) as exc:
+        return EmbedResult(
+            error_category=_error(exc), latency_ms=int((time.monotonic() - started) * 1000)
+        )
+    elapsed = int((time.monotonic() - started) * 1000)
+    if status == 429:
+        return EmbedResult(error_category="http_429", http_status=status, latency_ms=elapsed)
+    if status >= 500:
+        return EmbedResult(error_category="http_5xx", http_status=status, latency_ms=elapsed)
+    if not 200 <= status < 300:
+        return EmbedResult(error_category="http_4xx", http_status=status, latency_ms=elapsed)
+    try:
+        vectors = validate_embeddings(json.loads(body), len(inputs), dims)
+    except (ValueError, TypeError):
+        vectors = None
+    if vectors is None:
+        return EmbedResult(
+            error_category="invalid_response", http_status=status, latency_ms=elapsed
+        )
+    return EmbedResult(vectors=vectors, http_status=status, latency_ms=elapsed)
 
 
 async def complete(
