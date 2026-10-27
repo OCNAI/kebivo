@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -42,17 +43,30 @@ class KebivoConnectionError(KebivoError):
     """No HTTP response was received after all attempts."""
 
 
+MAX_RETRY_AFTER = 60.0
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    # urllib would resend the bearer token to the redirect target.
+    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _retry_after(value: str | None) -> float:
     if not value:
         return 0.0
     try:
-        return max(0.0, float(value))
+        seconds = float(value)
     except ValueError:
         try:
             date = parsedate_to_datetime(value)
-            return max(0.0, (date - datetime.now(timezone.utc)).total_seconds())  # noqa: UP017
+            seconds = (date - datetime.now(timezone.utc)).total_seconds()  # noqa: UP017
         except (TypeError, ValueError, OverflowError):
             return 0.0
+    return min(MAX_RETRY_AFTER, max(0.0, seconds))
 
 
 class Kebivo:
@@ -177,8 +191,12 @@ class Kebivo:
         )
         for attempt in range(4):
             try:
-                with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                    return cast(dict[str, Any], json.load(response))
+                with _OPENER.open(request, timeout=self.timeout) as response:
+                    raw = response.read()
+                try:
+                    return cast(dict[str, Any], json.loads(raw))
+                except ValueError as error:
+                    raise KebivoError("Kebivo returned a response that is not JSON") from error
             except urllib.error.HTTPError as error:
                 raw = error.read()
                 try:
@@ -196,7 +214,12 @@ class Kebivo:
                 if error.code != 429 and error.code < 500 or attempt == 3:
                     raise failure from error
                 wait = max(2**attempt, _retry_after(error.headers.get("Retry-After")))
-            except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            except (
+                urllib.error.URLError,
+                http.client.HTTPException,
+                TimeoutError,
+                ConnectionError,
+            ) as error:
                 if attempt == 3:
                     raise KebivoConnectionError(str(error)) from error
                 wait = 2**attempt

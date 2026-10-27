@@ -118,7 +118,7 @@ def test_connection_retries_then_typed_error(monkeypatch: Any) -> None:
         keys.append(request.get_header("Idempotency-key"))
         raise urllib.error.URLError("offline")
 
-    monkeypatch.setattr(sdk.urllib.request, "urlopen", fail)
+    monkeypatch.setattr(sdk._OPENER, "open", fail)
     monkeypatch.setattr(sdk.time, "sleep", waits.append)
     with pytest.raises(sdk.KebivoConnectionError):
         sdk.Kebivo("https://example.test", "token", timeout=0.25).report_gap("Question?")
@@ -157,3 +157,27 @@ def test_sdk_against_real_app(tmp_path: Path) -> None:
         thread.join(timeout=5)
         admin.close()
         app.state.engine.dispose()
+
+
+def test_redirect_is_not_followed(stub: Any, monkeypatch: Any) -> None:
+    url, received, replies = stub
+    monkeypatch.setattr(sdk.time, "sleep", lambda _: pytest.fail("unexpected retry"))
+    replies.append((302, {"Location": "http://127.0.0.1:9/steal"}, {}))
+    with pytest.raises(sdk.KebivoHTTPError) as caught:
+        sdk.Kebivo(url, "token").report_gap("Question?")
+    assert caught.value.status_code == 302
+    assert len(received) == 1
+
+
+def test_retry_after_is_capped(stub: Any, monkeypatch: Any) -> None:
+    url, _received, replies = stub
+    waits: list[float] = []
+    monkeypatch.setattr(sdk.time, "sleep", waits.append)
+    replies.extend(
+        [
+            (429, {"Retry-After": "86400"}, {"error": {"code": "rate_limited"}}),
+            (202, {}, {"event_id": "event-1"}),
+        ]
+    )
+    sdk.Kebivo(url, "token").report_gap("Question?")
+    assert waits == [sdk.MAX_RETRY_AFTER]
