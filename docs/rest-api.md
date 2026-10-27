@@ -111,6 +111,43 @@ Reporting feedback should never break your user's conversation. Send it in the b
 
 The [standalone Python SDK](../sdk/python/README.md) provides `Kebivo(url, token, timeout=10)`, `report_gap(...)`, and `submit_correction(...)`. It creates and reuses an idempotency key across retries, handles `Retry-After`, and raises typed errors. Install it directly from GitHub; it is not published to PyPI.
 
+### LangChain and LangGraph
+
+Install the SDK with its optional callback dependency from a repository checkout:
+
+```sh
+pip install './sdk/python[langchain]'
+```
+
+Attach the handler to a LangChain retriever. An empty document list reports the retriever query as a knowledge gap. A nonempty result does not report. The report is sent from a background thread, so Kebivo retries never delay retrieval, and errors are logged rather than raised.
+
+```python
+import os
+from kebivo import Kebivo
+from kebivo.langchain import KebivoCallbackHandler
+
+client = Kebivo(os.environ["KEBIVO_URL"], os.environ["KEBIVO_TOKEN"])
+handler = KebivoCallbackHandler(client, project_tags=["support"])
+documents = retriever.invoke(question, config={"callbacks": [handler]})
+```
+
+In a LangGraph retrieval node, pass the graph's callback config through to the retriever so the handler sees its run:
+
+```python
+from langchain_core.runnables import RunnableConfig
+
+def retrieve(state: dict, config: RunnableConfig) -> dict:
+    docs = retriever.invoke(state["question"], config=config)
+    return {"documents": docs}
+
+result = graph.invoke(
+    {"question": "Where is the VPN guide?"},
+    config={"callbacks": [handler]},
+)
+```
+
+Here `retriever`, `question`, and `graph` are your existing application objects; register `retrieve` as a node in the graph. This reports only an empty retrieval, without needing a model to decide to call a tool.
+
 ## TypeScript SDK
 
 The [standalone TypeScript SDK](../sdk/typescript/README.md) provides the same calls and retry behavior for Node 20+ using global `fetch`, with no runtime dependencies. Install it by local path or copy its ESM file. It is not published to npm. Keep project tokens on the server; never embed them in browser code.

@@ -28,10 +28,9 @@ Today a [webhook destination](docs/destinations.md) plus a small relay reaches m
 
 ### Ways to send feedback
 
-Today: the REST API and the MCP server, with copy-paste [framework examples](examples/frameworks/) for Claude, the OpenAI Agents SDK, LangGraph, the Vercel AI SDK, Open WebUI and Dify.
+Today: the REST API, the MCP server, the [Python](sdk/python/README.md) and [TypeScript](sdk/typescript/README.md) SDKs, and the Python SDK's optional [LangChain callback](docs/rest-api.md#langchain-and-langgraph) for empty retrievals. Copy-paste [framework examples](examples/frameworks/) cover Claude, the OpenAI Agents SDK, LangGraph, the Vercel AI SDK, Open WebUI and Dify.
 
-- Python SDK and TypeScript SDK (thin clients for the REST API)
-- Native LangChain callbacks and a LangGraph integration package
+- Deeper LangGraph integration beyond the retriever callback
 - Framework middleware that reports a gap when an answer has no supporting sources
 
 ### Grouping and triage
