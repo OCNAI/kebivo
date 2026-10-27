@@ -120,6 +120,8 @@ test('open a group and update its status; the filter survives a reload', async (
   await page.getByText(question).first().click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText(question);
   await expect(page.getByRole('heading', { name: 'Occurrences' })).toBeVisible();
+  await expect(page.locator('[aria-labelledby="occurrences-title"] article time').first()).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}T/);
+  await expect(page.getByText('Time unavailable')).toHaveCount(0);
   await page.getByLabel('Group status').selectOption({ label: 'Resolved' });
   await expect(page.getByLabel('Group status')).toHaveValue('resolved');
   await page.reload();
