@@ -103,16 +103,20 @@ def test_project_create_cli_issues_token_and_rejects_duplicate(
             authenticate_bearer(db, Settings.from_env(), result["token"])[0].project_id
             == project.id
         )
-        assert {row.action for row in db.scalars(select(AuditEvent)).all()} >= {
-            "project.created",
-            "project_token.created",
-        }
+        actions = [
+            row.action for row in db.scalars(select(AuditEvent).order_by(AuditEvent.created_at))
+        ]
+        assert actions.index("project.created") < actions.index("project_token.created")
     with pytest.raises(SystemExit, match="slug already exists"):
         main()
     assert capsys.readouterr().out == ""
     monkeypatch.setattr("sys.argv", ["kebivo-admin", "project", "create", "--name", " "])
     with pytest.raises(SystemExit, match="Invalid project"):
         main()
+    for name in ("!!!", "東京"):
+        monkeypatch.setattr("sys.argv", ["kebivo-admin", "project", "create", "--name", name])
+        with pytest.raises(SystemExit, match="Could not derive a slug from the name; pass --slug"):
+            main()
     monkeypatch.setattr(
         "sys.argv", ["kebivo-admin", "project", "create", "--name", "Other", "--slug", "custom"]
     )

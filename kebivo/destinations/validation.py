@@ -162,7 +162,8 @@ def validate_config(
             hidden[f"custom_headers.{name}"] = _header_value(value, f"custom_headers.{name}")
         public["timeout_seconds"] = _timeout(supplied.get("timeout_seconds"), 10)
     elif kind == "slack":
-        url = _webhook_url(supplied.get("url"), False)
+        raw_url = supplied.get("url")
+        url = _webhook_url(raw_url.strip() if isinstance(raw_url, str) else raw_url, False)
         parsed = urlsplit(url)
         if (
             parsed.hostname != "hooks.slack.com"
