@@ -14,7 +14,7 @@ migrations:
 	uv run python -c 'import os, subprocess, tempfile; temporary = tempfile.TemporaryDirectory(); os.environ["DATABASE_URL"] = "sqlite:///" + temporary.name + "/migration.sqlite3"; subprocess.run(["alembic", "upgrade", "head"], check=True)'
 
 lint:
-	uv run ruff check kebivo e2e examples
+	uv run ruff check kebivo e2e examples sdk/python
 	cd frontend && npm run lint
 
 format:
@@ -23,6 +23,7 @@ format:
 
 type:
 	uv run mypy kebivo
+	uv run mypy sdk/python/kebivo
 	cd frontend && npm run typecheck
 
 test:
