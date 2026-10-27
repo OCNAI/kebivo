@@ -60,6 +60,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=node-binary /usr/local/bin/node /usr/local/bin/node
+COPY sdk/python ./sdk/python
 RUN uv sync --frozen --all-extras --no-install-project
 COPY scripts/smoke-webhook.py scripts/fake_llm_server.py ./scripts/
 COPY docs ./docs
