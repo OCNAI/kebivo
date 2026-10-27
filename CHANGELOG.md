@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — unreleased
+
+A new installation now gets from `docker run` to a routed, signed delivery by copy-paste, with no UI step and no model key.
+
+- `python -m kebivo.cli project create --name "..."` creates a project and prints a `feedback:gap` token once (`--json` for scripts). `bootstrap --password-stdin` reads the admin password from a pipe without warnings.
+- The quickstart leads with the published image, uses the real clone URL for the build path, and adds a "Route it" step: run `examples/webhook_receiver.py`, add a webhook destination and rule, and see the receiver verify a signed delivery. A test keeps the documented image tag in step with the package version.
+- The project Connect panel has a "Send test event" button that sends a sample gap through normal intake and routing and links to its group. Inbox and dashboard empty states point to it.
+- Signing in from an origin that is not allowed now returns a message that lists the configured origins instead of a bare "Invalid Origin".
+- Native Slack destination: paste a Slack incoming-webhook URL and Kebivo posts a Block Kit message with the question, project, tags, occurrence count and, when `PUBLIC_URL` is set, a link to the group. The URL is validated to `hooks.slack.com`, stored encrypted and never shown again in full.
+- Python client (`sdk/python`, standard library only) and TypeScript client (`sdk/typescript`, ESM, no runtime dependencies, Node 20+) for reporting gaps and corrections, with idempotency keys, bounded retries that honour `Retry-After`, and typed errors. An optional LangChain callback reports a gap when a retriever returns no documents. Install from Git; neither is published to a package index.
+- Group detail shows when each occurrence was received.
+
 ## 0.1.1 — 2026-10-25
 
 Packaging only; no application changes. The MCP Registry server name is now `io.github.OCNAI/kebivo`, in `server.json` and in the image's `io.modelcontextprotocol.server.name` label. The registry matches the GitHub account's letter case, so it refused the lower-case name used in 0.1.0.
