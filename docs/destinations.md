@@ -1,6 +1,6 @@
 ---
-title: Webhook and email destinations
-description: Configure Kebivo webhook and SMTP destinations, verify signed payloads, test delivery and inspect retries for routed feedback.
+title: Webhook, Slack and email destinations
+description: Configure Kebivo webhook, Slack and SMTP destinations, test delivery and inspect retries for routed feedback.
 ---
 
 # Destinations
@@ -11,13 +11,15 @@ Open **Destinations** at `/destinations`. The list shows each destination's type
 
 Admin cookie sessions manage destinations through `GET/POST /api/v1/destinations` and `GET/PATCH/DELETE /api/v1/destinations/{id}`. Writes require `Origin` and `X-CSRF-Token`. Names are unique without regard to case. The built-in inbox is listed and can only be enabled or disabled. The inbox keeps every accepted event regardless of routing.
 
-A destination has a `name`, `type` (`webhook` or `smtp`), `enabled`, `delivery_mode` (`new_groups_only` or `every_occurrence`) and a type-specific `config` object. `new_groups_only` sends new and reopened groups, or the first non-failed delivery to that destination for a group; `every_occurrence` sends each routed event. See [deduplication](deduplication.md). Webhook and SMTP destinations also have `allow_private_network`, which defaults to false. Opt in only for a trusted private endpoint; the sender checks resolved addresses and pins the selected address for the connection.
+A destination has a `name`, `type` (`webhook`, `slack` or `smtp`), `enabled`, `delivery_mode` (`new_groups_only` or `every_occurrence`) and a type-specific `config` object. `new_groups_only` sends new and reopened groups, or the first non-failed delivery to that destination for a group; `every_occurrence` sends each routed event. See [deduplication](deduplication.md). Webhook and SMTP destinations also have `allow_private_network`, which defaults to false. Opt in only for a trusted private endpoint; the sender checks resolved addresses and pins the selected address for the connection. Slack requires it to remain false.
 
 `POST /api/v1/destinations/{id}/test` sends a synthetic `test:true` message and records a `destination.tested` audit event with outcome and category, even when the destination is disabled. It creates no delivery or attempt row and is limited to ten calls per minute per admin session. Webhook sends use `X-Delivery-ID`; signing uses the Standard Webhooks headers described below. See [routing and delivery](routing.md) for retries and logs.
 
 Webhook configuration: `url`, `auth` (`{"type":"none"}`, bearer with `token`, or header with `name` and `value`), optional `signing`, up to 10 `custom_headers`, and `timeout_seconds` from 1 to 30 (default 10). URLs require HTTPS unless private network access is enabled; userinfo and fragments are rejected. Literal metadata, link-local, and other always-blocked IP addresses are rejected when saving, even with `allow_private_network=true`. Trusted private addresses such as `10.0.0.1` remain available with the opt-in. Header names must be valid HTTP tokens. Hop-by-hop, Host, Content-Length, Content-Type, Authorization and `webhook-*` names are reserved.
 
 SMTP configuration: `host`, `port`, `tls_mode` (`starttls` by default, `implicit_tls`, or `none`), optional `username` and `password`, `from`, 1 to 20 `to` addresses, and `timeout_seconds` from 1 to 30 (default 15). A password requires TLS.
+
+Slack configuration: `url` is a Slack incoming-webhook URL under `https://hooks.slack.com/services/`; optional `timeout_seconds` is 1–30 (default 10). The URL is encrypted and returned only as `{ "set": true }`; the API shows its origin but never its path. Slack receives a Block Kit message with the question, project, tags and occurrence count. Set `PUBLIC_URL` to Kebivo's HTTPS origin to include a button linking to the group. Slack sends use the normal queue, retry schedule, delivery log, test send and checked-address HTTPS sender. The private-network opt-in is rejected for Slack.
 
 The webhook URL, bearer token, header values, signing secret and SMTP password are encrypted in the destination row. Responses show only `{ "set": true }` for a stored secret. The webhook response also gives `url_origin` and `url_has_path`, never the path itself. On PATCH, an omitted field keeps its value; `null` clears it and a string replaces it, subject to validation. A signing secret is returned once when signing is enabled or from `POST /api/v1/destinations/{id}/rotate-signing-secret`; save it immediately. A destination referenced by any rule, fallback or delivery cannot be deleted.
 

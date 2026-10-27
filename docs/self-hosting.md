@@ -51,6 +51,7 @@ Settings come from environment variables. Compose reads them from `.env`, which 
 | `SECRET_KEY` | At least 32 characters, not a known placeholder. Keys project-token digests and login-throttle identifiers. Keep it stable: changing it invalidates **every project token**. It does not encrypt data. |
 | `ENCRYPTION_KEY` | 64 hex characters (`openssl rand -hex 32`). Encrypts destination secrets and LLM provider keys with AES-256-GCM. Store it separately from database backups. Losing it means re-entering those secrets. |
 | `ALLOWED_ORIGINS` | Exact, comma-separated browser origins that may sign in, such as `https://feedback.example.org` (scheme, host and port, no path). In production only loopback origins may use HTTP. Empty means no browser can sign in. `localhost` and `127.0.0.1` are different origins. |
+| `PUBLIC_URL` | Optional HTTPS origin of this Kebivo instance. Slack destinations include a link to the feedback group when set. |
 
 ### Network and access
 

@@ -18,7 +18,7 @@ Today a [webhook destination](docs/destinations.md) plus a small relay reaches m
 
 | Candidate | Today |
 | --- | --- |
-| Native Slack destination | Webhook + Slack relay recipe |
+| Native Slack destination | Available in the upcoming 0.2.0 release; webhook + Slack relay recipe works today |
 | Native Jira destination | Webhook + Jira relay recipe |
 | Native Linear destination | Webhook + Linear relay recipe |
 | GitHub Issues and GitLab Issues destinations | Webhook + your own relay |

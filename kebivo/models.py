@@ -117,7 +117,7 @@ class Destination(Base):
     )
     __table_args__ = (
         CheckConstraint("length(name) BETWEEN 1 AND 120", name="ck_destinations_name"),
-        CheckConstraint("type IN ('webhook','smtp','inbox')", name="ck_destinations_type"),
+        CheckConstraint("type IN ('webhook','smtp','inbox','slack')", name="ck_destinations_type"),
         CheckConstraint(
             "length(CAST(config_json AS BLOB)) <= 16384", name="ck_destinations_config_length"
         ),
