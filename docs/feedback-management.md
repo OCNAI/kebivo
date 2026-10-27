@@ -7,7 +7,7 @@ description: Search and triage Kebivo knowledge gap groups in the admin inbox wi
 
 REST and MCP submissions commit the event, its group membership, history and a processing job together. Exact matching can join an existing group. An idempotent replay returns the original event without creating another group. The admin event list includes `group_id`; event detail includes the group's ID and status.
 
-To check a project's inbox and routing, an administrator can `POST /api/v1/projects/{project_id}/test-event` from an allowed page origin with the session cookie and CSRF token. It creates a fixed knowledge gap tagged `kebivo-test` and returns its `event_id` and `group_id`. Repeated sends create separate events that can join the same group; configured routing may deliver each event. The endpoint accepts 10 requests per administrator per minute and rejects archived or disabled projects.
+To check a project's inbox and routing, an administrator can `POST /api/v1/projects/{project_id}/test-event` from an allowed page origin with the session cookie and CSRF token. It creates a fixed knowledge gap, `Kebivo test event: How do I reset my corporate VPN?`, tagged `kebivo-test` and returns its `event_id` and `group_id`. Repeated sends create separate events that can join the same group; configured routing may deliver each event. The endpoint accepts 10 requests per administrator per minute and rejects archived or disabled projects.
 
 The project Connect panel offers **Send test event** for active projects and links a successful response to its feedback group. The Dashboard and Inbox empty states point administrators to that action; a workspace without projects asks them to create one first. A wrong-origin sign-in shows the server's configured-origin guidance.
 

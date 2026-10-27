@@ -50,6 +50,7 @@ async def ingest(
     *,
     submitted_via: str,
     client_ip: str,
+    apply_ip_limit: bool = True,
     _submit: Callable[..., SubmissionResult] = submit_feedback,
 ) -> SubmissionResult:
     """Authorize, validate, rate-limit, then commit one feedback event."""
@@ -85,7 +86,7 @@ async def ingest(
     except ValueError:
         raise InvalidIdempotencyKey from None
     try:
-        if submitted_via == "rest":
+        if submitted_via == "rest" and apply_ip_limit:
             limiter.check("ip", client_ip, settings.feedback_rate_limit_per_ip)
         if principal.token_id is not None:
             limiter.check("token", principal.token_id, settings.feedback_rate_limit_per_token)

@@ -53,6 +53,8 @@ Settings come from environment variables. Compose reads them from `.env`, which 
 | `ALLOWED_ORIGINS` | Exact, comma-separated browser origins that may sign in, such as `https://feedback.example.org` (scheme, host and port, no path). In production only loopback origins may use HTTP. Empty means no browser can sign in. `localhost` and `127.0.0.1` are different origins. |
 | `PUBLIC_URL` | Optional HTTPS origin of this Kebivo instance. Slack destinations include a link to the feedback group when set. |
 
+A wrong-origin 403 lists the configured `ALLOWED_ORIGINS` by design.
+
 ### Network and access
 
 | Variable | Default | Purpose |

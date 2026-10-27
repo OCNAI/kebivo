@@ -199,6 +199,44 @@ def _token_metadata(row: ApiToken) -> dict[str, Any]:
     }
 
 
+def mint_project_token(
+    db: Session,
+    settings: Any,
+    project: Project,
+    admin_id: str,
+    *,
+    name: str,
+    scopes: list[str],
+    expires_at: datetime | None = None,
+) -> tuple[ApiToken, str]:
+    prefix = "kebivo_pt_" + secrets.token_urlsafe(12).rstrip("=")
+    token = prefix + "." + secrets.token_urlsafe(32)
+    row = ApiToken(
+        project_id=project.id,
+        name=name,
+        token_hash=_token_digest(settings, token),
+        token_prefix=prefix,
+        scopes_json=json.dumps(scopes, separators=(",", ":")),
+        created_by_admin_id=admin_id,
+        expires_at=expires_at,
+    )
+    db.add(row)
+    db.flush()
+    db.add(
+        AuditEvent(
+            actor_type="admin",
+            actor_ref=admin_id,
+            action="project_token.created",
+            subject_type="api_token",
+            subject_id=row.id,
+            details_json=json.dumps(
+                {"project_id": project.id, "scopes": scopes}, separators=(",", ":")
+            ),
+        )
+    )
+    return row, token
+
+
 def install_token_routes(app: Any) -> None:
     router = APIRouter(prefix="/api/v1/projects/{project_id}/tokens", tags=["project tokens"])
 
@@ -215,31 +253,9 @@ def install_token_routes(app: Any) -> None:
         admin, _, _ = auth
         db: Session = request.state.db
         project = project_or_404(db, project_id)
-        prefix = "kebivo_pt_" + secrets.token_urlsafe(12).rstrip("=")
-        secret = secrets.token_urlsafe(32)
-        token = prefix + "." + secret
-        row = ApiToken(
-            project_id=project.id,
-            name=body.name,
-            token_hash=_token_digest(request.app.state.settings, token),
-            token_prefix=prefix,
-            scopes_json=json.dumps(body.scopes, separators=(",", ":")),
-            created_by_admin_id=admin.id,
-            expires_at=body.expires_at,
-        )
-        db.add(row)
-        db.flush()
-        db.add(
-            AuditEvent(
-                actor_type="admin",
-                actor_ref=admin.id,
-                action="project_token.created",
-                subject_type="api_token",
-                subject_id=row.id,
-                details_json=json.dumps(
-                    {"project_id": project.id, "scopes": body.scopes}, separators=(",", ":")
-                ),
-            )
+        row, token = mint_project_token(
+            db, request.app.state.settings, project, admin.id,
+            name=body.name, scopes=body.scopes, expires_at=body.expires_at,
         )
         try:
             db.commit()

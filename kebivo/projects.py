@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import and_, or_, select
@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from kebivo.admin_groups import _reject_bearer
 from kebivo.auth import AdminAuth, _peer_ip
-from kebivo.feedback.ingest import ingest
+from kebivo.feedback.ingest import RateLimited, ingest
 from kebivo.feedback.tags import normalize_tag_v1
 from kebivo.models import (
     AdminUser,
@@ -274,21 +274,29 @@ def install_project_routes(app: Any) -> None:
                 409, "project_inactive", "Project must be active to send a test event"
             )
         request.app.state.feedback_limiter.check("admin_test_event", admin.id, 10)
-        result = await ingest(
-            request.app.state.session_factory,
-            request.app.state.settings,
-            request.app.state.feedback_limiter,
-            ProjectTokenPrincipal(project.id, None, frozenset({GAP_SCOPE})),
-            {
-                "event_type": "knowledge_gap",
-                "question": "How do I reset my corporate VPN?",
-                "tags": ["kebivo-test"],
-                "agent_id": "kebivo-test",
-            },
-            None,
-            submitted_via="rest",
-            client_ip=_peer_ip(request),
-        )
+        try:
+            result = await ingest(
+                request.app.state.session_factory,
+                request.app.state.settings,
+                request.app.state.feedback_limiter,
+                ProjectTokenPrincipal(project.id, None, frozenset({GAP_SCOPE})),
+                {
+                    "event_type": "knowledge_gap",
+                    "question": "Kebivo test event: How do I reset my corporate VPN?",
+                    "tags": ["kebivo-test"],
+                    "agent_id": "kebivo-test",
+                },
+                None,
+                submitted_via="rest",
+                client_ip=_peer_ip(request),
+                apply_ip_limit=False,
+            )
+        except RateLimited as exc:
+            raise HTTPException(
+                status_code=429,
+                detail="Feedback rate limit exceeded",
+                headers={"Retry-After": str(exc.retry_after)},
+            ) from None
         group_id = db.scalar(
             select(FeedbackGroupMember.group_id).where(
                 FeedbackGroupMember.event_id == result.event_id

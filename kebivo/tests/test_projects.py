@@ -157,6 +157,10 @@ def test_admin_test_event_uses_ingest_and_limits_writes(
     with app.state.session_factory() as db:
         events = db.scalars(select(FeedbackEvent).order_by(FeedbackEvent.created_at)).all()
         assert len(events) == 2
+        assert all(
+            event.question == "Kebivo test event: How do I reset my corporate VPN?"
+            for event in events
+        )
         assert all(event.api_token_id is None and event.submitted_via == "rest" for event in events)
         assert len(db.scalars(select(ProcessingJob)).all()) == 2
         assert len(db.scalars(select(FeedbackGroupMember)).all()) == 2
@@ -174,6 +178,30 @@ def test_admin_test_event_uses_ingest_and_limits_writes(
     client.post(f"/api/v1/projects/{project['id']}/archive", headers=headers)
     archived = client.post(path, headers=headers)
     assert archived.status_code == 409
+    app.state.engine.dispose()
+
+
+def test_admin_test_event_skips_ip_bucket_and_maps_ingest_limit(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    from kebivo.feedback.ingest import RateLimited
+
+    client, app = make_client(tmp_path / "test-event-limits.db")
+    headers = write_headers(client)
+    project = client.post(
+        "/api/v1/projects", json={"name": "Research", "slug": "research"}, headers=headers
+    ).json()
+    path = f"/api/v1/projects/{project['id']}/test-event"
+    app.state.feedback_limiter.check("ip", "testclient", 1)
+    assert client.post(path, headers=headers).status_code == 202
+
+    async def limited(*args: object, **kwargs: object) -> None:
+        raise RateLimited(17)
+
+    monkeypatch.setattr("kebivo.projects.ingest", limited)
+    response = client.post(path, headers=headers)
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "17"
     app.state.engine.dispose()
 
 

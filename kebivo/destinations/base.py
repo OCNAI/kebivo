@@ -209,9 +209,15 @@ class SlackAdapter(WebhookAdapter):
             question = question[:2999] + "…"
         project = str(message["project"]["name"])
         tags = ", ".join(str(tag) for tag in message["tags"]) or "None"
+        project_text = f"Project: {project}"
+        tags_text = f"Tags: {tags}"
+        if len(project_text) > 2000:
+            project_text = project_text[:1999] + "…"
+        if len(tags_text) > 2000:
+            tags_text = tags_text[:1999] + "…"
         fields = [
-            {"type": "plain_text", "text": f"Project: {project}"},
-            {"type": "plain_text", "text": f"Tags: {tags}"},
+            {"type": "plain_text", "text": project_text},
+            {"type": "plain_text", "text": tags_text},
             {"type": "plain_text", "text": f"Occurrences: {message['occurrence_count']}"},
         ]
         blocks: list[dict[str, Any]] = [

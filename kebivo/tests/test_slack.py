@@ -38,6 +38,8 @@ def test_slack_url_is_secret_and_private_opt_in_rejected() -> None:
     public, hidden = validate_config({"type": "slack", "url": URL}, {})
     assert public == {"timeout_seconds": 10}
     assert hidden == {"url": URL}
+    _, padded = validate_config({"type": "slack", "url": f" \n{URL}\t "}, {})
+    assert padded == {"url": URL}
     with pytest.raises(ConfigError) as exc:
         validate_config({"type": "slack", "url": URL, "allow_private_network": True}, {})
     assert exc.value.field == "allow_private_network"
@@ -128,6 +130,13 @@ def test_slack_block_kit_and_checked_sender(monkeypatch: Any) -> None:
     message["feedback"]["question"] = "q" * 10000
     assert asyncio.run(send_destination(destination, message, settings)).outcome == "success"
     assert sent[-1][2]["blocks"][0]["text"]["text"] == "q" * 2999 + "…"
+
+    message["project"]["name"] = "p" * 2500
+    message["tags"] = ["t" * 2500]
+    assert asyncio.run(send_destination(destination, message, settings)).outcome == "success"
+    fields = sent[-1][2]["blocks"][1]["fields"]
+    assert fields[0]["text"] == "Project: " + "p" * 1990 + "…"
+    assert fields[1]["text"] == "Tags: " + "t" * 1993 + "…"
 
 
 def test_public_url_requires_https_origin() -> None:
