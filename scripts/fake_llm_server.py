@@ -7,10 +7,41 @@ GET /requests returns recorded path, headers and request bodies.
 """
 
 import argparse
+import hashlib
 import json
+import math
+import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+
+_CONCEPTS = {
+    "forgot": "reset",
+    "recover": "reset",
+    "change": "reset",
+    "passcode": "password",
+    "login": "password",
+    "signin": "password",
+    "virtual": "vps",
+    "server": "vps",
+    "private": "vpn",
+    "connect": "access",
+    "connection": "access",
+    "use": "access",
+}
+_STOP = {"a", "an", "the", "i", "my", "how", "do", "can", "to", "is", "for", "of", "and", "what"}
+
+
+def _embedding(value: str) -> list[float]:
+    vector = [0.0] * 64
+    for token in re.findall(r"[a-z0-9]+", value.lower()):
+        if token in _STOP:
+            continue
+        concept = _CONCEPTS.get(token, token)
+        digest = hashlib.sha256(concept.encode()).digest()
+        vector[int.from_bytes(digest[:2], "little") % 64] += 1.0
+    length = math.sqrt(sum(x * x for x in vector))
+    return [x / length for x in vector] if length else vector
 
 
 class FakeLLMServer(ThreadingHTTPServer):
@@ -43,14 +74,31 @@ class FakeLLMHandler(BaseHTTPRequestHandler):
         except (json.JSONDecodeError, KeyError, TypeError):
             self.send_error(400)
             return
-        if scenario not in {"valid", "no_match", "valid_c2", "low_confidence", "wrong_label", "malformed", "slow", "500", "429", "redirect", "oversized"}:
+        if scenario not in {
+            "valid",
+            "no_match",
+            "valid_c2",
+            "low_confidence",
+            "wrong_label",
+            "malformed",
+            "slow",
+            "500",
+            "429",
+            "redirect",
+            "oversized",
+        }:
             self.send_error(400)
             return
         self.server.scenario = scenario
         self._reply(200, json.dumps({"scenario": scenario}).encode())
 
     def do_POST(self) -> None:
-        if not self.path.endswith("/chat/completions") and "/chat/completions?" not in self.path:
+        embeddings = self.path.endswith("/embeddings")
+        if (
+            not embeddings
+            and not self.path.endswith("/chat/completions")
+            and "/chat/completions?" not in self.path
+        ):
             self.send_error(404)
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -75,12 +123,39 @@ class FakeLLMHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         if case == "oversized":
-            self._reply(200, b"x" * (256 * 1024 + 1))
+            self._reply(200, b"x" * ((4 * 1024 * 1024 if embeddings else 256 * 1024) + 1))
             return
         if case == "malformed":
             self._reply(200, b"this is not JSON")
             return
-        candidate = None if case == "no_match" else "c99" if case == "wrong_label" else "c2" if case == "valid_c2" else "c1"
+        if embeddings:
+            try:
+                values = json.loads(body)["input"]
+                if not isinstance(values, list) or any(not isinstance(v, str) for v in values):
+                    raise ValueError
+            except (ValueError, KeyError, TypeError):
+                self.send_error(400)
+                return
+            self._reply(
+                200,
+                json.dumps(
+                    {
+                        "data": [
+                            {"index": i, "embedding": _embedding(v)} for i, v in enumerate(values)
+                        ]
+                    }
+                ).encode(),
+            )
+            return
+        candidate = (
+            None
+            if case == "no_match"
+            else "c99"
+            if case == "wrong_label"
+            else "c2"
+            if case == "valid_c2"
+            else "c1"
+        )
         answer = {
             "same_issue": case != "no_match",
             "candidate": candidate,
