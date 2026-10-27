@@ -28,6 +28,7 @@ class Settings:
     database_path: str
     database_url: str | None = None
     allowed_origins: tuple[str, ...] = ()
+    public_url: str | None = None
     trusted_proxy_ips: tuple[str, ...] = ()
     feedback_rate_limit_per_token: int = 120
     feedback_rate_limit_per_ip: int = 300
@@ -129,6 +130,25 @@ class Settings:
                 if not is_loopback:
                     raise SettingsError("Production ALLOWED_ORIGINS must use HTTPS except loopback")
 
+        public_url = values.get("PUBLIC_URL", "").rstrip("/") or None
+        if public_url:
+            try:
+                parsed = urlsplit(public_url)
+                _ = parsed.port
+            except ValueError:
+                raise SettingsError("PUBLIC_URL must be an HTTPS origin") from None
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+                or any(ord(char) < 32 or ord(char) == 127 for char in public_url)
+            ):
+                raise SettingsError("PUBLIC_URL must be an HTTPS origin")
+
         proxy_raw = values.get("TRUSTED_PROXY_IPS", "")
         try:
             trusted_proxy_ips = tuple(
@@ -209,6 +229,7 @@ class Settings:
             database_path=database_path,
             database_url=database_url,
             allowed_origins=allowed_origins,
+            public_url=public_url,
             trusted_proxy_ips=trusted_proxy_ips,
             feedback_rate_limit_per_token=positive_limit("FEEDBACK_RATE_LIMIT_PER_TOKEN", 120),
             feedback_rate_limit_per_ip=positive_limit("FEEDBACK_RATE_LIMIT_PER_IP", 300),

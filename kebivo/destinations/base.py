@@ -194,9 +194,57 @@ class WebhookAdapter:
         return failure("permanent", "http_4xx", http_status=status)
 
 
+class SlackAdapter(WebhookAdapter):
+    async def send(
+        self,
+        message: dict[str, Any],
+        config: dict[str, Any],
+        secrets: dict[str, Any],
+        *,
+        timeout: int,
+    ) -> DeliveryResult:
+        question = str(message["feedback"]["question"])
+        project = str(message["project"]["name"])
+        tags = ", ".join(str(tag) for tag in message["tags"]) or "None"
+        fields = [
+            {"type": "plain_text", "text": f"Project: {project}"},
+            {"type": "plain_text", "text": f"Tags: {tags}"},
+            {"type": "plain_text", "text": f"Occurrences: {message['occurrence_count']}"},
+        ]
+        blocks: list[dict[str, Any]] = [
+            {"type": "section", "text": {"type": "plain_text", "text": question}},
+            {"type": "section", "fields": fields},
+        ]
+        public_url = config.get("public_url")
+        if public_url and message.get("group_id") and not message.get("test"):
+            blocks.append(
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "View group"},
+                            "url": f"{public_url}/inbox/groups/{message['group_id']}",
+                        }
+                    ],
+                }
+            )
+        return await super().send(
+            {
+                "delivery_id": message["delivery_id"],
+                "text": "New Kebivo feedback",
+                "blocks": blocks,
+            },
+            config,
+            secrets,
+            timeout=timeout,
+        )
+
+
 REGISTRY: dict[str, Adapter] = {
     "inbox": InboxAdapter(),
     "webhook": WebhookAdapter(),
+    "slack": SlackAdapter(),
     "smtp": SmtpAdapter(),
 }
 

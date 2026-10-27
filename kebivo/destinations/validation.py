@@ -161,6 +161,22 @@ def validate_config(
                 raise ConfigError("custom_headers", "Invalid header name")
             hidden[f"custom_headers.{name}"] = _header_value(value, f"custom_headers.{name}")
         public["timeout_seconds"] = _timeout(supplied.get("timeout_seconds"), 10)
+    elif kind == "slack":
+        url = _webhook_url(supplied.get("url"), False)
+        parsed = urlsplit(url)
+        if (
+            parsed.hostname != "hooks.slack.com"
+            or parsed.scheme != "https"
+            or parsed.port not in (None, 443)
+            or not parsed.path.startswith("/services/")
+            or not parsed.path.removeprefix("/services/").strip("/")
+            or parsed.query
+        ):
+            raise ConfigError("url", "Must be a Slack incoming-webhook URL")
+        if private:
+            raise ConfigError("allow_private_network", "Slack does not allow private networks")
+        hidden["url"] = url
+        public["timeout_seconds"] = _timeout(supplied.get("timeout_seconds"), 10)
     elif kind == "smtp":
         host = _string(supplied.get("host"), "host")
         assert host is not None
@@ -201,5 +217,5 @@ def validate_config(
         public["to"] = [_email(item, f"to[{index}]") for index, item in enumerate(recipients)]
         public["timeout_seconds"] = _timeout(supplied.get("timeout_seconds"), 15)
     else:
-        raise ConfigError("type", "Must be webhook or smtp")
+        raise ConfigError("type", "Must be webhook, slack or smtp")
     return public, hidden

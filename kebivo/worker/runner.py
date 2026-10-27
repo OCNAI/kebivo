@@ -254,9 +254,7 @@ class Worker:
                     self.retention_task is None or self.retention_task.done()
                 ):
                     self.retention_check_at = time.monotonic() + 600
-                    self.retention_task = asyncio.create_task(
-                        self._retention(), name="retention"
-                    )
+                    self.retention_task = asyncio.create_task(self._retention(), name="retention")
                 # Even a one-slot worker needs a separate lane for a model call.
                 total_slots = max(2, self.settings.worker_concurrency)
                 capacity = total_slots - len(self.inflight)
@@ -891,6 +889,8 @@ async def send_destination(
         config["user_agent"] = settings.webhook_user_agent
         if settings.allowed_origins:
             config["dashboard_origin"] = settings.allowed_origins[0]
+        if settings.public_url:
+            config["public_url"] = settings.public_url
         secrets = (
             SecretBox.from_settings(settings).decrypt(destination["id"], destination["ciphertext"])
             if destination["ciphertext"]
@@ -926,7 +926,7 @@ async def send_destination(
     timeout = config.get("timeout_seconds", 10)
     if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 30:
         return failure("permanent", "config_invalid")
-    if kind == "webhook" and (
+    if kind in {"webhook", "slack"} and (
         "url" not in secrets or (config.get("signing") and "signing_secret" not in secrets)
     ):
         return failure("permanent", "config_invalid")
