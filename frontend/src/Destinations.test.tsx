@@ -51,6 +51,21 @@ const smtp = {
     timeout_seconds: 15,
   },
 };
+const slack = {
+  id: "slack",
+  name: "Team updates",
+  type: "slack",
+  enabled: true,
+  delivery_mode: "new_groups_only",
+  allow_private_network: false,
+  is_system: false,
+  config: {
+    url: { set: true },
+    url_origin: "https://hooks.slack.com",
+    url_has_path: true,
+    timeout_seconds: 10,
+  },
+};
 describe("Destinations admin UI", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -65,12 +80,19 @@ describe("Destinations admin UI", () => {
         method = String(init?.method ?? "GET"),
         body = String(init?.body ?? "");
       requests.push({ path, method, body });
-      if (path.endsWith("/destinations") && method === "POST")
+      if (path.endsWith("/destinations") && method === "POST") {
+        const payload = JSON.parse(body);
         return new Response(
-          JSON.stringify({ ...hook, id: "new", signing_secret: "once-only" }),
+          JSON.stringify({
+            ...(payload.type === "slack" ? slack : hook),
+            id: "new",
+            name: payload.name,
+            signing_secret: payload.type === "webhook" ? "once-only" : undefined,
+          }),
         );
+      }
       if (path.endsWith("/destinations"))
-        return new Response(JSON.stringify({ items: [inbox, hook, smtp] }));
+        return new Response(JSON.stringify({ items: [inbox, hook, smtp, slack] }));
       if (path.endsWith("/destinations/hook") && method === "GET")
         return new Response(JSON.stringify(hook));
       if (path.endsWith("/destinations/hook") && method === "PATCH")
@@ -79,10 +101,12 @@ describe("Destinations admin UI", () => {
         return new Response(JSON.stringify(smtp));
       if (path.endsWith("/destinations/smtp") && method === "PATCH")
         return new Response(JSON.stringify(smtp));
-      if (path.endsWith("/destinations") && method === "POST")
-        return new Response(
-          JSON.stringify({ ...hook, id: "new", signing_secret: "once-only" }),
-        );
+      if (path.endsWith("/destinations/slack") && method === "GET")
+        return new Response(JSON.stringify(slack));
+      if (path.endsWith("/destinations/slack") && method === "PATCH")
+        return new Response(JSON.stringify(slack));
+      if (path.endsWith("/destinations/new") && method === "GET")
+        return new Response(JSON.stringify({ ...slack, id: "new" }));
       if (path.endsWith("/test"))
         return new Response(
           JSON.stringify({
@@ -111,6 +135,8 @@ describe("Destinations admin UI", () => {
     await render();
     expect(container.textContent).toContain("Built-in inbox");
     expect(container.textContent).toContain("Webhook");
+    expect(container.textContent).toContain("Slack");
+    expect(container.textContent).toContain("https://hooks.slack.com · path hidden");
     expect(container.textContent).toContain(
       "https://example.test · path hidden",
     );
@@ -118,6 +144,65 @@ describe("Destinations admin UI", () => {
     expect(container.querySelector("tbody tr")?.textContent).toContain(
       "Disable",
     );
+  });
+  it("creates Slack with an encrypted URL and supports test send", async () => {
+    await render();
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent === "New Slack")!
+        .click();
+    });
+    expect(container.textContent).toContain("Create Slack destination");
+    expect(
+      container.querySelector('input[name="allow_private_network"]'),
+    ).toBeNull();
+    await act(async () => {
+      container.querySelector<HTMLInputElement>('input[name="name"]')!.value =
+        "Team updates";
+      container
+        .querySelector<HTMLInputElement>('input[name="name"]')!
+        .dispatchEvent(new Event("input", { bubbles: true }));
+      container.querySelector<HTMLInputElement>('input[name="url"]')!.value =
+        "https://hooks.slack.com/services/T123/B456/secret";
+      container
+        .querySelector<HTMLInputElement>('input[name="url"]')!
+        .dispatchEvent(new Event("input", { bubbles: true }));
+      container
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    const post = requests.find(
+      (request) => request.method === "POST" && request.path.endsWith("/destinations"),
+    );
+    expect(JSON.parse(post!.body)).toMatchObject({
+      type: "slack",
+      config: { timeout_seconds: 10 },
+      secrets: { url: "https://hooks.slack.com/services/T123/B456/secret" },
+    });
+    expect(container.textContent).toContain("https://hooks.slack.com · path hidden");
+    expect(container.textContent).not.toContain(
+      "https://hooks.slack.com/services/T123/B456/secret",
+    );
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent === "Test send")!
+        .click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(
+      requests.some(
+        (request) =>
+          request.method === "POST" && request.path.endsWith("/destinations/new/test"),
+      ),
+    ).toBe(true);
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".panel-heading button")!.click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    const url = container.querySelector<HTMLInputElement>('input[name="url"]')!;
+    expect(url.value).toBe("");
+    expect(url.placeholder).toBe("https://hooks.slack.com · path hidden");
   });
   it("creates a webhook and clears the one-time secret when dismissed", async () => {
     await render();
@@ -181,8 +266,8 @@ describe("Destinations admin UI", () => {
   it("hides and clears SMTP credentials when TLS is None", async () => {
     await render();
     await act(async () => {
-      container
-        .querySelectorAll<HTMLButtonElement>(".dashboard-heading button")[1]
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent === "New SMTP")!
         .click();
     });
     const tls = container.querySelector<HTMLSelectElement>(
