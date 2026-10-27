@@ -24,4 +24,22 @@ describe('P7 settings and integration',()=>{
     host=document.createElement('div');document.body.append(host);root=createRoot(host);Object.defineProperty(window,'location',{configurable:true,value:{origin:"https://bad' origin"}});
     act(()=>root.render(<ConnectPanel correctionsEnabled/>));expect(host.textContent).toContain('http://127.0.0.1:8000/api/v1/feedback');
   });
+  it('sends a test event and links to its group',async()=>{
+    host=document.createElement('div');document.body.append(host);root=createRoot(host);
+    const fetch=vi.fn(async()=>new Response(JSON.stringify({event_id:'e1',group_id:'g1'}),{status:202}));globalThis.fetch=fetch as typeof globalThis.fetch;
+    await act(async()=>root.render(<ConnectPanel correctionsEnabled projectId="p1"/>));
+    await act(async()=>{host.querySelector<HTMLButtonElement>('button')!.click();await new Promise(resolve=>setTimeout(resolve,0));});
+    expect(fetch).toHaveBeenCalledWith('/api/v1/projects/p1/test-event',expect.objectContaining({method:'POST'}));
+    expect(host.textContent).toContain('Test event sent.');
+    expect(host.querySelector<HTMLAnchorElement>('a[href^="/inbox/groups/g1"]')?.textContent).toBe('View group');
+  });
+  it('disables test events for archived projects and reports endpoint errors',async()=>{
+    host=document.createElement('div');document.body.append(host);root=createRoot(host);
+    const fetch=vi.fn(async()=>new Response(JSON.stringify({detail:'Project is archived.'}),{status:409}));globalThis.fetch=fetch as typeof globalThis.fetch;
+    await act(async()=>root.render(<ConnectPanel correctionsEnabled projectId="p1" archived/>));
+    const button=host.querySelector<HTMLButtonElement>('button')!;expect(button.disabled).toBe(true);expect(fetch).not.toHaveBeenCalled();
+    act(()=>root.render(<ConnectPanel correctionsEnabled projectId="p1"/>));
+    await act(async()=>{host.querySelector<HTMLButtonElement>('button')!.click();await new Promise(resolve=>setTimeout(resolve,0));});
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Project is archived.');
+  });
 });

@@ -67,11 +67,21 @@ describe('Dashboard delivery failure link', () => {
     expect(container.textContent).not.toContain('One-off question');
   });
 
-  it('explains when no question has recurred', async () => {
+  it('shows a first-run empty state when there are no events', async () => {
     await act(async () => {
       root.render(<DashboardSummary navigate={() => {}} />);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(container.textContent).toContain('No question has been reported more than once yet.');
+    expect(container.textContent).toContain('No feedback groups yet');
+  });
+  it('points a new workspace to the real test event action', async () => {
+    const navigate = vi.fn();
+    await act(async () => {
+      root.render(<DashboardSummary navigate={navigate} projectId="p1" />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(container.textContent).toContain('Send a test event from a project Connect panel');
+    await act(async () => { container.querySelector<HTMLButtonElement>('.empty-state button')!.click(); });
+    expect(navigate).toHaveBeenCalledWith('/?project=p1');
   });
 });

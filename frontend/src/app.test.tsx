@@ -69,6 +69,15 @@ describe('authenticated dashboard', () => {
     expect(calls.find((call) => call.path.endsWith('/auth/logout'))?.headers.get('X-CSRF-Token')).toBe('csrf1');
   });
 
+  it('shows the configured origin in a wrong-origin sign-in response', async () => {
+    globalThis.fetch = vi.fn(async input => String(input).endsWith('/auth/session')
+      ? new Response(JSON.stringify({ detail: 'Authentication required' }), { status: 401 })
+      : new Response(JSON.stringify({ detail: 'Page origin is not in ALLOWED_ORIGINS. Configured origins: https://admin.example.org' }), { status: 403 })) as typeof fetch;
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Configured origins: https://admin.example.org');
+  });
+
   it('identifies project correction policy separately from token scope', async () => {
     const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' as const } }, tags: [], created_at: '', updated_at: '' };
     const writes: Record<string, unknown>[] = [];
