@@ -125,6 +125,10 @@ def test_slack_block_kit_and_checked_sender(monkeypatch: Any) -> None:
     assert asyncio.run(send_destination(destination, message, no_link)).outcome == "success"
     assert len(sent[-1][2]["blocks"]) == 2
 
+    message["feedback"]["question"] = "q" * 10000
+    assert asyncio.run(send_destination(destination, message, settings)).outcome == "success"
+    assert sent[-1][2]["blocks"][0]["text"]["text"] == "q" * 2999 + "…"
+
 
 def test_public_url_requires_https_origin() -> None:
     for value in ("http://example.org", "https://example.org/path", "https://u@example.org"):

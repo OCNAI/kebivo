@@ -204,6 +204,9 @@ class SlackAdapter(WebhookAdapter):
         timeout: int,
     ) -> DeliveryResult:
         question = str(message["feedback"]["question"])
+        # Slack rejects section text over 3000 characters; questions may be longer.
+        if len(question) > 3000:
+            question = question[:2999] + "…"
         project = str(message["project"]["name"])
         tags = ", ".join(str(tag) for tag in message["tags"]) or "None"
         fields = [
