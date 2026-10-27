@@ -171,6 +171,8 @@ accepted = client.report_gap("How do I reset my VPN?", tags=["it"])
 print(accepted["event_id"])
 ```
 
+For Node 20+ applications, use the [standalone TypeScript SDK](sdk/typescript/README.md) from a local path. It has no runtime dependencies and is not published to npm. Keep project tokens on the server; never embed them in browser code.
+
 Runnable clients for [cURL](examples/rest_curl.sh), [Python](examples/rest_python.py) (standard library) and [TypeScript](examples/rest_typescript.ts) (Node.js 24, no build step) are in [`examples/`](examples/), and the project page in the UI shows the same snippets with your endpoint. The [REST integration guide](docs/rest-api.md) covers fields, authentication, idempotency, errors, retries and rate limits.
 
 ## Report knowledge gaps with MCP

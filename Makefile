@@ -29,6 +29,7 @@ type:
 test:
 	uv run pytest
 	cd frontend && npm test -- --run
+	cd sdk/typescript && node --test
 
 audit:
 	uv export --locked --no-dev --no-emit-project --format requirements-txt --output-file /tmp/kebivo-python-requirements.txt
