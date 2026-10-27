@@ -113,18 +113,18 @@ The [standalone Python SDK](../sdk/python/README.md) provides `Kebivo(url, token
 
 ### LangChain and LangGraph
 
-Install the SDK with its optional callback dependency from a repository checkout:
+Install the `kebivo-client[langchain]` extra with its optional callback dependency from a repository checkout:
 
 ```sh
 pip install './sdk/python[langchain]'
 ```
 
-Attach the handler to a LangChain retriever. An empty document list reports the retriever query as a knowledge gap. A nonempty result does not report. The report is sent from a background thread, so Kebivo retries never delay retrieval, and errors are logged rather than raised.
+Attach the handler to a LangChain retriever. An empty document list reports the retriever query as a knowledge gap. A nonempty result does not report. Reports use a bounded background queue and one worker, so Kebivo retries never delay retrieval. A full queue drops reports with a warning, and delivery errors are logged rather than raised. Call `handler.flush(timeout=1)` before shutdown to wait for accepted reports.
 
 ```python
 import os
-from kebivo import Kebivo
-from kebivo.langchain import KebivoCallbackHandler
+from kebivo_client import Kebivo
+from kebivo_client.langchain import KebivoCallbackHandler
 
 client = Kebivo(os.environ["KEBIVO_URL"], os.environ["KEBIVO_TOKEN"])
 handler = KebivoCallbackHandler(client, project_tags=["support"])

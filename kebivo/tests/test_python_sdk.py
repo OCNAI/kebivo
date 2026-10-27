@@ -1,28 +1,22 @@
 """Contracts for the standalone standard-library Python SDK."""
 
-import importlib.util
 import json
 import socket
 import threading
 import time
-import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+import kebivo_client as sdk
 import pytest
 import uvicorn
 from sqlalchemy import func, select
 
+import kebivo
 from kebivo.models import FeedbackEvent
 from kebivo.tests.test_projects import make_client
 from kebivo.tests.test_tokens import create_project, issue_token
-
-SDK_PATH = Path(__file__).resolve().parents[2] / "sdk/python/kebivo/__init__.py"
-spec = importlib.util.spec_from_file_location("kebivo_python_sdk", SDK_PATH)
-assert spec and spec.loader
-sdk = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(sdk)
 
 
 @pytest.fixture
@@ -59,7 +53,7 @@ def stub() -> Any:
 def test_retry_preserves_key_and_payload(stub: Any, monkeypatch: Any) -> None:
     url, received, replies = stub
     waits: list[float] = []
-    monkeypatch.setattr(sdk.time, "sleep", waits.append)
+    monkeypatch.setattr(time, "sleep", waits.append)
     replies.extend(
         [
             (
@@ -85,7 +79,7 @@ def test_retry_preserves_key_and_payload(stub: Any, monkeypatch: Any) -> None:
 
 def test_http_error_is_typed_and_not_retried(stub: Any, monkeypatch: Any) -> None:
     url, received, replies = stub
-    monkeypatch.setattr(sdk.time, "sleep", lambda _: pytest.fail("unexpected retry"))
+    monkeypatch.setattr(time, "sleep", lambda _: pytest.fail("unexpected retry"))
     replies.append(
         (
             422,
@@ -113,17 +107,73 @@ def test_connection_retries_then_typed_error(monkeypatch: Any) -> None:
     keys: list[str] = []
     waits: list[float] = []
 
-    def fail(request: Any, timeout: float) -> None:
-        assert timeout == 0.25
-        keys.append(request.get_header("Idempotency-key"))
-        raise urllib.error.URLError("offline")
+    def fail(self: Any, data: bytes, key: str) -> None:
+        keys.append(key)
+        raise OSError("offline")
 
-    monkeypatch.setattr(sdk._OPENER, "open", fail)
-    monkeypatch.setattr(sdk.time, "sleep", waits.append)
+    monkeypatch.setattr(sdk.Kebivo, "_request", fail)
+    monkeypatch.setattr(time, "sleep", waits.append)
     with pytest.raises(sdk.KebivoConnectionError):
         sdk.Kebivo("https://example.test", "token", timeout=0.25).report_gap("Question?")
     assert len(keys) == 4 and len(set(keys)) == 1
     assert waits == [1, 2, 4]
+
+
+def test_server_and_sdk_import_side_by_side() -> None:
+    assert kebivo.__name__ == "kebivo"
+    assert sdk.__name__ == "kebivo_client"
+    assert kebivo is not sdk
+
+
+def test_invalid_input_before_request(monkeypatch: Any) -> None:
+    monkeypatch.setattr(sdk.Kebivo, "_request", lambda *_: pytest.fail("unexpected request"))
+    for key in ("", "a b", "a\n", "é", "a" * 256):
+        with pytest.raises(sdk.KebivoValidationError):
+            sdk.Kebivo("https://example.test", "token").report_gap("Question?", idempotency_key=key)
+    with pytest.raises(sdk.KebivoValidationError):
+        sdk.Kebivo("https://user:secret@example.test", "token")
+
+
+def test_insecure_warning_once(monkeypatch: Any, caplog: Any) -> None:
+    monkeypatch.setattr(sdk, "_warned_insecure", False)
+    sdk.Kebivo("http://example.test", "token")
+    sdk.Kebivo("http://other.test", "token")
+    sdk.Kebivo("http://127.0.0.1", "token")
+    assert caplog.text.count("token will be sent over HTTP") == 1
+
+
+def test_slow_body_has_total_deadline() -> None:
+    class Drip(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(202)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", "100")
+            self.end_headers()
+            for _ in range(10):
+                try:
+                    self.wfile.write(b"x")
+                    self.wfile.flush()
+                except OSError:
+                    break
+                time.sleep(0.4)
+
+        def log_message(self, *_args: Any) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Drip)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = sdk.Kebivo(f"http://127.0.0.1:{server.server_port}", "token", timeout=1)
+        started = time.monotonic()
+        with pytest.raises(sdk.KebivoConnectionError):
+            client.report_gap("Question?")
+        assert time.monotonic() - started < 2
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
 
 
 def test_sdk_against_real_app(tmp_path: Path) -> None:
@@ -161,7 +211,7 @@ def test_sdk_against_real_app(tmp_path: Path) -> None:
 
 def test_redirect_is_not_followed(stub: Any, monkeypatch: Any) -> None:
     url, received, replies = stub
-    monkeypatch.setattr(sdk.time, "sleep", lambda _: pytest.fail("unexpected retry"))
+    monkeypatch.setattr(time, "sleep", lambda _: pytest.fail("unexpected retry"))
     replies.append((302, {"Location": "http://127.0.0.1:9/steal"}, {}))
     with pytest.raises(sdk.KebivoHTTPError) as caught:
         sdk.Kebivo(url, "token").report_gap("Question?")
@@ -172,7 +222,7 @@ def test_redirect_is_not_followed(stub: Any, monkeypatch: Any) -> None:
 def test_retry_after_is_capped(stub: Any, monkeypatch: Any) -> None:
     url, _received, replies = stub
     waits: list[float] = []
-    monkeypatch.setattr(sdk.time, "sleep", waits.append)
+    monkeypatch.setattr(time, "sleep", waits.append)
     replies.extend(
         [
             (429, {"Retry-After": "86400"}, {"error": {"code": "rate_limited"}}),

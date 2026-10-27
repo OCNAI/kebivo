@@ -23,7 +23,7 @@ format:
 
 type:
 	uv run mypy kebivo
-	uv run mypy sdk/python/kebivo
+	uv run mypy sdk/python/kebivo_client
 	cd frontend && npm run typecheck
 
 test:

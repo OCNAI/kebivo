@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "kebivo"
+name = "kebivo-client"
 version = "0.1.1"
 description = "Standard library client for the Kebivo feedback API"
 readme = "README.md"
@@ -15,4 +15,4 @@ dependencies = []
 langchain = ["langchain-core>=1.0,<2"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["kebivo"]
+packages = ["kebivo_client"]

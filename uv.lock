@@ -476,6 +476,7 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "aiosmtpd" },
+    { name = "kebivo-client" },
     { name = "langchain-core" },
     { name = "mypy" },
     { name = "pytest" },
@@ -490,6 +491,7 @@ requires-dist = [
     { name = "cryptography", specifier = "==50.0.2" },
     { name = "fastapi", specifier = "==0.143.3" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "kebivo-client", marker = "extra == 'dev'", editable = "sdk/python" },
     { name = "langchain-core", marker = "extra == 'dev'", specifier = "==1.7.0" },
     { name = "mcp", specifier = "==2.3.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.15.0" },
@@ -500,6 +502,15 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = "==0.34.2" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "kebivo-client"
+version = "0.1.1"
+source = { editable = "sdk/python" }
+
+[package.metadata]
+requires-dist = [{ name = "langchain-core", marker = "extra == 'langchain'", specifier = ">=1.0,<2" }]
+provides-extras = ["langchain"]
 
 [[package]]
 name = "langchain-core"

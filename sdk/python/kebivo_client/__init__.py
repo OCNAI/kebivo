@@ -3,17 +3,29 @@
 from __future__ import annotations
 
 import http.client
+import ipaddress
 import json
+import logging
+import math
+import socket
 import time
-import urllib.error
-import urllib.request
 import uuid
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from threading import Event, Timer
 from typing import Any, cast
 from urllib.parse import urlsplit
 
-__all__ = ["Kebivo", "KebivoError", "KebivoHTTPError", "KebivoConnectionError"]
+__all__ = [
+    "Kebivo",
+    "KebivoError",
+    "KebivoHTTPError",
+    "KebivoConnectionError",
+    "KebivoValidationError",
+]
+
+logger = logging.getLogger(__name__)
+_warned_insecure = False
 
 
 class KebivoError(Exception):
@@ -43,16 +55,11 @@ class KebivoConnectionError(KebivoError):
     """No HTTP response was received after all attempts."""
 
 
+class KebivoValidationError(KebivoError, ValueError):
+    """A request parameter is invalid."""
+
+
 MAX_RETRY_AFTER = 60.0
-
-
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    # urllib would resend the bearer token to the redirect target.
-    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
-        return None
-
-
-_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def _retry_after(value: str | None) -> float:
@@ -79,12 +86,24 @@ class Kebivo:
             or not parsed.netloc
             or parsed.query
             or parsed.fragment
+            or parsed.username is not None
+            or parsed.password is not None
         ):
-            raise ValueError("url must be an HTTP(S) base URL")
+            raise KebivoValidationError("url must be an HTTP(S) base URL without userinfo")
         if not token:
-            raise ValueError("token is required")
-        if timeout <= 0:
-            raise ValueError("timeout must be positive")
+            raise KebivoValidationError("token is required")
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise KebivoValidationError("timeout must be finite and positive")
+        global _warned_insecure
+        if parsed.scheme == "http" and not _warned_insecure:
+            host = parsed.hostname or ""
+            try:
+                loopback = ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                loopback = host.lower() == "localhost"
+            if not loopback:
+                logger.warning("Kebivo token will be sent over HTTP to a non-loopback host")
+                _warned_insecure = True
         self.url = url.rstrip("/") + "/api/v1/feedback"
         self.token = token
         self.timeout = timeout
@@ -179,49 +198,88 @@ class Kebivo:
         body.update({key: value for key, value in optional.items() if value is not None})
         data = json.dumps(body, allow_nan=False).encode("utf-8")
         key = idempotency_key if idempotency_key is not None else str(uuid.uuid4())
-        request = urllib.request.Request(
-            self.url,
-            data=data,
-            headers={
-                "Authorization": f"Bearer {self.token}",
-                "Content-Type": "application/json",
-                "Idempotency-Key": key,
-            },
-            method="POST",
-        )
+        if not 1 <= len(key) <= 255 or any(not 33 <= ord(char) <= 126 for char in key):
+            raise KebivoValidationError(
+                "idempotency_key must be 1-255 printable ASCII characters without spaces"
+            )
         for attempt in range(4):
             try:
-                with _OPENER.open(request, timeout=self.timeout) as response:
-                    raw = response.read()
-                try:
-                    return cast(dict[str, Any], json.loads(raw))
-                except ValueError as error:
-                    raise KebivoError("Kebivo returned a response that is not JSON") from error
-            except urllib.error.HTTPError as error:
-                raw = error.read()
+                status, headers, raw = self._request(data, key)
+                if 200 <= status < 300:
+                    try:
+                        return cast(dict[str, Any], json.loads(raw))
+                    except ValueError as error:
+                        raise KebivoError("Kebivo returned a response that is not JSON") from error
                 try:
                     envelope = json.loads(raw).get("error", {})
                 except (ValueError, AttributeError):
                     envelope = {}
-                message = envelope.get("message") or error.reason or "Request failed"
+                message = envelope.get("message") or "Request failed"
                 failure = KebivoHTTPError(
-                    error.code,
+                    status,
                     envelope.get("code"),
                     str(message),
                     envelope.get("details"),
-                    envelope.get("request_id") or error.headers.get("X-Request-ID"),
+                    envelope.get("request_id") or headers.get("X-Request-ID"),
                 )
-                if error.code != 429 and error.code < 500 or attempt == 3:
-                    raise failure from error
-                wait = max(2**attempt, _retry_after(error.headers.get("Retry-After")))
-            except (
-                urllib.error.URLError,
-                http.client.HTTPException,
-                TimeoutError,
-                ConnectionError,
-            ) as error:
+                if status != 429 and status < 500 or attempt == 3:
+                    raise failure
+                wait = max(2**attempt, _retry_after(headers.get("Retry-After")))
+            except TimeoutError as error:
+                raise KebivoConnectionError(str(error)) from error
+            except (OSError, http.client.HTTPException) as error:
                 if attempt == 3:
                     raise KebivoConnectionError(str(error)) from error
                 wait = 2**attempt
             time.sleep(wait)
         raise AssertionError("retry loop must return or raise")
+
+    def _request(self, data: bytes, key: str) -> tuple[int, http.client.HTTPMessage, bytes]:
+        parsed = urlsplit(self.url)
+        connection_type = (
+            http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+        )
+        assert parsed.hostname is not None
+        connection = connection_type(parsed.hostname, parsed.port, timeout=self.timeout)
+        expired = Event()
+        active_socket: socket.socket | None = None
+
+        def stop() -> None:
+            expired.set()
+            sock = active_socket or connection.sock
+            if sock is not None:
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+        timer = Timer(self.timeout, stop)
+        timer.daemon = True
+        timer.start()
+        try:
+            path = parsed.path or "/"
+            connection.request(
+                "POST",
+                path,
+                body=data,
+                headers={
+                    "Authorization": f"Bearer {self.token}",
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": key,
+                },
+            )
+            if expired.is_set():
+                raise TimeoutError("Kebivo request deadline exceeded")
+            active_socket = connection.sock
+            response = connection.getresponse()
+            raw = response.read()
+            if expired.is_set():
+                raise TimeoutError("Kebivo request deadline exceeded")
+            return response.status, response.headers, raw
+        except (OSError, http.client.HTTPException):
+            if expired.is_set():
+                raise TimeoutError("Kebivo request deadline exceeded") from None
+            raise
+        finally:
+            timer.cancel()
+            connection.close()
