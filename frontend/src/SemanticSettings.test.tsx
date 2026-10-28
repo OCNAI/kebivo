@@ -35,6 +35,18 @@ describe('SemanticSettings embeddings', () => {
     await act(async () => { const select = container.querySelector<HTMLSelectElement>('#semantic-method')!; select.value = 'embeddings'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   }
 
+  it('shows the honest embeddings help copy and keeps the judge help unchanged', async () => {
+    await render();
+    const mode = container.querySelector<HTMLSelectElement>('#dedup-mode')!;
+    await act(async () => { mode.value = 'exact'; mode.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(container.querySelector('#dedup-mode-help')?.textContent).toBe('Exact groups identical questions in the same project and event type. To also group paraphrases, use Semantic: the LLM judge method finds the most paraphrases, and the embeddings method groups only very close matches by default.');
+    await act(async () => { mode.value = 'semantic'; mode.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(container.querySelector('#semantic-method-help')?.textContent).toBe('Sends each new question and similar existing ones to an LLM, which decides if they match. Slower; handles subtle cases.');
+    await selectEmbeddings();
+    expect(container.querySelector('#semantic-method-help')?.textContent).toBe('Turns questions into vectors and groups only very close matches. Fast and cheap, and works with a local model such as nomic-embed-text, but by default it misses most paraphrases. To group more paraphrases, use Ask an LLM to judge.');
+    expect(container.querySelector('#threshold-help')?.textContent).toBe("Questions at or above this score are grouped. The default is tuned for nomic-embed-text to avoid merging different questions; in our tests it grouped only about 3 in 100 paraphrases. Lowering it groups more paraphrases but merges more different questions: at 0.80 it grouped about 23 in 100 paraphrases, and about 6 in 10 of its groupings were wrong. Other models need their own tuning. Check with the preview, or run dedup-eval on your project's history.");
+  });
+
   it('clears privacy acknowledgement when the method changes and keeps method values', async () => {
     await render();
     const ack = container.querySelector<HTMLInputElement>('#privacy-ack')!;
