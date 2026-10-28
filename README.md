@@ -1,8 +1,6 @@
 # Kebivo: self-hosted knowledge gap feedback for AI agents
 
-Collect the questions your AI assistant could not answer.
-
-Kebivo collects unanswered questions and proposed knowledge corrections from AI agents over REST or MCP. It groups repeat reports and routes them to the people who maintain the knowledge, through an admin inbox, email or signed webhooks. Run it yourself in one container with no cloud account or AI provider required.
+Kebivo is an open-source, self-hosted tool that collects the questions your AI assistant, chatbot or RAG app couldn't answer, groups repeats, and routes them to the people who own the content. Your agent or app reports a gap over REST or MCP, and routing rules deliver it to an admin inbox, Slack, email or signed webhooks. It runs as one container with no cloud account or AI provider required, under Apache-2.0.
 
 [![CI](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -23,15 +21,27 @@ Start with the [Quickstart](#quickstart). For framework tutorials, see the [Kebi
 
 When an assistant cannot answer, the documentation owner may never see the question. The same question can fail again, and corrections offered in chat may never reach the people who maintain the content. Kebivo collects those reports in one place, where owners can triage and route them to the tools they use.
 
-When AI assistants cannot answer questions, Kebivo sends those knowledge gaps to a documentation or support owner for review. It groups repeated questions so the owner can see what keeps coming up. It can sit alongside a RAG application or agent framework; it does not retrieve content or update a knowledge base for you.
+## When to use Kebivo
+
+- Your assistant, chatbot or RAG app can identify an unanswered question and report it over REST or MCP.
+- The same questions recur, and content owners need a grouped count and inbox to prioritize them.
+- Different teams own different topics, so you need to route reports by project or tags to Slack, email or signed webhooks.
+- Users suggest corrections (an opt-in setting, off by default), and a person must review them before anyone changes the knowledge source.
+- You need a self-hosted feedback workflow that runs without a cloud account or AI provider.
+
+Use something else when:
+
+- You need a tool to answer questions, retrieve documents or apply corrections to your knowledge base.
+- You need a ticketing system, analytics product, multi-user accounts, SSO or roles.
+- You need high availability across multiple processes or a distributed database.
 
 ## Features
 
 - Send reports from application code through REST, or give agents the Streamable HTTP MCP tools `report_knowledge_gap` and `submit_knowledge_correction`.
 - Create one project per assistant or team, with default tags, a corrections policy, and bearer tokens that are shown once, can expire and can be revoked.
 - Route reports with ordered rules, ANY/ALL tag matching, several destinations per rule, a fallback, and a dry-run simulator.
-- Deliver to signed webhooks with a versioned JSON payload, SMTP email, or the built-in inbox. Deliveries have durable retries with backoff, restart recovery, a delivery log and manual retry.
-- Identical questions are grouped automatically. You can also configure an LLM provider for semantic grouping.
+- Deliver to signed webhooks with a versioned JSON payload, Slack incoming webhooks, SMTP email, or the built-in inbox. Deliveries have durable retries with backoff, restart recovery, a delivery log and manual retry.
+- Questions that match exactly, ignoring case, extra whitespace, quote and dash styles, and trailing `?`, `!` or `.`, are grouped automatically. You can also configure an LLM provider for semantic grouping.
 - Triage reports in the inbox with search, filters, statuses, notes, tags, merge, split and deletion. Each group has a full history.
 - Enable OpenAI-compatible, Azure OpenAI or local (Ollama, LM Studio) providers for semantic grouping on a per-project basis. This is off by default.
 - Run one container with one SQLite file. Startup migrations, online backup and checked restore, retention (on by default), JSON Lines export, and health checks are included.
