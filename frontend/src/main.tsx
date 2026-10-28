@@ -19,9 +19,10 @@ document.title = projectConfig.display_name;
 type Admin = { id: string; email: string };
 type Project = {
   id: string; name: string; slug: string; description: string | null; is_active: boolean;
-  archived_at: string | null; settings: { corrections?: { enabled?: boolean }; deduplication?: { mode?: 'disabled' | 'exact' | 'semantic'; enabled?: boolean } };
+  archived_at: string | null; settings: { corrections?: { enabled?: boolean }; deduplication?: Deduplication };
   tags: { id: string; name: string; slug: string; is_default: boolean }[]; created_at: string; updated_at: string;
 };
+type Deduplication = { mode?: 'disabled' | 'exact' | 'semantic'; enabled?: boolean; privacy_acknowledged?: boolean; semantic?: { method?: 'judge' | 'embeddings'; provider_id?: string; model?: string | null; embedding_model?: string; similarity_threshold?: number; max_scan?: number; candidate_count?: number; min_confidence?: number; timeout_seconds?: number; max_attempts?: number } };
 type Token = { id: string; name: string; prefix: string; scopes: string[]; created_at: string; expires_at: string | null; last_used_at: string | null; revoked_at: string | null };
 type CreatedToken = Token & { token: string };
 const date = (value: string | null) => value ? new Date(value).toLocaleDateString() : 'Never';
@@ -123,8 +124,11 @@ export function App() {
     event.preventDefault(); const data = new FormData(event.currentTarget);
     const settings = { ...selected?.settings, corrections: { enabled: data.get('corrections') === 'on' }, deduplication: { mode: String(data.get('deduplication_mode')) as 'disabled' | 'exact' | 'semantic' } };
     const payload = { name: String(data.get('name')), slug: String(data.get('slug')), description: String(data.get('description')) || null, settings, ...(selected ? { is_active: data.get('is_active') === 'on' } : {}) };
+    const projectSettings = selected && settings.deduplication.mode === 'semantic'
+      ? { ...settings, deduplication: { ...selected.settings.deduplication, mode: settings.deduplication.mode } }
+      : settings;
     await run(async () => selected
-      ? apiRequest<Project>(`projects/${selected.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+      ? apiRequest<Project>(`projects/${selected.id}`, { method: 'PATCH', body: JSON.stringify({ ...payload, settings: projectSettings }) })
       : apiRequest<Project>('projects', { method: 'POST', body: JSON.stringify(payload) }), async (project) => {
       setSelected(project); setEditing(false); setNotice(selected ? 'Project settings saved.' : 'Project created.');
       await refreshProjects();
@@ -207,7 +211,7 @@ export function App() {
               <ConnectPanel correctionsEnabled={Boolean(selected.settings.corrections?.enabled)} archived={Boolean(selected.archived_at)} projectId={selected.id} />
             <section className="panel project-configuration" aria-label="Project configuration">
       <DefaultTagsEditor key={selected.id} project={selected} busy={busy} onSaved={(updated) => { setSelected(updated); setNotice('Default tags saved.'); }} onError={setError} />
-              <SemanticSettings key={`semantic-${selected.id}`} project={selected} onSaved={updated => { setSelected(updated); setNotice('Deduplication settings saved.'); }} onError={setError} />
+              <SemanticSettings key={`semantic-${selected.id}`} project={selected} onSaved={updated => { const backfill = updated.settings.deduplication?.semantic?.method === 'embeddings' && selected.settings.deduplication?.semantic?.method !== 'embeddings'; setSelected(updated); setNotice(`Deduplication settings saved.${backfill ? ' Existing questions are being sent for indexing.' : ''}`); }} onError={setError} />
               <div id="routing"><Routing project={selected} /></div>
               <p className="scope-note"><strong>Correction access uses two gates.</strong> The project policy above controls whether corrections are accepted. Each token must also include the <code>feedback:correction</code> scope.</p>
               {selected.archived_at && <p className="inline-note">Archived {date(selected.archived_at)}. Restore this project before issuing credentials.</p>}
@@ -230,19 +234,114 @@ export function DefaultTagsEditor({ project, busy, onSaved, onError }: { project
   async function submit(event: React.FormEvent) { event.preventDefault(); onError(''); setSaving(true); try { const result = await apiRequest<Project>(`projects/${project.id}/default-tags`, { method:'PUT', body:JSON.stringify({tags:value.split(/[\n,]/).map(v=>v.trim()).filter(Boolean)}) }); onSaved(result); setValue(result.tags.filter(tag=>tag.is_default).map(tag=>tag.name).join('\n')); } catch(e) { onError(apiErrorMessage(e)); } finally { setSaving(false); } }
   return <section className="default-tags" aria-labelledby="default-tags-title"><h3 id="default-tags-title">Default tags</h3><p className="subtle">One tag per line. Submitted tags stay visible on existing feedback.</p><form onSubmit={submit}><label htmlFor="default-tags">Default tags</label><textarea id="default-tags" rows={4} value={value} onChange={e=>setValue(e.target.value)} disabled={busy||saving||Boolean(project.archived_at)} /><button disabled={busy||saving||Boolean(project.archived_at)}>{saving?'Saving…':'Save default tags'}</button></form><div className="normalized-tags"><strong>Normalized slugs</strong>{defaults.length ? <ul>{defaults.map(tag=><li key={tag.slug}><span>{tag.name}</span><code>{tag.slug}</code></li>)}</ul> : <p className="subtle">No default tags.</p>}</div></section>;
 }
-function SemanticSettings({ project, onSaved, onError }: { project: Project; onSaved: (project: Project) => void; onError: (message: string) => void }) {
-  type Provider = { id: string; name: string; model: string | null; enabled: boolean };
-  const d = project.settings.deduplication ?? {}, sem = (d as typeof d & { semantic?: { provider_id?: string; model?: string; candidate_count?: number; min_confidence?: number; timeout_seconds?: number; max_attempts?: number } }).semantic;
-  const [providers, setProviders] = React.useState<Provider[]>([]), [preview, setPreview] = React.useState<Record<string, unknown> | null>(null), [saving, setSaving] = React.useState(false);
-  const [mode, setMode] = React.useState<string>(d.mode ?? (d.enabled === false ? 'disabled' : 'exact'));
-  const [ack, setAck] = React.useState(false);
-  React.useEffect(() => { apiRequest<{items:Provider[]}>('admin/llm-providers').then(r => setProviders(r.items.filter(p => p.enabled))).catch(e => onError(e.message)); }, [onError]);
-  async function submit(e: React.FormEvent<HTMLFormElement>) { e.preventDefault(); const form = new FormData(e.currentTarget); if (mode === 'semantic' && !ack) { onError('Acknowledge the privacy disclosure before saving semantic matching.'); return; }
-    const deduplication = mode === 'semantic' ? { mode, privacy_acknowledged: true, semantic: { provider_id: String(form.get('provider_id')), model: String(form.get('semantic_model') || '') || null, candidate_count: Number(form.get('candidate_count')), min_confidence: Number(form.get('min_confidence')), timeout_seconds: Number(form.get('semantic_timeout')), max_attempts: Number(form.get('max_attempts')) } } : { mode };
-    setSaving(true); try { const updated = await apiRequest<Project>(`projects/${project.id}`, { method:'PATCH', body: JSON.stringify({ settings: { ...project.settings, deduplication } }) }); onSaved(updated); } catch(e) { onError(apiErrorMessage(e)); } finally { setSaving(false); }
+export function SemanticSettings({ project, onSaved, onError }: { project: Project; onSaved: (project: Project) => void; onError: (message: string) => void }) {
+  type Provider = { id: string; name: string; provider_type: 'openai_compatible' | 'azure_openai' | 'local'; base_url: string; model: string | null; enabled: boolean };
+  type Defaults = { embeddings: { similarity_threshold: number; max_scan: number } };
+  type Similarity = { similarity: number; question?: string; question_excerpt?: string; threshold_met: boolean };
+  type Preview = { method?: string; exact_match_group_id?: string | null; similarities?: Similarity[]; verdict?: { outcome?: string; error_category?: string }; similarity_threshold?: number };
+  const d = project.settings.deduplication ?? {}, sem = d.semantic ?? {};
+  const [providers, setProviders] = React.useState<Provider[]>([]), [defaults, setDefaults] = React.useState<Defaults | null>(null);
+  const [preview, setPreview] = React.useState<Preview | null>(null), [previewError, setPreviewError] = React.useState(''), [previewBusy, setPreviewBusy] = React.useState(false);
+  const [saving, setSaving] = React.useState(false), [loading, setLoading] = React.useState(true);
+  const [mode, setMode] = React.useState<'disabled' | 'exact' | 'semantic'>(d.mode ?? (d.enabled === false ? 'disabled' : 'exact'));
+  const [method, setMethod] = React.useState<'judge' | 'embeddings'>(sem.method ?? 'judge');
+  const [providerId, setProviderId] = React.useState(sem.provider_id ?? '');
+  const [judge, setJudge] = React.useState({ model: sem.model ?? '', candidate_count: sem.candidate_count ?? 5, min_confidence: sem.min_confidence ?? 0.85, timeout_seconds: sem.timeout_seconds ?? 15, max_attempts: sem.max_attempts ?? 2 });
+  const [embedding, setEmbedding] = React.useState({ model: sem.embedding_model ?? '', threshold: sem.similarity_threshold, max_scan: sem.max_scan });
+  const [ack, setAck] = React.useState(false), [errors, setErrors] = React.useState<Record<string, string>>({}), [formError, setFormError] = React.useState('');
+  const provider = providers.find(item => item.id === providerId);
+  const compatible = providers.filter(item => item.provider_type === 'openai_compatible' || item.provider_type === 'local');
+  const initialMethod = sem.method ?? 'judge', initialProviderId = sem.provider_id ?? '';
+  const helpIds = (key: string) => `${key}-help${errors[key] ? ` ${key}-error` : ''}`;
+  React.useEffect(() => {
+    let live = true;
+    Promise.all([apiRequest<{items:Provider[]}>('admin/llm-providers'), apiRequest<Defaults>(`projects/dedup/defaults`)]).then(([p, defs]) => {
+      if (!live) return;
+      const enabled = p.items.filter(item => item.enabled); setProviders(enabled); setDefaults(defs);
+      if (!initialProviderId || !enabled.some(item => item.id === initialProviderId && (initialMethod !== 'embeddings' || item.provider_type !== 'azure_openai'))) {
+        const next = initialMethod === 'embeddings' ? enabled.find(item => item.provider_type !== 'azure_openai') : enabled[0];
+        if (next) setProviderId(next.id);
+      }
+      setEmbedding(value => ({ ...value, threshold: value.threshold ?? defs.embeddings.similarity_threshold, max_scan: value.max_scan ?? defs.embeddings.max_scan }));
+    }).catch(e => { if (live) onError(apiErrorMessage(e)); }).finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
+  }, [initialMethod, initialProviderId, onError]);
+  function changeMethod(value: 'judge' | 'embeddings') {
+    setMethod(value); setAck(false); setErrors({}); setFormError('');
+    if (value === 'embeddings' && provider?.provider_type === 'azure_openai') setProviderId(compatible[0]?.id ?? '');
   }
-  async function runPreview(e: React.FormEvent<HTMLFormElement>) { e.preventDefault(); const form = new FormData(e.currentTarget); setPreview(null); try { setPreview(await apiRequest(`admin/projects/${project.id}/dedup/preview`, { method:'POST', body: JSON.stringify({event_type: form.get('event_type'), question: form.get('question')}) })); } catch(e) { onError(apiErrorMessage(e)); } }
-  return <section className="panel" aria-labelledby="semantic-title"><h2 id="semantic-title">Deduplication and semantic matching</h2><form className="project-form" onSubmit={e => void submit(e)}><label htmlFor="dedup-mode">Mode</label><select id="dedup-mode" value={mode} onChange={e => setMode(e.target.value)}><option value="disabled">Disabled</option><option value="exact">Exact</option><option value="semantic" disabled={!providers.length}>Semantic{!providers.length ? ' (configure an enabled provider first)' : ''}</option></select><p className="help-text">Semantic matching sends submitted question text and up to 10 similar question excerpts to the selected provider. It does not send names, metadata, or group IDs. Provider retention and processing policies apply.</p>{mode === 'semantic' && <><label htmlFor="semantic-provider">Provider</label><select id="semantic-provider" name="provider_id" defaultValue={sem?.provider_id ?? providers[0]?.id} required>{providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select><label htmlFor="semantic-model">Model override (optional)</label><input id="semantic-model" name="semantic_model" defaultValue={sem?.model ?? ''}/><label htmlFor="candidate-count">Candidate groups (1–10)</label><input id="candidate-count" name="candidate_count" type="number" min="1" max="10" defaultValue={sem?.candidate_count ?? 5}/><label htmlFor="min-confidence">Minimum confidence</label><input id="min-confidence" name="min_confidence" type="number" min="0.5" max="1" step="0.01" defaultValue={sem?.min_confidence ?? 0.85}/><label htmlFor="semantic-timeout">Timeout (seconds)</label><input id="semantic-timeout" name="semantic_timeout" type="number" min="1" max="30" defaultValue={sem?.timeout_seconds ?? 15}/><label htmlFor="max-attempts">Maximum attempts</label><input id="max-attempts" name="max_attempts" type="number" min="1" max="3" defaultValue={sem?.max_attempts ?? 2}/><label className="checkbox-row"><input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)}/> I understand question text will be sent to the selected provider for matching.</label></>}<button disabled={saving}>{saving ? 'Saving…' : 'Save deduplication settings'}</button></form><hr/><h3>Preview a submission</h3><form className="project-form" onSubmit={e => void runPreview(e)}><label htmlFor="preview-type">Event type</label><select id="preview-type" name="event_type"><option value="knowledge_gap">Knowledge gap</option><option value="knowledge_correction">Knowledge correction</option></select><label htmlFor="preview-question">Question</label><textarea id="preview-question" name="question" required maxLength={10000}/><button>Run preview</button></form>{preview && <pre className="safe-pre" role="status">{JSON.stringify(preview,null,2)}</pre>}</section>;
+  function changeProvider(value: string) {
+    const next = providers.find(item => item.id === value);
+    if (provider && next && ((provider.provider_type === 'local') !== (next.provider_type === 'local'))) setAck(false);
+    setProviderId(value);
+  }
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); const nextErrors: Record<string,string> = {};
+    if (mode === 'semantic') {
+      if (!ack) nextErrors.ack = 'Confirm the privacy statement before saving.';
+      if (method === 'embeddings') {
+        if (!compatible.length) nextErrors.provider = 'Embeddings need an OpenAI-compatible or local provider. Add one under LLM providers.';
+        if (!embedding.model.trim()) nextErrors.embedding_model = 'Enter an embedding model.';
+        if (embedding.threshold == null || embedding.threshold < 0.5 || embedding.threshold > 0.99) nextErrors.threshold = 'Enter a threshold from 0.50 to 0.99.';
+        if (embedding.max_scan == null || embedding.max_scan < 1 || embedding.max_scan > 5000) nextErrors.max_scan = 'Enter a value from 1 to 5,000.';
+      }
+    }
+    setErrors(nextErrors); setFormError(Object.values(nextErrors)[0] ?? '');
+    if (Object.keys(nextErrors).length) { const ids: Record<string,string> = { provider:'semantic-provider', embedding_model:'embedding-model', threshold:'similarity-threshold', max_scan:'max-scan', ack:'privacy-ack' }; document.getElementById(ids[Object.keys(nextErrors)[0]])?.focus(); return; }
+    const semantic = method === 'embeddings'
+      ? { method, provider_id: providerId, embedding_model: embedding.model.trim(), similarity_threshold: embedding.threshold ?? defaults?.embeddings.similarity_threshold, max_scan: embedding.max_scan ?? defaults?.embeddings.max_scan }
+      : { method, provider_id: providerId, model: judge.model || null, candidate_count: judge.candidate_count, min_confidence: judge.min_confidence, timeout_seconds: judge.timeout_seconds, max_attempts: judge.max_attempts };
+    const deduplication = mode === 'semantic' ? { mode, privacy_acknowledged: true, semantic } : { mode };
+    setSaving(true); try { const updated = await apiRequest<Project>(`projects/${project.id}`, { method:'PATCH', body: JSON.stringify({ settings: { ...project.settings, deduplication } }) }); onSaved(updated); }
+    catch(e) { if (e instanceof ApiError && e.fields.length) { const mapped = Object.fromEntries(e.fields.map(field => [field.field.split('.').at(-1) ?? field.field, field.message])); setErrors(mapped); setFormError(e.message); const ids: Record<string,string> = { provider:'semantic-provider', provider_id:'semantic-provider', embedding_model:'embedding-model', similarity_threshold:'similarity-threshold', max_scan:'max-scan' }; document.getElementById(ids[Object.keys(mapped)[0]] ?? Object.keys(mapped)[0])?.focus(); } else onError(apiErrorMessage(e)); }
+    finally { setSaving(false); }
+  }
+  async function runPreview(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); const form = new FormData(e.currentTarget); setPreview(null); setPreviewError(''); setPreviewBusy(true);
+    try { setPreview(await apiRequest<Preview>(`admin/projects/${project.id}/dedup/preview`, { method:'POST', body: JSON.stringify({event_type: form.get('event_type'), question: form.get('question')}) })); }
+    catch(e) { setPreviewError(e instanceof ApiError ? e.code || String(e.status) : 'unknown'); } finally { setPreviewBusy(false); }
+  }
+  const hosted = provider?.provider_type === 'openai_compatible';
+  const privacy = method === 'judge'
+    ? "I understand that new question text and up to 10 similar question excerpts will be sent to the selected provider. No names, metadata or group IDs are sent. The provider's retention and processing policies apply."
+    : hosted
+      ? `I understand that when I save, Kebivo sends up to ${embedding.max_scan ?? defaults?.embeddings.max_scan ?? ''} existing questions to this endpoint once to index them, and sends each new question as it arrives. Only question text is sent, truncated to 2,000 characters. Answers, corrections, context, tags, metadata, user references and IDs are never sent. The provider's retention and processing policies apply.`
+      : `I understand that when I save, Kebivo sends up to ${embedding.max_scan ?? defaults?.embeddings.max_scan ?? ''} existing questions to the local embedding endpoint once to index them, and sends each new question as it arrives. Only question text is sent, truncated to 2,000 characters; no answers, corrections, context, tags, metadata, user references or IDs. Question text goes only to ${provider?.base_url ? new URL(provider.base_url).host : '{endpoint_host}'}; if that endpoint runs on this host or its private network, it does not leave your infrastructure.`;
+  const exactHelp = 'Exact groups identical questions in the same project and event type. To also group paraphrases, use Semantic with a local embedding model such as nomic-embed-text (Ollama).';
+  return <section className="panel" aria-labelledby="semantic-title"><h2 id="semantic-title">Deduplication and semantic matching</h2>
+    <form className="project-form" noValidate onSubmit={e => void submit(e)}>
+      <fieldset disabled={saving}><label htmlFor="dedup-mode">Mode</label><select id="dedup-mode" value={mode} onChange={e => { setMode(e.target.value as typeof mode); setAck(false); setErrors({}); setFormError(''); }}><option value="disabled">Disabled</option><option value="exact">Exact</option><option value="semantic" disabled={!providers.length}>Semantic{!providers.length ? ' (add an LLM provider first)' : ''}</option></select>
+      {mode === 'exact' && <p className="help-text" id="dedup-mode-help">{exactHelp}</p>}
+      {mode === 'semantic' && <>
+        <label htmlFor="semantic-method">Matching method</label><select id="semantic-method" value={method} aria-describedby="semantic-method-help" onChange={e => changeMethod(e.target.value as typeof method)}><option value="judge">Ask an LLM to judge</option><option value="embeddings">Compare embeddings</option></select>
+        <p className="help-text" id="semantic-method-help">{method === 'judge' ? 'Sends each new question and similar existing ones to an LLM, which decides if they match. Slower; handles subtle cases.' : 'Turns questions into vectors and groups those that are close in meaning. Fast and cheap; works with a local model such as nomic-embed-text.'}</p>
+        <label htmlFor="semantic-provider">Provider</label><select id="semantic-provider" value={providerId} onChange={e => changeProvider(e.target.value)} disabled={loading || (method === 'embeddings' && !compatible.length)} aria-describedby={method === 'embeddings' && !compatible.length ? 'provider-error' : undefined} aria-invalid={Boolean(errors.provider)}>
+          {method === 'embeddings' && !compatible.length ? <option value="">No compatible provider</option> : !providers.length && <option value="">No provider configured</option>}
+          {(method === 'embeddings' ? providers : providers).map(p => <option key={p.id} value={p.id} disabled={method === 'embeddings' && p.provider_type === 'azure_openai'}>{p.name}{method === 'embeddings' && p.provider_type === 'azure_openai' ? ' (Azure not supported)' : ''}</option>)}
+        </select>
+        {method === 'embeddings' && !compatible.length && <p className="field-error" id="provider-error">{providers.some(item => item.provider_type === 'azure_openai') ? "Azure OpenAI can't be used for embeddings yet. Choose an OpenAI-compatible or local provider." : errors.provider ?? 'Embeddings need an OpenAI-compatible or local provider. Add one under LLM providers.'}</p>}
+        {method === 'judge' ? <>
+          <label htmlFor="semantic-model">Model override (optional)</label><input id="semantic-model" value={judge.model} onChange={e => setJudge({...judge, model:e.target.value})}/>
+          <label htmlFor="candidate-count">Candidate groups (1–10)</label><input id="candidate-count" type="number" min="1" max="10" value={judge.candidate_count} onChange={e => setJudge({...judge, candidate_count:Number(e.target.value)})}/>
+          <label htmlFor="min-confidence">Minimum confidence</label><input id="min-confidence" type="number" min="0.5" max="1" step="0.01" value={judge.min_confidence} onChange={e => setJudge({...judge, min_confidence:Number(e.target.value)})}/>
+          <label htmlFor="semantic-timeout">Timeout (seconds)</label><input id="semantic-timeout" type="number" min="1" max="30" value={judge.timeout_seconds} onChange={e => setJudge({...judge, timeout_seconds:Number(e.target.value)})}/>
+          <label htmlFor="max-attempts">Maximum attempts</label><input id="max-attempts" type="number" min="1" max="3" value={judge.max_attempts} onChange={e => setJudge({...judge, max_attempts:Number(e.target.value)})}/>
+        </> : <>
+          <label htmlFor="embedding-model">Embedding model</label><input id="embedding-model" value={embedding.model} required onChange={e => setEmbedding({...embedding,model:e.target.value})} aria-describedby={`${helpIds('embedding_model')} embedding-model-help`} aria-invalid={Boolean(errors.embedding_model)}/><p className="help-text" id="embedding-model-help">Model name on the provider, for example nomic-embed-text.</p>{errors.embedding_model && <p className="field-error" id="embedding_model-error">{errors.embedding_model}</p>}
+          <label htmlFor="similarity-threshold">Similarity threshold (0.50–0.99)</label><input id="similarity-threshold" type="number" min="0.5" max="0.99" step="0.01" value={embedding.threshold ?? ''} placeholder={defaults?.embeddings.similarity_threshold.toString()} onChange={e => setEmbedding({...embedding,threshold:e.target.value === '' ? undefined : Number(e.target.value)})} aria-describedby={`${helpIds('threshold')} threshold-help`} aria-invalid={Boolean(errors.threshold)}/><p className="help-text" id="threshold-help">Questions at or above this score are grouped. Raise it to group fewer, closer matches. Lower it to group more loosely, with a higher risk of merging different questions. Start from the default and adjust using the preview.</p>{errors.threshold && <p className="field-error" id="threshold-error">{errors.threshold}</p>}
+          <details><summary>Advanced</summary><label htmlFor="max-scan">Maximum questions to scan (1–5,000)</label><input id="max-scan" type="number" min="1" max="5000" step="1" value={embedding.max_scan ?? ''} placeholder={defaults?.embeddings.max_scan.toString()} onChange={e => setEmbedding({...embedding,max_scan:e.target.value === '' ? undefined : Number(e.target.value)})} aria-describedby={`${helpIds('max_scan')} max-scan-help`} aria-invalid={Boolean(errors.max_scan)}/><p className="help-text" id="max-scan-help">How many of the most recent groups each new question is compared against, and how many existing questions are sent for indexing when you enable this. Default 2,000, maximum 5,000. Higher values cost more and take longer.</p>{errors.max_scan && <p className="field-error" id="max_scan-error">{errors.max_scan}</p>}</details>
+        </>}
+        <label className="checkbox-row" htmlFor="privacy-ack"><input id="privacy-ack" type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)} aria-describedby={errors.ack ? 'ack-error' : undefined} aria-invalid={Boolean(errors.ack)}/> {privacy}</label>{errors.ack && <p className="field-error" id="ack-error">{errors.ack}</p>}
+      </>}
+      {formError && <p className="error-message" role="alert">{formError}</p>}
+      <button disabled={saving || loading || (mode === 'semantic' && method === 'embeddings' && !compatible.length)}>{saving ? 'Saving…' : 'Save deduplication settings'}</button></fieldset>
+    </form>
+    <hr/><h3>Preview a submission</h3><form className="project-form" onSubmit={e => void runPreview(e)}><label htmlFor="preview-type">Event type</label><select id="preview-type" name="event_type"><option value="knowledge_gap">Knowledge gap</option><option value="knowledge_correction">Knowledge correction</option></select><label htmlFor="preview-question">Question</label><textarea id="preview-question" name="question" required maxLength={10000}/><button disabled={previewBusy}>{previewBusy ? 'Running preview…' : 'Run preview'}</button></form>
+    {previewError && <p role="alert" className="error-message">Preview failed ({previewError}). Check the provider and model.</p>}
+    {preview?.method === 'embeddings' && (preview.verdict?.outcome === 'provider_error' || preview.verdict?.outcome === 'provider_unavailable' || preview.verdict?.outcome === 'timeout') ? <p role="alert" className="error-message">Preview failed ({preview.verdict.error_category ?? preview.verdict.outcome}). Check the provider and model.</p> : null}
+    {preview?.method === 'embeddings' && !['provider_error', 'provider_unavailable', 'timeout'].includes(preview.verdict?.outcome ?? '') && <div role="status" className="preview-result"><p><strong>{preview.verdict?.outcome === 'matched' || preview.exact_match_group_id ? 'Would group with an existing question.' : 'Would start a new group.'}</strong> Threshold {preview.similarity_threshold?.toFixed(2)}.</p>{preview.similarities?.length ? <div className="table-wrap"><table><caption>Closest existing questions</caption><thead><tr><th scope="col">Similarity</th><th scope="col">Question</th><th scope="col">Result</th></tr></thead><tbody>{preview.similarities.slice(0,5).map((item,index)=><tr key={`${item.similarity}-${index}`}><td>{item.similarity.toFixed(2)}</td><td title={item.question ?? item.question_excerpt}>{item.question ?? item.question_excerpt ?? 'Existing question'}</td><td>{item.threshold_met ? 'Meets threshold' : 'Below threshold'}</td></tr>)}</tbody></table></div> : preview.exact_match_group_id ? <p>An identical question already exists.</p> : <p>No indexed questions to compare against yet.</p>}</div>}
+    {preview && preview.method !== 'embeddings' && <pre className="safe-pre" role="status">{JSON.stringify(preview,null,2)}</pre>}
+  </section>;
 }
 export function McpConnectPanel({ correctionsEnabled }: { correctionsEnabled: boolean }) {
   const endpoint = `${window.location.origin}/mcp`;
@@ -264,7 +363,7 @@ function ProjectForm({ project, busy, onCancel, onSubmit }: { project: Project |
     <form className="project-form" onSubmit={onSubmit}><label htmlFor="project-name">Name</label><input id="project-name" name="name" defaultValue={project?.name ?? ''} maxLength={200} required />
       <label htmlFor="project-slug">Slug</label><input id="project-slug" name="slug" defaultValue={project?.slug ?? ''} pattern="[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,98}[a-zA-Z0-9])?" aria-describedby="slug-help" required /><small id="slug-help" className="subtle">Lowercase letters, numbers, and internal hyphens.</small>
       <label htmlFor="project-description">Description <span className="subtle">(optional)</span></label><textarea id="project-description" name="description" defaultValue={project?.description ?? ''} maxLength={5000} rows={3} />
-      <fieldset><legend>Project policies</legend><label className="checkbox-row"><input type="checkbox" name="corrections" defaultChecked={project?.settings.corrections?.enabled ?? false} /> Enable correction feedback</label><p className="help-text">Tokens also need the correction scope before an integration can submit corrections.</p><label htmlFor="deduplication-mode">Deduplication mode</label><select id="deduplication-mode" name="deduplication_mode" defaultValue={project?.settings.deduplication?.mode ?? (project?.settings.deduplication?.enabled === false ? 'disabled' : 'exact')}><option value="disabled">Disabled</option><option value="exact">Exact</option><option value="semantic" disabled>Semantic (Configure an LLM provider first)</option></select><p className="help-text">Exact groups identical questions in the same project and event type. Disabled creates a new group for every submission.</p><p className="help-text">Semantic matching is unavailable until an LLM provider is configured.</p></fieldset>
+      <fieldset><legend>Project policies</legend><label className="checkbox-row"><input type="checkbox" name="corrections" defaultChecked={project?.settings.corrections?.enabled ?? false} /> Enable correction feedback</label><p className="help-text">Tokens also need the correction scope before an integration can submit corrections.</p><label htmlFor="deduplication-mode">Deduplication mode</label><select id="deduplication-mode" name="deduplication_mode" defaultValue={project?.settings.deduplication?.mode ?? (project?.settings.deduplication?.enabled === false ? 'disabled' : 'exact')}><option value="disabled">Disabled</option><option value="exact">Exact</option><option value="semantic" disabled>Semantic (Configure an LLM provider first)</option></select><p className="help-text">Exact groups identical questions in the same project and event type. To also group paraphrases, use Semantic with a local embedding model such as nomic-embed-text (Ollama).</p><p className="help-text">Add an LLM provider under LLM providers first to enable Semantic.</p></fieldset>
       {project && <><label className="checkbox-row"><input type="checkbox" name="is_active" defaultChecked={project.is_active} /> Project is active</label></>}
       <div className="button-row"><button disabled={busy}>{busy ? 'Saving…' : project ? 'Save changes' : 'Create project'}</button><button type="button" className="quiet-button" onClick={onCancel}>Cancel</button></div>
     </form></section>;
