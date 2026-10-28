@@ -22,6 +22,7 @@ from kebivo.models import (
     AdminUser,
     AuditEvent,
     Destination,
+    EmbeddingBackfill,
     FeedbackGroupMember,
     LlmProviderConfig,
     Project,
@@ -305,6 +306,15 @@ def _audit_project(
     )
 
 
+def _reset_backfill(job: EmbeddingBackfill, semantic: dict[str, Any]) -> None:
+    job.provider_id = semantic["provider_id"]
+    job.model = semantic["embedding_model"]
+    job.dims = None
+    job.remaining = semantic["max_scan"]
+    job.cursor_seen_at = None
+    job.cursor_group_id = None
+
+
 def install_project_routes(app: Any) -> None:
     router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
@@ -479,6 +489,7 @@ def install_project_routes(app: Any) -> None:
         admin, _, _ = auth
         db: Session = request.state.db
         project = _get_project(db, project_id)
+        old_dedup = json.loads(project.settings_json).get("deduplication", {})
         changes = body.model_dump(exclude_unset=True)
         if "fallback_destination_id" in changes and changes["fallback_destination_id"] is not None:
             try:
@@ -500,6 +511,30 @@ def install_project_routes(app: Any) -> None:
                 {**json.loads(project.settings_json), **changes.pop("settings")},
                 separators=(",", ":"),
             )
+            new_dedup = json.loads(project.settings_json).get("deduplication", {})
+            new_semantic = new_dedup.get("semantic", {})
+            old_semantic = old_dedup.get("semantic", {})
+            embedding_enabled = (
+                new_dedup.get("mode") == "semantic" and new_semantic.get("method") == "embeddings"
+            )
+            changed = any(
+                new_semantic.get(key) != old_semantic.get(key)
+                for key in ("provider_id", "embedding_model")
+            )
+            if embedding_enabled and (
+                old_dedup.get("mode") != "semantic"
+                or old_semantic.get("method") != "embeddings"
+                or changed
+            ):
+                backfill = db.get(EmbeddingBackfill, project.id)
+                if backfill is None:
+                    backfill = EmbeddingBackfill(project_id=project.id)
+                    db.add(backfill)
+                _reset_backfill(backfill, new_semantic)
+            elif not embedding_enabled:
+                backfill = db.get(EmbeddingBackfill, project.id)
+                if backfill is not None:
+                    db.delete(backfill)
         else:
             acknowledged = False
         for key, value in changes.items():
