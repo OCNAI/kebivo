@@ -1,5 +1,5 @@
 site_name: Kebivo
-site_description: Collect unanswered AI agent questions and proposed corrections with Kebivo. Self-hosted feedback routing over REST or MCP, with an inbox, email and webhooks.
+site_description: Open-source, self-hosted tool that collects the questions your AI assistant couldn't answer and routes them to the people who own the content.
 site_url: https://docs.kebivo.com/
 repo_url: https://github.com/OCNAI/kebivo
 # `website:` links in docs resolve against this value.
