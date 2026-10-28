@@ -199,6 +199,8 @@ Each project has ordered rules: a rule matches ANY or ALL of its tags and sends 
 
 No model is called by default. To group questions that are worded differently, configure an LLM provider (**LLM settings** in the UI) and switch a project to semantic deduplication after acknowledging that question text will be sent to that provider. If the provider fails, the event keeps its own group and is still routed and delivered. See [deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md).
 
+Paraphrase grouping with embeddings is opt-in and needs an [embedding endpoint](docs/llm-providers.md#ollama-recipe); the default install groups exact repeats only.
+
 ## Security
 
 - Run behind a TLS reverse proxy and keep the app port on loopback ([guide](docs/self-hosting.md#reverse-proxy-and-tls)).
