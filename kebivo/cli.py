@@ -61,6 +61,13 @@ def main() -> None:
     retention_mode = retention.add_mutually_exclusive_group(required=True)
     retention_mode.add_argument("--dry-run", action="store_true")
     retention_mode.add_argument("--run", action="store_true")
+    evaluation = commands.add_parser(
+        "dedup-eval", help="score labelled dedup pairs against a project embedding provider"
+    )
+    evaluation.add_argument("--project", required=True)
+    evaluation.add_argument(
+        "--corpus", action="store_true", help="use the bundled synthetic corpus"
+    )
     args = parser.parse_args()
 
     if args.command == "version":
@@ -75,6 +82,15 @@ def main() -> None:
     )
     engine = make_engine(database_url)
     try:
+        if args.command == "dedup-eval":
+            from kebivo.dedup.evaluation import evaluate_project
+
+            with Session(engine) as db:
+                try:
+                    print(evaluate_project(db, configured, args.project, args.corpus))
+                except ValueError as exc:
+                    raise SystemExit(str(exc)) from None
+            return
         if args.command == "project":
             slug = (
                 args.slug

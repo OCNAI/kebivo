@@ -1,0 +1,752 @@
+[
+  {
+    "left": "How do I reset a VPN password?",
+    "right": "How do I recover my VPN password?",
+    "label": true
+  },
+  {
+    "left": "How do I reset a VPN password?",
+    "right": "How do I reset a VPS password?",
+    "label": false
+  },
+  {
+    "left": "How do I reset a VPN password?",
+    "right": "How do I download audit logs?",
+    "label": false
+  },
+  {
+    "left": "What is the way to reset a VPN password?",
+    "right": "What is the way to recover my VPN password?",
+    "label": true
+  },
+  {
+    "left": "What is the way to reset a VPN password?",
+    "right": "What is the way to reset a VPS password?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to reset a VPN password?",
+    "right": "Could you tell me how to recover my VPN password?",
+    "label": true
+  },
+  {
+    "left": "How do I connect to the VPN?",
+    "right": "How do I access the private network remotely?",
+    "label": true
+  },
+  {
+    "left": "How do I connect to the VPN?",
+    "right": "How do I connect to a VPS?",
+    "label": false
+  },
+  {
+    "left": "How do I connect to the VPN?",
+    "right": "How do I increase storage quota?",
+    "label": false
+  },
+  {
+    "left": "What is the way to connect to the VPN?",
+    "right": "What is the way to access the private network remotely?",
+    "label": true
+  },
+  {
+    "left": "What is the way to connect to the VPN?",
+    "right": "What is the way to connect to a VPS?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to connect to the VPN?",
+    "right": "Could you tell me how to access the private network remotely?",
+    "label": true
+  },
+  {
+    "left": "How do I rotate an API key?",
+    "right": "How do I replace an API credential?",
+    "label": true
+  },
+  {
+    "left": "How do I rotate an API key?",
+    "right": "How do I rotate an SSH key?",
+    "label": false
+  },
+  {
+    "left": "How do I rotate an API key?",
+    "right": "How do I pause a subscription?",
+    "label": false
+  },
+  {
+    "left": "What is the way to rotate an API key?",
+    "right": "What is the way to replace an API credential?",
+    "label": true
+  },
+  {
+    "left": "What is the way to rotate an API key?",
+    "right": "What is the way to rotate an SSH key?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to rotate an API key?",
+    "right": "Could you tell me how to replace an API credential?",
+    "label": true
+  },
+  {
+    "left": "How do I export a billing invoice?",
+    "right": "How do I download an invoice PDF?",
+    "label": true
+  },
+  {
+    "left": "How do I export a billing invoice?",
+    "right": "How do I export a usage report?",
+    "label": false
+  },
+  {
+    "left": "How do I export a billing invoice?",
+    "right": "How do I find the webhook secret?",
+    "label": false
+  },
+  {
+    "left": "What is the way to export a billing invoice?",
+    "right": "What is the way to download an invoice PDF?",
+    "label": true
+  },
+  {
+    "left": "What is the way to export a billing invoice?",
+    "right": "What is the way to export a usage report?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to export a billing invoice?",
+    "right": "Could you tell me how to download an invoice PDF?",
+    "label": true
+  },
+  {
+    "left": "How do I invite a team member?",
+    "right": "How do I add a colleague to the workspace?",
+    "label": true
+  },
+  {
+    "left": "How do I invite a team member?",
+    "right": "How do I remove a team member?",
+    "label": false
+  },
+  {
+    "left": "How do I invite a team member?",
+    "right": "How do I retry a failed delivery?",
+    "label": false
+  },
+  {
+    "left": "What is the way to invite a team member?",
+    "right": "What is the way to add a colleague to the workspace?",
+    "label": true
+  },
+  {
+    "left": "What is the way to invite a team member?",
+    "right": "What is the way to remove a team member?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to invite a team member?",
+    "right": "Could you tell me how to add a colleague to the workspace?",
+    "label": true
+  },
+  {
+    "left": "How do I disable two factor authentication?",
+    "right": "How do I turn off two step login?",
+    "label": true
+  },
+  {
+    "left": "How do I disable two factor authentication?",
+    "right": "How do I enable two factor authentication?",
+    "label": false
+  },
+  {
+    "left": "How do I disable two factor authentication?",
+    "right": "How do I change a workspace name?",
+    "label": false
+  },
+  {
+    "left": "What is the way to disable two factor authentication?",
+    "right": "What is the way to turn off two step login?",
+    "label": true
+  },
+  {
+    "left": "What is the way to disable two factor authentication?",
+    "right": "What is the way to enable two factor authentication?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to disable two factor authentication?",
+    "right": "Could you tell me how to turn off two step login?",
+    "label": true
+  },
+  {
+    "left": "How do I restore a deleted project?",
+    "right": "How do I recover a project I removed?",
+    "label": true
+  },
+  {
+    "left": "How do I restore a deleted project?",
+    "right": "How do I delete a project permanently?",
+    "label": false
+  },
+  {
+    "left": "How do I restore a deleted project?",
+    "right": "How do I set a retention period?",
+    "label": false
+  },
+  {
+    "left": "What is the way to restore a deleted project?",
+    "right": "What is the way to recover a project I removed?",
+    "label": true
+  },
+  {
+    "left": "What is the way to restore a deleted project?",
+    "right": "What is the way to delete a project permanently?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to restore a deleted project?",
+    "right": "Could you tell me how to recover a project I removed?",
+    "label": true
+  },
+  {
+    "left": "How do I change the account email?",
+    "right": "How do I update my sign in email address?",
+    "label": true
+  },
+  {
+    "left": "How do I change the account email?",
+    "right": "How do I change the billing email?",
+    "label": false
+  },
+  {
+    "left": "How do I change the account email?",
+    "right": "How do I verify a domain?",
+    "label": false
+  },
+  {
+    "left": "What is the way to change the account email?",
+    "right": "What is the way to update my sign in email address?",
+    "label": true
+  },
+  {
+    "left": "What is the way to change the account email?",
+    "right": "What is the way to change the billing email?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to change the account email?",
+    "right": "Could you tell me how to update my sign in email address?",
+    "label": true
+  },
+  {
+    "left": "How do I configure single sign on?",
+    "right": "How do I set up SSO for employees?",
+    "label": true
+  },
+  {
+    "left": "How do I configure single sign on?",
+    "right": "How do I configure SMTP email?",
+    "label": false
+  },
+  {
+    "left": "How do I configure single sign on?",
+    "right": "How do I create a read only token?",
+    "label": false
+  },
+  {
+    "left": "What is the way to configure single sign on?",
+    "right": "What is the way to set up SSO for employees?",
+    "label": true
+  },
+  {
+    "left": "What is the way to configure single sign on?",
+    "right": "What is the way to configure SMTP email?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to configure single sign on?",
+    "right": "Could you tell me how to set up SSO for employees?",
+    "label": true
+  },
+  {
+    "left": "How do I download audit logs?",
+    "right": "How do I export the activity audit trail?",
+    "label": true
+  },
+  {
+    "left": "How do I download audit logs?",
+    "right": "How do I delete audit logs?",
+    "label": false
+  },
+  {
+    "left": "How do I download audit logs?",
+    "right": "How do I filter events by date?",
+    "label": false
+  },
+  {
+    "left": "What is the way to download audit logs?",
+    "right": "What is the way to export the activity audit trail?",
+    "label": true
+  },
+  {
+    "left": "What is the way to download audit logs?",
+    "right": "What is the way to delete audit logs?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to download audit logs?",
+    "right": "Could you tell me how to export the activity audit trail?",
+    "label": true
+  },
+  {
+    "left": "How do I increase storage quota?",
+    "right": "How do I request more disk capacity?",
+    "label": true
+  },
+  {
+    "left": "How do I increase storage quota?",
+    "right": "How do I reduce storage quota?",
+    "label": false
+  },
+  {
+    "left": "How do I increase storage quota?",
+    "right": "How do I archive an old project?",
+    "label": false
+  },
+  {
+    "left": "What is the way to increase storage quota?",
+    "right": "What is the way to request more disk capacity?",
+    "label": true
+  },
+  {
+    "left": "What is the way to increase storage quota?",
+    "right": "What is the way to reduce storage quota?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to increase storage quota?",
+    "right": "Could you tell me how to request more disk capacity?",
+    "label": true
+  },
+  {
+    "left": "How do I pause a subscription?",
+    "right": "How do I temporarily suspend my plan?",
+    "label": true
+  },
+  {
+    "left": "How do I pause a subscription?",
+    "right": "How do I cancel a subscription?",
+    "label": false
+  },
+  {
+    "left": "How do I pause a subscription?",
+    "right": "How do I add a fallback destination?",
+    "label": false
+  },
+  {
+    "left": "What is the way to pause a subscription?",
+    "right": "What is the way to temporarily suspend my plan?",
+    "label": true
+  },
+  {
+    "left": "What is the way to pause a subscription?",
+    "right": "What is the way to cancel a subscription?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to pause a subscription?",
+    "right": "Could you tell me how to temporarily suspend my plan?",
+    "label": true
+  },
+  {
+    "left": "How do I find the webhook secret?",
+    "right": "How do I locate the webhook signing key?",
+    "label": true
+  },
+  {
+    "left": "How do I find the webhook secret?",
+    "right": "How do I find the API key?",
+    "label": false
+  },
+  {
+    "left": "How do I find the webhook secret?",
+    "right": "How do I reset an administrator password?",
+    "label": false
+  },
+  {
+    "left": "What is the way to find the webhook secret?",
+    "right": "What is the way to locate the webhook signing key?",
+    "label": true
+  },
+  {
+    "left": "What is the way to find the webhook secret?",
+    "right": "What is the way to find the API key?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to find the webhook secret?",
+    "right": "Could you tell me how to locate the webhook signing key?",
+    "label": true
+  },
+  {
+    "left": "How do I retry a failed delivery?",
+    "right": "How do I send a failed webhook again?",
+    "label": true
+  },
+  {
+    "left": "How do I retry a failed delivery?",
+    "right": "How do I retry a failed payment?",
+    "label": false
+  },
+  {
+    "left": "How do I retry a failed delivery?",
+    "right": "How do I enable project notifications?",
+    "label": false
+  },
+  {
+    "left": "What is the way to retry a failed delivery?",
+    "right": "What is the way to send a failed webhook again?",
+    "label": true
+  },
+  {
+    "left": "What is the way to retry a failed delivery?",
+    "right": "What is the way to retry a failed payment?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to retry a failed delivery?",
+    "right": "Could you tell me how to send a failed webhook again?",
+    "label": true
+  },
+  {
+    "left": "How do I change a workspace name?",
+    "right": "How do I rename my workspace?",
+    "label": true
+  },
+  {
+    "left": "How do I change a workspace name?",
+    "right": "How do I change a project name?",
+    "label": false
+  },
+  {
+    "left": "How do I change a workspace name?",
+    "right": "How do I view pending deliveries?",
+    "label": false
+  },
+  {
+    "left": "What is the way to change a workspace name?",
+    "right": "What is the way to rename my workspace?",
+    "label": true
+  },
+  {
+    "left": "What is the way to change a workspace name?",
+    "right": "What is the way to change a project name?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to change a workspace name?",
+    "right": "Could you tell me how to rename my workspace?",
+    "label": true
+  },
+  {
+    "left": "How do I set a retention period?",
+    "right": "How do I configure how long records are kept?",
+    "label": true
+  },
+  {
+    "left": "How do I set a retention period?",
+    "right": "How do I set a session timeout?",
+    "label": false
+  },
+  {
+    "left": "How do I set a retention period?",
+    "right": "How do I update a routing rule?",
+    "label": false
+  },
+  {
+    "left": "What is the way to set a retention period?",
+    "right": "What is the way to configure how long records are kept?",
+    "label": true
+  },
+  {
+    "left": "What is the way to set a retention period?",
+    "right": "What is the way to set a session timeout?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to set a retention period?",
+    "right": "Could you tell me how to configure how long records are kept?",
+    "label": true
+  },
+  {
+    "left": "How do I verify a domain?",
+    "right": "How do I prove ownership of my domain?",
+    "label": true
+  },
+  {
+    "left": "How do I verify a domain?",
+    "right": "How do I verify an email address?",
+    "label": false
+  },
+  {
+    "left": "How do I verify a domain?",
+    "right": "How do I reset a VPN password?",
+    "label": false
+  },
+  {
+    "left": "What is the way to verify a domain?",
+    "right": "What is the way to prove ownership of my domain?",
+    "label": true
+  },
+  {
+    "left": "What is the way to verify a domain?",
+    "right": "What is the way to verify an email address?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to verify a domain?",
+    "right": "Could you tell me how to prove ownership of my domain?",
+    "label": true
+  },
+  {
+    "left": "How do I create a read only token?",
+    "right": "How do I issue a token without write access?",
+    "label": true
+  },
+  {
+    "left": "How do I create a read only token?",
+    "right": "How do I create an admin token?",
+    "label": false
+  },
+  {
+    "left": "How do I create a read only token?",
+    "right": "How do I connect to the VPN?",
+    "label": false
+  },
+  {
+    "left": "What is the way to create a read only token?",
+    "right": "What is the way to issue a token without write access?",
+    "label": true
+  },
+  {
+    "left": "What is the way to create a read only token?",
+    "right": "What is the way to create an admin token?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to create a read only token?",
+    "right": "Could you tell me how to issue a token without write access?",
+    "label": true
+  },
+  {
+    "left": "How do I filter events by date?",
+    "right": "How do I show events from a date range?",
+    "label": true
+  },
+  {
+    "left": "How do I filter events by date?",
+    "right": "How do I filter users by date?",
+    "label": false
+  },
+  {
+    "left": "How do I filter events by date?",
+    "right": "How do I rotate an API key?",
+    "label": false
+  },
+  {
+    "left": "What is the way to filter events by date?",
+    "right": "What is the way to show events from a date range?",
+    "label": true
+  },
+  {
+    "left": "What is the way to filter events by date?",
+    "right": "What is the way to filter users by date?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to filter events by date?",
+    "right": "Could you tell me how to show events from a date range?",
+    "label": true
+  },
+  {
+    "left": "How do I archive an old project?",
+    "right": "How do I move a project into the archive?",
+    "label": true
+  },
+  {
+    "left": "How do I archive an old project?",
+    "right": "How do I delete an old project?",
+    "label": false
+  },
+  {
+    "left": "How do I archive an old project?",
+    "right": "How do I export a billing invoice?",
+    "label": false
+  },
+  {
+    "left": "What is the way to archive an old project?",
+    "right": "What is the way to move a project into the archive?",
+    "label": true
+  },
+  {
+    "left": "What is the way to archive an old project?",
+    "right": "What is the way to delete an old project?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to archive an old project?",
+    "right": "Could you tell me how to move a project into the archive?",
+    "label": true
+  },
+  {
+    "left": "How do I add a fallback destination?",
+    "right": "How do I configure a backup delivery target?",
+    "label": true
+  },
+  {
+    "left": "How do I add a fallback destination?",
+    "right": "How do I remove a destination?",
+    "label": false
+  },
+  {
+    "left": "How do I add a fallback destination?",
+    "right": "How do I invite a team member?",
+    "label": false
+  },
+  {
+    "left": "What is the way to add a fallback destination?",
+    "right": "What is the way to configure a backup delivery target?",
+    "label": true
+  },
+  {
+    "left": "What is the way to add a fallback destination?",
+    "right": "What is the way to remove a destination?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to add a fallback destination?",
+    "right": "Could you tell me how to configure a backup delivery target?",
+    "label": true
+  },
+  {
+    "left": "How do I reset an administrator password?",
+    "right": "How do I recover the admin login password?",
+    "label": true
+  },
+  {
+    "left": "How do I reset an administrator password?",
+    "right": "How do I reset a user password?",
+    "label": false
+  },
+  {
+    "left": "How do I reset an administrator password?",
+    "right": "How do I disable two factor authentication?",
+    "label": false
+  },
+  {
+    "left": "What is the way to reset an administrator password?",
+    "right": "What is the way to recover the admin login password?",
+    "label": true
+  },
+  {
+    "left": "What is the way to reset an administrator password?",
+    "right": "What is the way to reset a user password?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to reset an administrator password?",
+    "right": "Could you tell me how to recover the admin login password?",
+    "label": true
+  },
+  {
+    "left": "How do I enable project notifications?",
+    "right": "How do I turn on alerts for a project?",
+    "label": true
+  },
+  {
+    "left": "How do I enable project notifications?",
+    "right": "How do I disable project notifications?",
+    "label": false
+  },
+  {
+    "left": "How do I enable project notifications?",
+    "right": "How do I restore a deleted project?",
+    "label": false
+  },
+  {
+    "left": "What is the way to enable project notifications?",
+    "right": "What is the way to turn on alerts for a project?",
+    "label": true
+  },
+  {
+    "left": "What is the way to enable project notifications?",
+    "right": "What is the way to disable project notifications?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to enable project notifications?",
+    "right": "Could you tell me how to turn on alerts for a project?",
+    "label": true
+  },
+  {
+    "left": "How do I view pending deliveries?",
+    "right": "How do I list queued outbound messages?",
+    "label": true
+  },
+  {
+    "left": "How do I view pending deliveries?",
+    "right": "How do I view completed deliveries?",
+    "label": false
+  },
+  {
+    "left": "How do I view pending deliveries?",
+    "right": "How do I change the account email?",
+    "label": false
+  },
+  {
+    "left": "What is the way to view pending deliveries?",
+    "right": "What is the way to list queued outbound messages?",
+    "label": true
+  },
+  {
+    "left": "What is the way to view pending deliveries?",
+    "right": "What is the way to view completed deliveries?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to view pending deliveries?",
+    "right": "Could you tell me how to list queued outbound messages?",
+    "label": true
+  },
+  {
+    "left": "How do I update a routing rule?",
+    "right": "How do I edit a rule for event delivery?",
+    "label": true
+  },
+  {
+    "left": "How do I update a routing rule?",
+    "right": "How do I update a firewall rule?",
+    "label": false
+  },
+  {
+    "left": "How do I update a routing rule?",
+    "right": "How do I configure single sign on?",
+    "label": false
+  },
+  {
+    "left": "What is the way to update a routing rule?",
+    "right": "What is the way to edit a rule for event delivery?",
+    "label": true
+  },
+  {
+    "left": "What is the way to update a routing rule?",
+    "right": "What is the way to update a firewall rule?",
+    "label": false
+  },
+  {
+    "left": "Please explain how to update a routing rule?",
+    "right": "Could you tell me how to edit a rule for event delivery?",
+    "label": true
+  }
+]
