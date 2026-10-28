@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from kebivo.auth import AdminAuth
 from kebivo.destinations.validation import ConfigError
 from kebivo.errors import error_response
-from kebivo.llm.adapter import complete
+from kebivo.llm.adapter import complete, embed
 from kebivo.llm.validation import validate
 from kebivo.models import AuditEvent, LlmProviderConfig, Project, now_utc
 from kebivo.security.secretbox import SecretBox, SecretError
@@ -55,6 +55,11 @@ class ProviderPatch(BaseModel):
     api_key_env: str | None = None
     api_key: str | None = None
     headers: dict[str, str | None] | None = None
+
+
+class ProviderTestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    embedding_model: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 def _fail(request: Request, status: int, code: str, message: str) -> Any:
@@ -296,7 +301,9 @@ def install_llm_provider_routes(app: Any) -> None:
         return Response(status_code=204)
 
     @router.post("/{provider_id}/test")
-    async def test_provider(provider_id: str, request: Request, auth: AdminAuth) -> Any:
+    async def test_provider(
+        provider_id: str, request: Request, auth: AdminAuth, body: ProviderTestBody | None = None
+    ) -> Any:
         admin, _, _ = auth
         db: Session = request.state.db
         row = db.get(LlmProviderConfig, _id(provider_id)) if _id(provider_id) else None
@@ -308,9 +315,13 @@ def install_llm_provider_routes(app: Any) -> None:
         if len(recent) >= 6:
             return _fail(request, 429, "rate_limited", "Test limit exceeded")
         windows[admin.id] = recent + [now]
+        result: dict[str, Any]
+        secrets_available = True
         try:
             hidden = _secrets(row, request)
         except SecretError:
+            hidden = {}
+            secrets_available = False
             result = {
                 "ok": False,
                 "structured_output_valid": False,
@@ -361,6 +372,45 @@ def install_llm_provider_routes(app: Any) -> None:
             }
             if valid and not expected:
                 result["warning"] = "Valid response did not select the expected candidate"
+        if body is not None and body.embedding_model is not None:
+            if row.provider_type == "azure_openai":
+                result["embeddings"] = {
+                    "outcome": "unsupported",
+                    "error_category": "unsupported",
+                    "dims": None,
+                    "latency_ms": 0,
+                }
+            elif not secrets_available:
+                result["embeddings"] = {
+                    "outcome": "error",
+                    "error_category": "secrets_unavailable",
+                    "dims": None,
+                    "latency_ms": 0,
+                }
+            else:
+                acquired = False
+                try:
+                    await asyncio.wait_for(request.app.state.llm_semaphore.acquire(), timeout=2)
+                    acquired = True
+                    embedding = await embed(
+                        row, hidden, body.embedding_model, ["Kebivo embedding connection test"]
+                    )
+                    result["embeddings"] = {
+                        "outcome": "ok" if embedding.vectors else "error",
+                        "error_category": embedding.error_category,
+                        "dims": len(embedding.vectors[0]) if embedding.vectors else None,
+                        "latency_ms": embedding.latency_ms,
+                    }
+                except TimeoutError:
+                    result["embeddings"] = {
+                        "outcome": "error",
+                        "error_category": "llm_busy",
+                        "dims": None,
+                        "latency_ms": 0,
+                    }
+                finally:
+                    if acquired:
+                        request.app.state.llm_semaphore.release()
         row.last_test_at = now_utc()
         row.last_test_ok = bool(result["ok"])
         _audit(

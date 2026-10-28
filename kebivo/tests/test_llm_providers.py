@@ -247,6 +247,55 @@ def test_connection_test_respects_llm_capacity(tmp_path: Path) -> None:
     app.state.engine.dispose()
 
 
+def test_provider_test_optional_embeddings(tmp_path: Path, fake: FakeLLMServer) -> None:
+    client, app = make_client(tmp_path / "embedding-test.db")
+    path = "/api/v1/admin/llm-providers"
+    headers = write_headers(client)
+    created = client.post(
+        path,
+        json=payload(f"http://127.0.0.1:{fake.server_port}", "local"),
+        headers=headers,
+    )
+    provider_id = created.json()["id"]
+    classic = client.post(f"{path}/{provider_id}/test", headers=headers).json()
+    assert "embeddings" not in classic
+    result = client.post(
+        f"{path}/{provider_id}/test", json={"embedding_model": "nomic-embed-text"}, headers=headers
+    ).json()
+    assert set(result) == set(classic) | {"embeddings"}
+    assert result["ok"] is True
+    assert result["embeddings"]["outcome"] == "ok"
+    assert result["embeddings"]["error_category"] is None
+    assert result["embeddings"]["dims"] == 64
+    assert result["embeddings"]["latency_ms"] >= 0
+    assert json.loads(fake.requests[-1]["body"])["input"] == [
+        "Kebivo embedding connection test"
+    ]
+    fake.scenario = "malformed"
+    failed = client.post(
+        f"{path}/{provider_id}/test", json={"embedding_model": "nomic-embed-text"}, headers=headers
+    ).json()
+    assert failed["embeddings"]["outcome"] == "error"
+    assert failed["embeddings"]["error_category"] == "invalid_response"
+    azure = client.post(
+        path,
+        json=payload(f"http://127.0.0.1:{fake.server_port}", "azure_openai") | {"name": "Azure"},
+        headers=headers,
+    )
+    unsupported = client.post(
+        f"{path}/{azure.json()['id']}/test",
+        json={"embedding_model": "nomic-embed-text"},
+        headers=headers,
+    ).json()
+    assert unsupported["embeddings"] == {
+        "outcome": "unsupported",
+        "error_category": "unsupported",
+        "dims": None,
+        "latency_ms": 0,
+    }
+    app.state.engine.dispose()
+
+
 def test_azure_model_optional_and_provider_name_limit(tmp_path: Path, fake: FakeLLMServer) -> None:
     client, app = make_client(tmp_path / "azure.db")
     path = "/api/v1/admin/llm-providers"

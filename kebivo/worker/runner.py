@@ -503,7 +503,6 @@ class Worker:
                             work.secrets,
                             work.settings["embedding_model"],
                             [work.question[:2000]],
-                            work.settings.get("embedding_dimensions", 1536),
                         ),
                         timeout=remaining,
                     )

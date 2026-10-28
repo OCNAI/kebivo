@@ -60,7 +60,6 @@ class ProjectCreate(BaseModel):
                             "method": "embeddings",
                             "provider_id": "00000000-0000-0000-0000-000000000000",
                             "embedding_model": "text-embedding-3-small",
-                            "embedding_dimensions": 1536,
                             "similarity_threshold": EMBEDDING_SIMILARITY_DEFAULT,
                             "max_scan": EMBEDDING_MAX_SCAN_DEFAULT,
                         },
@@ -177,7 +176,6 @@ def _settings(value: dict[str, Any]) -> dict[str, Any]:
         if method == "judge":
             fields["candidate_count"] = (5, 1, 10)
         else:
-            fields["embedding_dimensions"] = (1536, 1, 8192)
             fields["max_scan"] = (EMBEDDING_MAX_SCAN_DEFAULT, 1, EMBEDDING_MAX_SCAN_CAP)
         normalized = {"provider_id": provider_id, "method": method}
         if method == "judge":
@@ -318,7 +316,6 @@ def install_project_routes(app: Any) -> None:
                 "similarity_threshold": EMBEDDING_SIMILARITY_DEFAULT,
                 "max_scan": EMBEDDING_MAX_SCAN_DEFAULT,
                 "max_scan_cap": EMBEDDING_MAX_SCAN_CAP,
-                "embedding_dimensions": 1536,
             }
         }
 

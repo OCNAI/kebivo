@@ -47,14 +47,23 @@ def enable_embeddings(client: Any, app: Any, project: dict[str, Any]) -> dict[st
     return cast(dict[str, Any], response.json()["settings"]["deduplication"]["semantic"])
 
 
-def test_matching_preview_privacy_and_stale_model(tmp_path: Path, fake: Any) -> None:
+def test_matching_preview_privacy_and_stale_model(
+    tmp_path: Path, fake: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import fake_llm_server
+
+    original_embedding = fake_llm_server._embedding
+    monkeypatch.setattr(
+        fake_llm_server, "_embedding", lambda value: original_embedding(value) + [0.0] * 704
+    )
     client, app, project, token = setup_semantic(tmp_path, fake)
     settings = enable_embeddings(client, app, project)
+    assert "embedding_dimensions" not in settings
     assert settings["similarity_threshold"] == 0.88
     assert settings["max_scan"] == 2000
-    assert (
-        client.get("/api/v1/projects/dedup/defaults").json()["embeddings"]["max_scan_cap"] == 5000
-    )
+    defaults = client.get("/api/v1/projects/dedup/defaults").json()["embeddings"]
+    assert defaults["max_scan_cap"] == 5000
+    assert "embedding_dimensions" not in defaults
     first = post(
         client,
         token,
@@ -79,6 +88,7 @@ def test_matching_preview_privacy_and_stale_model(tmp_path: Path, fake: Any) -> 
             == db.get(FeedbackGroupMember, second).group_id
         )
         assert db.get(QuestionEmbedding, second) is not None
+        assert db.get(QuestionEmbedding, second).dims == 768
     assert all(request["path"] == "/embeddings" for request in fake.requests)
     assert all("SECRET_CANARY" not in request["body"] for request in fake.requests)
     assert all(len(json.loads(request["body"])["input"]) == 1 for request in fake.requests)
@@ -92,6 +102,7 @@ def test_matching_preview_privacy_and_stale_model(tmp_path: Path, fake: Any) -> 
     assert preview.status_code == 200, preview.text
     assert preview.json()["method"] == "embeddings"
     assert preview.json()["similarities"][0]["threshold_met"] is True
+    assert preview.json()["similarities"][0]["question_excerpt"] == "How can I reset my VPN?"
     assert len(preview.json()["similarities"]) <= 5
     with app.state.session_factory() as db:
         assert db.scalar(select(func.count()).select_from(QuestionEmbedding)) == stored_before

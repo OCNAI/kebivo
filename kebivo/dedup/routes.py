@@ -162,7 +162,6 @@ def install_dedup_routes(app: Any) -> None:
                         secrets,
                         semantic["embedding_model"],
                         [body.question[:2000]],
-                        semantic.get("embedding_dimensions", 1536),
                     ),
                     timeout=45,
                 )
@@ -198,10 +197,19 @@ def install_dedup_routes(app: Any) -> None:
                 return score_embeddings(vector, rows)
 
             scores = await asyncio.to_thread(scan)
+            excerpts = {
+                event.id: event.question[:280]
+                for event in db.scalars(
+                    select(FeedbackEvent).where(
+                        FeedbackEvent.id.in_([event_id for _, event_id, _ in scores])
+                    )
+                )
+            }
             embedding_response["similarities"] = [
                 {
                     "group_id": group_id,
                     "representative_event_id": event_id,
+                    "question_excerpt": excerpts[event_id],
                     "similarity": score,
                     "threshold_met": score >= embedding_response["similarity_threshold"],
                 }

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Optional embeddings semantic grouping scores recent same-model group representatives in the worker. Project settings and the audited preview now support `semantic.method: embeddings`; the admin defaults endpoint exposes the similarity threshold and scan limit. Failed embedding calls leave the provisional group intact and routing continues.
+- Embedding dimensions are inferred from provider responses, so local 768-dimension models work without a setting. The admin preview includes representative question excerpts, and provider tests can optionally report an embeddings probe separately from the judge result.
 
 ## 0.2.0 — 2026-10-27
 
