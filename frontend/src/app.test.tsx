@@ -103,6 +103,30 @@ describe('authenticated dashboard', () => {
     expect(container.textContent).toContain('feedback:correction');
     expect(container.textContent).toContain('project policy above controls');
   });
+  it('preserves semantic deduplication when editing project details', async () => {
+    const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null, settings: { corrections: { enabled: false }, deduplication: { mode: 'semantic' as const, privacy_acknowledged: true, semantic: { method: 'judge' as const, provider_id: 'provider-1', model: 'gpt-test', candidate_count: 4 } } }, tags: [], created_at: '', updated_at: '' };
+    const writes: Record<string, unknown>[] = [];
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const path = String(input);
+      if (path.endsWith('/projects/p1') && init?.method === 'PATCH') { writes.push(JSON.parse(String(init.body))); return new Response(JSON.stringify({ ...project, ...JSON.parse(String(init.body)) })); }
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [project], next_cursor: null }));
+      if (path.endsWith('/projects/p1')) return new Response(JSON.stringify(project));
+      if (path.endsWith('/tokens')) return new Response(JSON.stringify({ items: [] }));
+      return new Response('{}');
+    }) as typeof fetch;
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.project-choice')?.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { [...container.querySelectorAll('button')].find(button => button.textContent === 'Edit')?.click(); });
+    expect(container.querySelector<HTMLSelectElement>('#deduplication-mode')!.value).toBe('semantic');
+    await act(async () => {
+      const name = container.querySelector<HTMLInputElement>('#project-name')!;
+      name.value = 'Support team'; name.dispatchEvent(new Event('input', { bubbles: true }));
+      container.querySelector<HTMLFormElement>('.project-form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(writes[0]).toMatchObject({ name: 'Support team', settings: { deduplication: project.settings.deduplication } });
+  });
   it('keeps focus on an inbox filter when the query string changes', async () => {
     globalThis.fetch=vi.fn(async input=>{const path=String(input);if(path.endsWith('/auth/session'))return new Response(JSON.stringify({admin:{id:'a1',email:'admin@example.org'},csrf_token:'csrf'}));if(path.endsWith('/projects?limit=100'))return new Response(JSON.stringify({items:[{id:'p1',name:'Support'}]}));if(path.includes('/admin/feedback?'))return new Response(JSON.stringify({items:[],next_cursor:null}));return new Response('{}');}) as typeof fetch;
     history.replaceState({},'', '/');

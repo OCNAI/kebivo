@@ -80,6 +80,14 @@ footer { padding: 18px; text-align: center; color: #99a39d; font-size: 11px; }
 .project-form fieldset { display: grid; gap: 8px; margin: 10px 0; padding: 13px; border: 1px solid #e2e9e3; border-radius: 9px; }
 .project-form legend { padding: 0 4px; }
 .help-text { margin: -5px 0 4px 23px; color: #87938c; font-size: 11px; }
+.project-form details { display: grid; gap: 8px; margin: 8px 0; }
+.project-form details summary { color: #285f4c; font-weight: 600; cursor: pointer; }
+.project-form details[open] summary { margin-bottom: 4px; }
+.project-form .field-error { margin: -3px 0 5px; }
+.project-form .checkbox-row { margin-top: 7px; }
+.preview-result { margin-top: 14px; }
+.preview-result > p { color: #44554d; font-size: 13px; }
+.preview-result table caption { padding: 10px 8px; text-align: left; color: #34463d; font-weight: 600; }
 .form-row { display: flex; align-items: end; gap: 10px; }
 .form-row > div { flex: 1; display: grid; gap: 7px; }
 .token-form { padding: 15px 0 17px; margin-bottom: 14px; border-top: 1px solid #edf0ed; border-bottom: 1px solid #edf0ed; }
