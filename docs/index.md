@@ -5,7 +5,9 @@ description: Technical documentation for Kebivo, a self-hosted feedback router f
 
 # Kebivo documentation
 
-Kebivo collects knowledge gaps from AI assistants in a self-hosted inbox. Application code can send reports over REST; agents can use an MCP tool. Kebivo groups repeated questions and routes them to the team that maintains the docs. It does not answer questions or edit your knowledge base.
+Kebivo is an open-source, self-hosted tool that collects the questions your AI assistant, chatbot or RAG app couldn't answer, groups repeats, and routes them to the people who own the content. Your agent or app reports a gap over REST or MCP, and routing rules deliver it to an admin inbox, email or signed webhooks. It runs as one container with no cloud account or AI provider required, under Apache-2.0.
+
+Kebivo does not answer questions or edit your knowledge base.
 
 Use these pages for setup, integration and operations. Tutorials and framework guides are in the [Kebivo website Guides](website:guides/). The [repository](../README.md) has the source code and runnable examples.
 
