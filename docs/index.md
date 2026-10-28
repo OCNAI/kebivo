@@ -1,6 +1,6 @@
 ---
 title: Documentation
-description: Technical documentation for Kebivo, a self-hosted feedback router for AI assistant knowledge gaps. Install, connect over REST or MCP, route and operate.
+description: "Open-source, self-hosted tool that collects the questions your AI assistant couldn't answer and routes them to the people who own the content."
 ---
 
 # Kebivo documentation
