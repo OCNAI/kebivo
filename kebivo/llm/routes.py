@@ -3,16 +3,17 @@
 import asyncio
 import json
 import time
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from kebivo.auth import AdminAuth
+from kebivo.dedup.embeddings import cosine, normalize
 from kebivo.destinations.validation import ConfigError
 from kebivo.errors import error_response
 from kebivo.llm.adapter import complete, embed
@@ -55,11 +56,6 @@ class ProviderPatch(BaseModel):
     api_key_env: str | None = None
     api_key: str | None = None
     headers: dict[str, str | None] | None = None
-
-
-class ProviderTestBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    embedding_model: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 def _fail(request: Request, status: int, code: str, message: str) -> Any:
@@ -246,9 +242,7 @@ def install_llm_provider_routes(app: Any) -> None:
             return _fail(request, 409, "secrets_unavailable", "Provider secrets unavailable")
         data = _data(row, hidden)
         changes = body.model_dump(exclude_unset=True)
-        if (
-            "base_url" in changes and changes["base_url"] != row.base_url
-        ) or (
+        if ("base_url" in changes and changes["base_url"] != row.base_url) or (
             "allow_private_network" in changes
             and changes["allow_private_network"] != row.allow_private_network
         ):
@@ -302,7 +296,11 @@ def install_llm_provider_routes(app: Any) -> None:
 
     @router.post("/{provider_id}/test")
     async def test_provider(
-        provider_id: str, request: Request, auth: AdminAuth, body: ProviderTestBody | None = None
+        provider_id: str,
+        request: Request,
+        auth: AdminAuth,
+        kind: Literal["chat", "embeddings"] = "chat",
+        embedding_model: str | None = None,
     ) -> Any:
         admin, _, _ = auth
         db: Session = request.state.db
@@ -316,12 +314,108 @@ def install_llm_provider_routes(app: Any) -> None:
             return _fail(request, 429, "rate_limited", "Test limit exceeded")
         windows[admin.id] = recent + [now]
         result: dict[str, Any]
-        secrets_available = True
+        if kind == "embeddings":
+            model = embedding_model
+            if model is None:
+                for project in db.scalars(select(Project)):
+                    dedup = json.loads(project.settings_json).get("deduplication", {})
+                    semantic = dedup.get("semantic", {})
+                    if (
+                        dedup.get("mode") == "semantic"
+                        and semantic.get("method") == "embeddings"
+                        and semantic.get("provider_id") == row.id
+                    ):
+                        model = semantic.get("embedding_model")
+                        break
+            model = model or row.model
+            if row.provider_type == "azure_openai":
+                result = {
+                    "ok": False,
+                    "error_category": "unsupported",
+                    "dims": None,
+                    "latency_ms": 0,
+                    "related_similarity": None,
+                    "unrelated_similarity": None,
+                    "http_status": None,
+                }
+            elif not model:
+                return _fail(request, 422, "validation_error", "Embedding model is required")
+            else:
+                try:
+                    hidden = _secrets(row, request)
+                except SecretError:
+                    result = {
+                        "ok": False,
+                        "error_category": "secrets_unavailable",
+                        "dims": None,
+                        "latency_ms": 0,
+                        "related_similarity": None,
+                        "unrelated_similarity": None,
+                        "http_status": None,
+                    }
+                else:
+                    try:
+                        async with request.app.state.llm_semaphore:
+                            embedding_result = await asyncio.wait_for(
+                                embed(
+                                    row,
+                                    hidden,
+                                    model,
+                                    [
+                                        "How do I reset my account password?",
+                                        "What steps restore my login password?",
+                                        "Where can I find the monthly invoice?",
+                                    ],
+                                ),
+                                timeout=45,
+                            )
+                        vectors = embedding_result.vectors
+                        related = (
+                            cosine(normalize(vectors[0]), normalize(vectors[1]))
+                            if vectors
+                            else None
+                        )
+                        unrelated = (
+                            cosine(normalize(vectors[0]), normalize(vectors[2]))
+                            if vectors
+                            else None
+                        )
+                        result = {
+                            "ok": related is not None
+                            and unrelated is not None
+                            and related > unrelated,
+                            "error_category": embedding_result.error_category,
+                            "dims": len(vectors[0]) if vectors else None,
+                            "latency_ms": embedding_result.latency_ms,
+                            "related_similarity": related,
+                            "unrelated_similarity": unrelated,
+                            "http_status": embedding_result.http_status,
+                        }
+                    except (TimeoutError, ValueError):
+                        result = {
+                            "ok": False,
+                            "error_category": "invalid_response",
+                            "dims": None,
+                            "latency_ms": 0,
+                            "related_similarity": None,
+                            "unrelated_similarity": None,
+                            "http_status": None,
+                        }
+            row.last_test_at = now_utc()
+            row.last_test_ok = bool(result["ok"])
+            _audit(
+                db,
+                admin.id,
+                "llm_provider.tested",
+                row.id,
+                {"kind": kind, "ok": result["ok"], "error_category": result["error_category"]},
+            )
+            db.commit()
+            return result
         try:
             hidden = _secrets(row, request)
         except SecretError:
             hidden = {}
-            secrets_available = False
             result = {
                 "ok": False,
                 "structured_output_valid": False,
@@ -372,45 +466,6 @@ def install_llm_provider_routes(app: Any) -> None:
             }
             if valid and not expected:
                 result["warning"] = "Valid response did not select the expected candidate"
-        if body is not None and body.embedding_model is not None:
-            if row.provider_type == "azure_openai":
-                result["embeddings"] = {
-                    "outcome": "unsupported",
-                    "error_category": "unsupported",
-                    "dims": None,
-                    "latency_ms": 0,
-                }
-            elif not secrets_available:
-                result["embeddings"] = {
-                    "outcome": "error",
-                    "error_category": "secrets_unavailable",
-                    "dims": None,
-                    "latency_ms": 0,
-                }
-            else:
-                acquired = False
-                try:
-                    await asyncio.wait_for(request.app.state.llm_semaphore.acquire(), timeout=2)
-                    acquired = True
-                    embedding = await embed(
-                        row, hidden, body.embedding_model, ["Kebivo embedding connection test"]
-                    )
-                    result["embeddings"] = {
-                        "outcome": "ok" if embedding.vectors else "error",
-                        "error_category": embedding.error_category,
-                        "dims": len(embedding.vectors[0]) if embedding.vectors else None,
-                        "latency_ms": embedding.latency_ms,
-                    }
-                except TimeoutError:
-                    result["embeddings"] = {
-                        "outcome": "error",
-                        "error_category": "llm_busy",
-                        "dims": None,
-                        "latency_ms": 0,
-                    }
-                finally:
-                    if acquired:
-                        request.app.state.llm_semaphore.release()
         row.last_test_at = now_utc()
         row.last_test_ok = bool(result["ok"])
         _audit(

@@ -1,6 +1,7 @@
 """Embedding storage and provider boundaries."""
 
 import asyncio
+import json
 import math
 import threading
 from datetime import UTC, datetime
@@ -74,6 +75,7 @@ def test_adapter_and_fake_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
         vpn = asyncio.run(embed(provider, {}, "fake-64", ["VPN", "VPS"]))
         assert vpn.vectors is not None
         assert cosine(*vpn.vectors) < 0.1
+        assert json.loads(server.requests[-1]["body"])["input"] == ["vpn", "vps"]
         monkeypatch.setattr(
             "scripts.fake_llm_server._embedding",
             lambda value: [1.0] * (64 if value == "a" else 768),

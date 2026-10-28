@@ -33,7 +33,7 @@ from kebivo.tokens import GAP_SCOPE, ProjectTokenPrincipal
 
 SLUG = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$")
 DEFAULT_SETTINGS = {"corrections": {"enabled": False}, "deduplication": {"mode": "exact"}}
-EMBEDDING_SIMILARITY_DEFAULT = 0.88
+EMBEDDING_SIMILARITY_DEFAULT = 0.93
 EMBEDDING_MAX_SCAN_DEFAULT = 2000
 EMBEDDING_MAX_SCAN_CAP = 5000
 MAX_PAGE_SIZE = 100

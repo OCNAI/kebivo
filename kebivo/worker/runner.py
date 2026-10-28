@@ -110,6 +110,7 @@ class Worker:
         self.inflight: set[asyncio.Task[None]] = set()
         self.semantic_inflight: set[asyncio.Task[None]] = set()
         self.provider_failures: dict[str, tuple[int, float]] = {}
+        self.backfill_retry_at: dict[str, float] = {}
         self.retention_check_at = time.monotonic() + 300
         self.retention_task: asyncio.Task[None] | None = None
         self.backfill_task: asyncio.Task[None] | None = None
@@ -336,6 +337,7 @@ class Worker:
                     and (source := db.get(LlmProviderConfig, candidate.provider_id)) is not None
                     and source.enabled
                     and self.provider_failures.get(source.id, (0, 0.0))[1] <= time.monotonic()
+                    and self.backfill_retry_at.get(candidate.project_id, 0.0) <= time.monotonic()
                 ),
                 None,
             )
@@ -405,11 +407,15 @@ class Worker:
             return job, provider, secrets, pending
 
     async def _backfill(self) -> None:
+        job_id: str | None = None
         try:
             batch = await asyncio.to_thread(self._backfill_batch)
             if batch is None:
                 return
             job, provider, secrets, pending = batch
+            job_id = job.project_id
+            if self.backfill_retry_at.get(job.project_id, 0.0) > time.monotonic():
+                return
             if self.provider_failures.get(provider.id, (0, 0.0))[1] > time.monotonic():
                 return
             vectors: list[list[float]] = []
@@ -420,6 +426,9 @@ class Worker:
                         timeout=45,
                     )
                 if not result.vectors:
+                    self.backfill_retry_at[job.project_id] = (
+                        time.monotonic() + PROVIDER_COOLDOWN_SECONDS
+                    )
                     if result.error_category in TRANSPORT_FAILURES | {"http_429"}:
                         failures = self.provider_failures.get(provider.id, (0, 0.0))[0] + 1
                         self.provider_failures[provider.id] = (
@@ -430,6 +439,7 @@ class Worker:
                         )
                     return
                 vectors = [normalize(vector) for vector in result.vectors]
+                self.backfill_retry_at.pop(job.project_id, None)
                 self.provider_failures.pop(provider.id, None)
             await asyncio.to_thread(
                 self._finish_backfill_batch,
@@ -441,6 +451,8 @@ class Worker:
                 vectors,
             )
         except (SecretError, TimeoutError, ValueError) as exc:
+            if job_id is not None:
+                self.backfill_retry_at[job_id] = time.monotonic() + PROVIDER_COOLDOWN_SECONDS
             _log("embedding_backfill_error", category=type(exc).__name__)
 
     def _finish_backfill_batch(

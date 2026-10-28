@@ -86,18 +86,40 @@ def test_backfill_restart_batches_pause_and_prune(
 
 
 def test_embedding_provider_test_pass_and_fail(tmp_path: Path, fake: Any) -> None:
-    client, app, _, _ = setup_semantic(tmp_path, fake)
+    client, app, project, _ = setup_semantic(tmp_path, fake)
+    enable_embeddings(client, app, project)
     with app.state.session_factory() as db:
         provider_id = db.scalar(select(LlmProviderConfig.id))
     path = f"/api/v1/admin/llm-providers/{provider_id}/test"
-    passed = client.post(path, json={"embedding_model": "fake-64"}, headers=write_headers(client))
+    passed = client.post(path + "?kind=embeddings", headers=write_headers(client))
     assert passed.status_code == 200 and passed.json()["ok"] is True
-    assert passed.json()["embeddings"]["dims"] == 64
+    assert passed.json()["dims"] == 64
+    assert passed.json()["related_similarity"] > passed.json()["unrelated_similarity"]
+    assert json.loads(fake.requests[-1]["body"])["model"] == "fake-64"
     fake.scenario = "malformed"
-    failed = client.post(path, json={"embedding_model": "fake-64"}, headers=write_headers(client))
-    assert failed.status_code == 200 and failed.json()["embeddings"]["outcome"] == "error"
+    failed = client.post(path + "?kind=embeddings", headers=write_headers(client))
+    assert failed.status_code == 200 and failed.json()["error_category"] == "invalid_response"
     with app.state.session_factory() as db:
         assert db.scalar(select(func.count()).select_from(QuestionEmbedding)) == 0
+
+
+@pytest.mark.parametrize("scenario", ["malformed", "429"])
+def test_backfill_failed_batch_waits_for_cooldown(tmp_path: Path, fake: Any, scenario: str) -> None:
+    client, app, project, token = setup_semantic(tmp_path, fake)
+    assert (
+        post(
+            client, token, {"event_type": "knowledge_gap", "question": "Reset my password"}
+        ).status_code
+        == 202
+    )
+    enable_embeddings(client, app, project)
+    worker = Worker(app.state.session_factory, app.state.settings)
+    fake.scenario = scenario
+    asyncio.run(worker._backfill())
+    assert len(fake.requests) == 1
+    assert worker.backfill_retry_at[project["id"]] > time.monotonic()
+    asyncio.run(worker._backfill())
+    assert len(fake.requests) == 1
 
 
 def test_corpus_balanced_and_eval_requires_acknowledged_provider(

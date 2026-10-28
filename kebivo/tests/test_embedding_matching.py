@@ -59,7 +59,7 @@ def test_matching_preview_privacy_and_stale_model(
     client, app, project, token = setup_semantic(tmp_path, fake)
     settings = enable_embeddings(client, app, project)
     assert "embedding_dimensions" not in settings
-    assert settings["similarity_threshold"] == 0.88
+    assert settings["similarity_threshold"] == 0.93
     assert settings["max_scan"] == 2000
     defaults = client.get("/api/v1/projects/dedup/defaults").json()["embeddings"]
     assert defaults["max_scan_cap"] == 5000

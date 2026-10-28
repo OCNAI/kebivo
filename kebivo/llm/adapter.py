@@ -147,7 +147,7 @@ async def embed(
     )
     if key:
         headers["Authorization"] = "Bearer " + key
-    payload = {"model": embedding_model, "input": [value[:2000] for value in inputs]}
+    payload = {"model": embedding_model, "input": [value.lower()[:2000] for value in inputs]}
     try:
         status, _, body = await post_pinned(
             provider.base_url.rstrip("/") + "/embeddings",
