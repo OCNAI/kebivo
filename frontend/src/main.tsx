@@ -122,7 +122,8 @@ export function App() {
 
   async function saveProject(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
-    const settings = { ...selected?.settings, corrections: { enabled: data.get('corrections') === 'on' }, deduplication: { mode: String(data.get('deduplication_mode')) as 'disabled' | 'exact' | 'semantic' } };
+    const mode = data.get('deduplication_mode') ?? selected?.settings.deduplication?.mode ?? 'exact';
+    const settings = { ...selected?.settings, corrections: { enabled: data.get('corrections') === 'on' }, deduplication: { mode: String(mode) as 'disabled' | 'exact' | 'semantic' } };
     const payload = { name: String(data.get('name')), slug: String(data.get('slug')), description: String(data.get('description')) || null, settings, ...(selected ? { is_active: data.get('is_active') === 'on' } : {}) };
     const projectSettings = selected && settings.deduplication.mode === 'semantic'
       ? { ...settings, deduplication: { ...selected.settings.deduplication, mode: settings.deduplication.mode } }
@@ -236,8 +237,8 @@ export function DefaultTagsEditor({ project, busy, onSaved, onError }: { project
 }
 export function SemanticSettings({ project, onSaved, onError }: { project: Project; onSaved: (project: Project) => void; onError: (message: string) => void }) {
   type Provider = { id: string; name: string; provider_type: 'openai_compatible' | 'azure_openai' | 'local'; base_url: string; model: string | null; enabled: boolean };
-  type Defaults = { embeddings: { similarity_threshold: number; max_scan: number } };
-  type Similarity = { similarity: number; question?: string; question_excerpt?: string; threshold_met: boolean };
+  type Defaults = { embeddings: { similarity_threshold: number; max_scan: number; max_scan_cap: number } };
+  type Similarity = { group_id: string; representative_event_id: string; similarity: number; question_excerpt?: string; threshold_met: boolean };
   type Preview = { method?: string; exact_match_group_id?: string | null; similarities?: Similarity[]; verdict?: { outcome?: string; error_category?: string }; similarity_threshold?: number };
   const d = project.settings.deduplication ?? {}, sem = d.semantic ?? {};
   const [providers, setProviders] = React.useState<Provider[]>([]), [defaults, setDefaults] = React.useState<Defaults | null>(null);
@@ -283,7 +284,7 @@ export function SemanticSettings({ project, onSaved, onError }: { project: Proje
         if (!compatible.length) nextErrors.provider = 'Embeddings need an OpenAI-compatible or local provider. Add one under LLM providers.';
         if (!embedding.model.trim()) nextErrors.embedding_model = 'Enter an embedding model.';
         if (embedding.threshold == null || embedding.threshold < 0.5 || embedding.threshold > 0.99) nextErrors.threshold = 'Enter a threshold from 0.50 to 0.99.';
-        if (embedding.max_scan == null || embedding.max_scan < 1 || embedding.max_scan > 5000) nextErrors.max_scan = 'Enter a value from 1 to 5,000.';
+        if (embedding.max_scan == null || embedding.max_scan < 1 || embedding.max_scan > (defaults?.embeddings.max_scan_cap ?? 5000)) nextErrors.max_scan = 'Enter a value from 1 to 5,000.';
       }
     }
     setErrors(nextErrors); setFormError(Object.values(nextErrors)[0] ?? '');
@@ -302,11 +303,13 @@ export function SemanticSettings({ project, onSaved, onError }: { project: Proje
     catch(e) { setPreviewError(e instanceof ApiError ? e.code || String(e.status) : 'unknown'); } finally { setPreviewBusy(false); }
   }
   const hosted = provider?.provider_type === 'openai_compatible';
+  let endpointHost = provider?.base_url ?? '{endpoint_host}';
+  try { if (provider?.base_url) endpointHost = new URL(provider.base_url).host; } catch { /* Keep the configured endpoint visible if it is not a valid URL. */ }
   const privacy = method === 'judge'
     ? "I understand that new question text and up to 10 similar question excerpts will be sent to the selected provider. No names, metadata or group IDs are sent. The provider's retention and processing policies apply."
     : hosted
       ? `I understand that when I save, Kebivo sends up to ${embedding.max_scan ?? defaults?.embeddings.max_scan ?? ''} existing questions to this endpoint once to index them, and sends each new question as it arrives. Only question text is sent, truncated to 2,000 characters. Answers, corrections, context, tags, metadata, user references and IDs are never sent. The provider's retention and processing policies apply.`
-      : `I understand that when I save, Kebivo sends up to ${embedding.max_scan ?? defaults?.embeddings.max_scan ?? ''} existing questions to the local embedding endpoint once to index them, and sends each new question as it arrives. Only question text is sent, truncated to 2,000 characters; no answers, corrections, context, tags, metadata, user references or IDs. Question text goes only to ${provider?.base_url ? new URL(provider.base_url).host : '{endpoint_host}'}; if that endpoint runs on this host or its private network, it does not leave your infrastructure.`;
+      : `I understand that when I save, Kebivo sends up to ${embedding.max_scan ?? defaults?.embeddings.max_scan ?? ''} existing questions to the local embedding endpoint once to index them, and sends each new question as it arrives. Only question text is sent, truncated to 2,000 characters; no answers, corrections, context, tags, metadata, user references or IDs. Question text goes only to ${endpointHost}; if that endpoint runs on this host or its private network, it does not leave your infrastructure.`;
   const exactHelp = 'Exact groups identical questions in the same project and event type. To also group paraphrases, use Semantic with a local embedding model such as nomic-embed-text (Ollama).';
   return <section className="panel" aria-labelledby="semantic-title"><h2 id="semantic-title">Deduplication and semantic matching</h2>
     <form className="project-form" noValidate onSubmit={e => void submit(e)}>
@@ -339,7 +342,7 @@ export function SemanticSettings({ project, onSaved, onError }: { project: Proje
     <hr/><h3>Preview a submission</h3><form className="project-form" onSubmit={e => void runPreview(e)}><label htmlFor="preview-type">Event type</label><select id="preview-type" name="event_type"><option value="knowledge_gap">Knowledge gap</option><option value="knowledge_correction">Knowledge correction</option></select><label htmlFor="preview-question">Question</label><textarea id="preview-question" name="question" required maxLength={10000}/><button disabled={previewBusy}>{previewBusy ? 'Running preview…' : 'Run preview'}</button></form>
     {previewError && <p role="alert" className="error-message">Preview failed ({previewError}). Check the provider and model.</p>}
     {preview?.method === 'embeddings' && (preview.verdict?.outcome === 'provider_error' || preview.verdict?.outcome === 'provider_unavailable' || preview.verdict?.outcome === 'timeout') ? <p role="alert" className="error-message">Preview failed ({preview.verdict.error_category ?? preview.verdict.outcome}). Check the provider and model.</p> : null}
-    {preview?.method === 'embeddings' && !['provider_error', 'provider_unavailable', 'timeout'].includes(preview.verdict?.outcome ?? '') && <div role="status" className="preview-result"><p><strong>{preview.verdict?.outcome === 'matched' || preview.exact_match_group_id ? 'Would group with an existing question.' : 'Would start a new group.'}</strong> Threshold {preview.similarity_threshold?.toFixed(2)}.</p>{preview.similarities?.length ? <div className="table-wrap"><table><caption>Closest existing questions</caption><thead><tr><th scope="col">Similarity</th><th scope="col">Question</th><th scope="col">Result</th></tr></thead><tbody>{preview.similarities.slice(0,5).map((item,index)=><tr key={`${item.similarity}-${index}`}><td>{item.similarity.toFixed(2)}</td><td title={item.question ?? item.question_excerpt}>{item.question ?? item.question_excerpt ?? 'Existing question'}</td><td>{item.threshold_met ? 'Meets threshold' : 'Below threshold'}</td></tr>)}</tbody></table></div> : preview.exact_match_group_id ? <p>An identical question already exists.</p> : <p>No indexed questions to compare against yet.</p>}</div>}
+    {preview?.method === 'embeddings' && !['provider_error', 'provider_unavailable', 'timeout'].includes(preview.verdict?.outcome ?? '') && <div role="status" className="preview-result"><p><strong>{preview.verdict?.outcome === 'matched' || preview.exact_match_group_id ? 'Would group with an existing question.' : 'Would start a new group.'}</strong> Threshold {preview.similarity_threshold?.toFixed(2)}.</p>{preview.similarities?.length ? <div className="table-wrap"><table><caption>Closest existing questions</caption><thead><tr><th scope="col">Similarity</th><th scope="col">Question</th><th scope="col">Result</th></tr></thead><tbody>{preview.similarities.slice(0,5).map(item=><tr key={item.group_id}><td>{item.similarity.toFixed(2)}</td><td title={item.question_excerpt}>{item.question_excerpt ?? 'Existing question'}</td><td>{item.threshold_met ? 'Meets threshold' : 'Below threshold'}</td></tr>)}</tbody></table></div> : preview.exact_match_group_id ? <p>An identical question already exists.</p> : <p>No indexed questions to compare against yet.</p>}</div>}
     {preview && preview.method !== 'embeddings' && <pre className="safe-pre" role="status">{JSON.stringify(preview,null,2)}</pre>}
   </section>;
 }

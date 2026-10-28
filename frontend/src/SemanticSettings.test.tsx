@@ -21,8 +21,8 @@ describe('SemanticSettings embeddings', () => {
     globalThis.fetch = vi.fn(async (input, init) => {
       const url = String(input);
       if (url.endsWith('/admin/llm-providers')) return new Response(JSON.stringify({ items: providers }));
-      if (url.endsWith('/projects/dedup/defaults')) return new Response(JSON.stringify({ embeddings: { similarity_threshold: 0.73, max_scan: 987, max_scan_cap: 5000 } }));
-      if (url.endsWith('/admin/projects/project-1/dedup/preview')) return new Response(JSON.stringify({ method: 'embeddings', verdict: { outcome: 'matched' }, similarity_threshold: 0.73, similarities: Array.from({ length: 7 }, (_, i) => ({ similarity: 0.9 - i / 100, question_excerpt: `Question ${i + 1}`, threshold_met: i < 3 })) }));
+      if (url.endsWith('/projects/dedup/defaults')) return new Response(JSON.stringify({ embeddings: { similarity_threshold: 0.73, max_scan: 987, max_scan_cap: 1200 } }));
+      if (url.endsWith('/admin/projects/project-1/dedup/preview')) return new Response(JSON.stringify({ method: 'embeddings', verdict: { outcome: 'matched' }, similarity_threshold: 0.73, similarities: Array.from({ length: 7 }, (_, i) => ({ group_id: `g${i + 1}`, representative_event_id: `e${i + 1}`, similarity: 0.9 - i / 100, question_excerpt: `Question ${i + 1}`, threshold_met: i < 3 })) }));
       if (url.endsWith('/projects/project-1') && init?.method === 'PATCH') { writes.push(JSON.parse(String(init.body))); return new Response(JSON.stringify(project((JSON.parse(String(init.body)) as {settings:{deduplication:{semantic:Record<string,unknown>}}}).settings.deduplication.semantic))); }
       return new Response('{}');
     }) as typeof fetch;
@@ -56,7 +56,7 @@ describe('SemanticSettings embeddings', () => {
     expect(container.textContent).toContain('Azure not supported');
   });
 
-  it('uses the API default and rejects threshold values outside the API bounds', async () => {
+  it('uses API defaults and rejects threshold and scan values outside their bounds', async () => {
     await render(project({ method: 'embeddings', provider_id: 'p1', embedding_model: 'nomic-embed-text' }));
     expect(container.querySelector<HTMLInputElement>('#similarity-threshold')!.value).toBe('0.73');
     expect(container.querySelector<HTMLInputElement>('#max-scan')!.value).toBe('987');
@@ -74,7 +74,7 @@ describe('SemanticSettings embeddings', () => {
       const maxScan = container.querySelector<HTMLInputElement>('#max-scan')!;
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(threshold, '0.73');
       threshold.dispatchEvent(new Event('input', { bubbles: true }));
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(maxScan, '5001');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(maxScan, '1201');
       maxScan.dispatchEvent(new Event('input', { bubbles: true }));
       container.querySelector<HTMLFormElement>('.project-form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
