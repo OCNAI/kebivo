@@ -6,6 +6,7 @@ from array import array
 from collections.abc import Sequence
 
 from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from kebivo.models import QuestionEmbedding
@@ -53,8 +54,9 @@ def store(
     model: str,
     values: Sequence[float],
 ) -> None:
-    db.add(
-        QuestionEmbedding(
+    db.execute(
+        insert(QuestionEmbedding)
+        .values(
             event_id=event_id,
             project_id=project_id,
             event_type=event_type,
@@ -63,6 +65,7 @@ def store(
             dims=len(values),
             vector=encode(values),
         )
+        .on_conflict_do_nothing(index_elements=["event_id"])
     )
 
 

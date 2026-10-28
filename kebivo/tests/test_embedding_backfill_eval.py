@@ -13,9 +13,12 @@ from sqlalchemy import func, select
 from kebivo.cli import main
 from kebivo.dedup.evaluation import corpus, evaluate_project
 from kebivo.models import (
+    DedupEvaluation,
     EmbeddingBackfill,
+    FeedbackEvent,
     FeedbackGroup,
     LlmProviderConfig,
+    ProcessingJob,
     Project,
     QuestionEmbedding,
 )
@@ -83,6 +86,64 @@ def test_backfill_restart_batches_pause_and_prune(
             == 0
         )
     assert [len(json.loads(request["body"])["input"]) for request in fake.requests] == [16, 2]
+
+
+def test_backfill_and_event_embedding_same_vector_complete(tmp_path: Path, fake: Any) -> None:
+    client, app, project, token = setup_semantic(tmp_path, fake)
+    enable_embeddings(client, app, project)
+    event_id = post(
+        client, token, {"event_type": "knowledge_gap", "question": "Reset VPN access now"}
+    ).json()["event_id"]
+    worker = Worker(app.state.session_factory, app.state.settings)
+    batch = worker._backfill_batch()
+    assert batch is not None
+    backfill, _, _, pending = batch
+    assert [item[1] for item in pending] == [event_id]
+
+    with app.state.session_factory() as db:
+        job_id = db.scalar(select(ProcessingJob.id).where(ProcessingJob.event_id == event_id))
+    assert job_id is not None and worker._claim("job", 1) == [job_id]
+    work = worker._prepare_semantic(job_id)
+    assert work is not None
+    asyncio.run(worker._ask_embedding(work))
+    assert work.vector is not None
+
+    worker._finish_backfill_batch(
+        backfill.project_id, backfill.provider_id, backfill.model, backfill.dims,
+        pending, [work.vector],
+    )
+    worker._process_sync(job_id, work)
+    with app.state.session_factory() as db:
+        job = db.get(ProcessingJob, job_id)
+        assert job is not None and job.status == "completed" and job.error_code is None
+        assert db.get(FeedbackEvent, event_id).processing_status == "completed"
+        assert db.scalar(select(func.count()).select_from(QuestionEmbedding)) == 1
+        assert db.scalar(select(func.count()).select_from(DedupEvaluation)) == 1
+
+
+def test_embedding_job_retries_after_routing_error(tmp_path: Path, fake: Any) -> None:
+    client, app, project, token = setup_semantic(tmp_path, fake)
+    enable_embeddings(client, app, project)
+    event_id = post(
+        client, token, {"event_type": "knowledge_gap", "question": "Reset VPN access now"}
+    ).json()["event_id"]
+    worker = Worker(app.state.session_factory, app.state.settings)
+    job_id = worker._claim("job", 1)[0]
+    worker._process_failed(job_id)
+    with app.state.session_factory() as db:
+        job = db.get(ProcessingJob, job_id)
+        assert job is not None and job.status == "pending"
+        assert job.error_code == "routing_error" and job.attempt_count == 1
+        assert job.next_attempt_at is not None
+        job.next_attempt_at = None
+        db.commit()
+    assert worker._claim("job", 1) == [job_id]
+    asyncio.run(worker._process(job_id))
+    with app.state.session_factory() as db:
+        job = db.get(ProcessingJob, job_id)
+        assert job is not None and job.status == "completed" and job.error_code is None
+        assert db.get(FeedbackEvent, event_id).processing_status == "completed"
+        assert db.get(DedupEvaluation, event_id) is not None
 
 
 def test_embedding_provider_test_pass_and_fail(tmp_path: Path, fake: Any) -> None:
