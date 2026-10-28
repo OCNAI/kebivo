@@ -33,25 +33,26 @@ Administrators can call `POST /api/v1/admin/projects/{id}/dedup/preview` with an
 
 ### Embeddings method
 
-Embeddings compare the new question with stored vectors for the most recent `max_scan` group representatives in the same project and event type. There is no FTS candidate stage. Only vectors from the configured model and dimensions are compared. The highest cosine similarity joins its group when it meets `similarity_threshold`; otherwise the event keeps its own group. The default scan limit is 2,000 (range 1–5,000), and the threshold accepts 0.50–0.99. An exact hit still joins during intake without an embedding request. [Configure an embedding provider](llm-providers.md#ollama-recipe) before enabling this method.
+Embeddings compare the new question with stored vectors for up to the most recent `max_scan` group representatives in the same project and event type. There is no FTS candidate stage. Only vectors from the configured model with the same inferred dimensions are compared. The highest cosine similarity joins its group when it meets `similarity_threshold`; otherwise the event keeps its own group. The default scan limit is 2,000 (range 1–5,000), and the threshold accepts 0.50–0.99. An exact hit still joins during intake without an embedding request. [Configure an embedding provider](llm-providers.md#ollama-recipe) before enabling this method.
 
-The current default threshold is **0.88**. The local `nomic-embed-text` calibration on 150 balanced synthetic pairs exposed a tokenizer issue with capitalized input; lowercasing the input and raising the default to **0.93** is being implemented. With lowercased input, the short calibration table is:
+The default threshold is **0.93**. Kebivo lowercases question text before embedding because Ollama's `nomic-embed-text` tokenizer can turn capitalized words into the same unknown token. Calibration used 150 balanced synthetic pairs (75 paraphrases and 75 distinct questions) with lowercased input. At 0.93, the model grouped only about **3 in 100 paraphrases**; its two groupings in this corpus were correct. At 0.80, it grouped about **23 in 100 paraphrases**, but only about **37% of its groupings were correct**. A single-word near miss such as “reset a VPN password” versus “reset a VPS password” can score higher than a real paraphrase: near-miss median similarity was 0.84, versus 0.73 for paraphrases.
 
-| Threshold | Precision | Recall | True positives | False positives | False negatives |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 0.85 | 0.320 | 0.107 | 8 | 17 | 67 |
-| 0.88 | 0.385 | 0.067 | 5 | 8 | 70 |
-| 0.90 | 0.500 | 0.053 | 4 | 4 | 71 |
-| 0.92 | 0.667 | 0.027 | 2 | 1 | 73 |
-| 0.93 | 1.000 | 0.027 | 2 | 0 | 73 |
+| Threshold | Precision | Recall |
+| --- | ---: | ---: |
+| 0.80 | about 0.37 | about 0.23 |
+| 0.85 | 0.320 | 0.107 |
+| 0.88 | 0.385 | 0.067 |
+| 0.90 | 0.500 | 0.053 |
+| 0.92 | 0.667 | 0.027 |
+| **0.93 (default)** | **1.000** | **0.027** |
 
-These results apply only to that model and corpus. Near-miss questions can score above paraphrases, so inspect your own data before lowering the threshold. Preview with `POST /api/v1/admin/projects/{id}/dedup/preview` returns the top five `similarities`, their scores and whether each meets the threshold; it stores no vector. Run `python -m kebivo.cli dedup-eval --project ID` against labelled project history, or add `--corpus` for the bundled synthetic pairs. The CLI prints precision, recall and counts at thresholds 0.50–0.99. It requires a project with privacy acknowledgement and an enabled embeddings provider. Use group merge or split to correct a mistaken match.
+Only `nomic-embed-text` was calibrated; other models, including `text-embedding-3-small`, need their own tuning. Use the existing [LLM judge method](#judge-method) when you need useful paraphrase grouping today. Embeddings are a precision-first option to tune on your own data. Preview with `POST /api/v1/admin/projects/{id}/dedup/preview` returns the top five `similarities`, representative question excerpts, scores and whether each meets the threshold; it stores no vector. Run `python -m kebivo.cli dedup-eval --project ID` against labelled project history, or add `--corpus` for the bundled synthetic pairs. The CLI prints precision, recall and counts at thresholds 0.50–0.99. It requires a project with privacy acknowledgement and an enabled embeddings provider. Use group merge or split to correct a mistaken match.
 
-Enabling embeddings queues one backfill for that project. It visits the newest group representatives first, up to `max_scan`, and embeds missing vectors in batches of at most 16. Re-enabling with the same model does not stack jobs. Changing the provider, model or dimensions resets the backfill; vectors for the old configuration are ignored and pruned. Backfill does not regroup stored events. A provider error or missing vector never blocks intake: the new event keeps its exact or own group and routing continues. Failed events are not retried for embedding later.
+Enabling embeddings queues one backfill for that project. It visits the newest group representatives first, up to `max_scan`, and embeds missing vectors in batches of at most 16. Re-enabling with the same configuration does not stack jobs. Changing the provider or model resets the backfill. Old-model or old-dimension vectors are ignored during matching; backfill prunes vectors from the previous provider, model or dimensions. Backfill does not regroup stored events. A provider error or missing vector never blocks intake: the new event keeps its exact or own group and routing continues. Failed events are not retried for embedding later.
 
 ### Data sent off-host
 
-- **Sent:** only question text, truncated to 2,000 characters. This includes the new question for each processed event, representative questions during backfill (up to `max_scan` historical questions, sent once during a successful pass), and the preview question.
+- **Sent:** only question text, lowercased and truncated to 2,000 characters. This includes the new question for each processed event, representative questions during backfill (up to `max_scan` historical questions, sent once during a successful pass), the preview question, and question pairs when you run `dedup-eval` on project history. The provider test sends fixed synthetic questions.
 - **Never sent:** answers, corrections, context, tags, metadata, source or user refs, agent or conversation IDs, or group IDs.
 - **Received:** vectors only. Vectors are stored locally as derived personal data, deleted with the event and by retention, and never exported or returned by the API.
 

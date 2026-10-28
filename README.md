@@ -199,7 +199,7 @@ Each project has ordered rules: a rule matches ANY or ALL of its tags and sends 
 
 No model is called by default. To group questions that are worded differently, configure an LLM provider (**LLM settings** in the UI) and switch a project to semantic deduplication after acknowledging that question text will be sent to that provider. If the provider fails, the event keeps its own group and is still routed and delivered. See [deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md).
 
-Paraphrase grouping with embeddings is opt-in and needs an [embedding endpoint](docs/llm-providers.md#ollama-recipe); the default install groups exact repeats only.
+Embeddings are an opt-in, precision-first option that needs an [embedding endpoint](docs/llm-providers.md#ollama-recipe); the default install groups exact repeats only. With `nomic-embed-text`, the default 0.93 threshold grouped only about 3% of paraphrases in a 150-pair synthetic test; use the LLM judge method for useful paraphrase grouping.
 
 ## Security
 
