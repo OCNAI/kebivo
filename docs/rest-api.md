@@ -236,3 +236,11 @@ Kebivo stores it as `unverified`. It never changes your knowledge base: a person
 Track the event in the admin inbox (`/inbox`), where it appears in a feedback group. Delivery status for each destination is in the delivery log (`/deliveries`). Webhook receivers get the [versioned payload](destinations.md#webhook-payload-and-verification), and [`examples/webhook_receiver.py`](../examples/webhook_receiver.py) shows how to verify it.
 
 Kebivo does not serve an OpenAPI document or interactive API docs. For agent prompts that decide when to report, start from [`examples/agent-instructions.md`](../examples/agent-instructions.md).
+
+### Admin embeddings checks
+
+Embedding dimensions are inferred from each provider response; there is no project dimension setting. Kebivo accepts consistent vectors of 1–8,192 finite values. Existing `embedding_dimensions` values in saved project settings are dropped when the settings are updated.
+
+`POST /api/v1/admin/projects/{project_id}/dedup/preview` returns `question_excerpt` (up to 280 characters from the representative question) on each embeddings `similarities` item. Candidate lookup uses the query vector's dimensions, so vectors from an earlier model size are ignored.
+
+`POST /api/v1/admin/llm-providers/{provider_id}/test` runs the existing chat test by default (`kind=chat`) with no request body. To check embeddings, call `POST /api/v1/admin/llm-providers/{provider_id}/test?kind=embeddings&embedding_model=nomic-embed-text`. `embedding_model` is optional; it falls back to a project setting for this provider, then to the provider model. The embeddings response has top-level `ok`, `error_category`, `dims`, `latency_ms`, `related_similarity`, `unrelated_similarity`, and `http_status`; for example, `{"ok":true,"error_category":null,"dims":768,"latency_ms":12,"related_similarity":0.87,"unrelated_similarity":0.21,"http_status":200}`. `ok` requires the related pair to score above the unrelated pair. Azure OpenAI returns `error_category: "unsupported"`. The test sends only fixed questions, never stored feedback. Input is lowercased before embedding, and the default similarity threshold for grouping is `0.93`.

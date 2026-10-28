@@ -20,7 +20,7 @@ def upgrade() -> None:
         ),
         sa.Column("provider_id", sa.String(36), nullable=False),
         sa.Column("model", sa.String(200), nullable=False),
-        sa.Column("dims", sa.Integer(), nullable=False),
+        sa.Column("dims", sa.Integer()),
         sa.Column("remaining", sa.Integer(), nullable=False),
         sa.Column("cursor_seen_at", sa.DateTime(timezone=True)),
         sa.Column("cursor_group_id", sa.String(36)),

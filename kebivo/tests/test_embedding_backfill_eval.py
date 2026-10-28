@@ -28,7 +28,15 @@ from kebivo.worker.runner import Worker
 pytest_plugins = ["kebivo.tests.test_semantic_dedup"]
 
 
-def test_backfill_restart_batches_pause_and_prune(tmp_path: Path, fake: Any) -> None:
+def test_backfill_restart_batches_pause_and_prune(
+    tmp_path: Path, fake: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import fake_llm_server
+
+    original_embedding = fake_llm_server._embedding
+    monkeypatch.setattr(
+        fake_llm_server, "_embedding", lambda value: original_embedding(value) + [0.0] * 704
+    )
     client, app, project, token = setup_semantic(tmp_path, fake)
     for index in range(18):
         response = post(
@@ -42,6 +50,7 @@ def test_backfill_restart_batches_pause_and_prune(tmp_path: Path, fake: Any) -> 
     with app.state.session_factory() as db:
         provider_id = db.scalar(select(LlmProviderConfig.id))
         assert db.scalar(select(func.count()).select_from(EmbeddingBackfill)) == 1
+        assert db.get(EmbeddingBackfill, project["id"]).dims is None
         groups_before = db.scalar(select(func.count()).select_from(FeedbackGroup))
     worker = Worker(app.state.session_factory, app.state.settings)
     worker.provider_failures[provider_id] = (2, time.monotonic() + 60)
@@ -53,6 +62,7 @@ def test_backfill_restart_batches_pause_and_prune(tmp_path: Path, fake: Any) -> 
         assert db.scalar(select(func.count()).select_from(QuestionEmbedding)) == 16
         job = db.get(EmbeddingBackfill, project["id"])
         assert job is not None and job.remaining == 1984
+        assert job.dims == 768
         first = db.scalar(select(QuestionEmbedding))
         assert first is not None
         first.model = "stale-model"
@@ -76,18 +86,40 @@ def test_backfill_restart_batches_pause_and_prune(tmp_path: Path, fake: Any) -> 
 
 
 def test_embedding_provider_test_pass_and_fail(tmp_path: Path, fake: Any) -> None:
-    client, app, _, _ = setup_semantic(tmp_path, fake)
+    client, app, project, _ = setup_semantic(tmp_path, fake)
+    enable_embeddings(client, app, project)
     with app.state.session_factory() as db:
         provider_id = db.scalar(select(LlmProviderConfig.id))
-    path = f"/api/v1/admin/llm-providers/{provider_id}/test?kind=embeddings&dimensions=64"
-    passed = client.post(path, headers=write_headers(client))
+    path = f"/api/v1/admin/llm-providers/{provider_id}/test"
+    passed = client.post(path + "?kind=embeddings", headers=write_headers(client))
     assert passed.status_code == 200 and passed.json()["ok"] is True
     assert passed.json()["dims"] == 64
+    assert passed.json()["related_similarity"] > passed.json()["unrelated_similarity"]
+    assert json.loads(fake.requests[-1]["body"])["model"] == "fake-64"
     fake.scenario = "malformed"
-    failed = client.post(path, headers=write_headers(client))
-    assert failed.status_code == 200 and failed.json()["ok"] is False
+    failed = client.post(path + "?kind=embeddings", headers=write_headers(client))
+    assert failed.status_code == 200 and failed.json()["error_category"] == "invalid_response"
     with app.state.session_factory() as db:
         assert db.scalar(select(func.count()).select_from(QuestionEmbedding)) == 0
+
+
+@pytest.mark.parametrize("scenario", ["malformed", "429"])
+def test_backfill_failed_batch_waits_for_cooldown(tmp_path: Path, fake: Any, scenario: str) -> None:
+    client, app, project, token = setup_semantic(tmp_path, fake)
+    assert (
+        post(
+            client, token, {"event_type": "knowledge_gap", "question": "Reset my password"}
+        ).status_code
+        == 202
+    )
+    enable_embeddings(client, app, project)
+    worker = Worker(app.state.session_factory, app.state.settings)
+    fake.scenario = scenario
+    asyncio.run(worker._backfill())
+    assert len(fake.requests) == 1
+    assert worker.backfill_retry_at[project["id"]] > time.monotonic()
+    asyncio.run(worker._backfill())
+    assert len(fake.requests) == 1
 
 
 def test_corpus_balanced_and_eval_requires_acknowledged_provider(

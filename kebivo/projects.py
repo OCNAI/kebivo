@@ -33,7 +33,7 @@ from kebivo.tokens import GAP_SCOPE, ProjectTokenPrincipal
 
 SLUG = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$")
 DEFAULT_SETTINGS = {"corrections": {"enabled": False}, "deduplication": {"mode": "exact"}}
-EMBEDDING_SIMILARITY_DEFAULT = 0.88
+EMBEDDING_SIMILARITY_DEFAULT = 0.93
 EMBEDDING_MAX_SCAN_DEFAULT = 2000
 EMBEDDING_MAX_SCAN_CAP = 5000
 MAX_PAGE_SIZE = 100
@@ -61,7 +61,6 @@ class ProjectCreate(BaseModel):
                             "method": "embeddings",
                             "provider_id": "00000000-0000-0000-0000-000000000000",
                             "embedding_model": "text-embedding-3-small",
-                            "embedding_dimensions": 1536,
                             "similarity_threshold": EMBEDDING_SIMILARITY_DEFAULT,
                             "max_scan": EMBEDDING_MAX_SCAN_DEFAULT,
                         },
@@ -178,7 +177,6 @@ def _settings(value: dict[str, Any]) -> dict[str, Any]:
         if method == "judge":
             fields["candidate_count"] = (5, 1, 10)
         else:
-            fields["embedding_dimensions"] = (1536, 1, 8192)
             fields["max_scan"] = (EMBEDDING_MAX_SCAN_DEFAULT, 1, EMBEDDING_MAX_SCAN_CAP)
         normalized = {"provider_id": provider_id, "method": method}
         if method == "judge":
@@ -311,7 +309,7 @@ def _audit_project(
 def _reset_backfill(job: EmbeddingBackfill, semantic: dict[str, Any]) -> None:
     job.provider_id = semantic["provider_id"]
     job.model = semantic["embedding_model"]
-    job.dims = semantic["embedding_dimensions"]
+    job.dims = None
     job.remaining = semantic["max_scan"]
     job.cursor_seen_at = None
     job.cursor_group_id = None
@@ -328,7 +326,6 @@ def install_project_routes(app: Any) -> None:
                 "similarity_threshold": EMBEDDING_SIMILARITY_DEFAULT,
                 "max_scan": EMBEDDING_MAX_SCAN_DEFAULT,
                 "max_scan_cap": EMBEDDING_MAX_SCAN_CAP,
-                "embedding_dimensions": 1536,
             }
         }
 
@@ -522,7 +519,7 @@ def install_project_routes(app: Any) -> None:
             )
             changed = any(
                 new_semantic.get(key) != old_semantic.get(key)
-                for key in ("provider_id", "embedding_model", "embedding_dimensions")
+                for key in ("provider_id", "embedding_model")
             )
             if embedding_enabled and (
                 old_dedup.get("mode") != "semantic"

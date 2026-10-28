@@ -104,9 +104,10 @@ def test_crud_secrets_validation_and_test_results(tmp_path: Path, fake: FakeLLMS
     assert client.get(path).status_code == 200
     assert client.post(path, json=payload("https://example.com"), headers={}).status_code == 403
     with TestClient(app) as bearer_only:
-        assert bearer_only.get(
-            path, headers={"Authorization": "Bearer project-token"}
-        ).status_code == 401
+        assert (
+            bearer_only.get(path, headers={"Authorization": "Bearer project-token"}).status_code
+            == 401
+        )
     headers = write_headers(client)
     created = client.post(
         path, json=payload(f"http://127.0.0.1:{fake.server_port}"), headers=headers
@@ -173,10 +174,10 @@ def test_crud_secrets_validation_and_test_results(tmp_path: Path, fake: FakeLLMS
 def test_destination_change_clears_credentials(tmp_path: Path, change: str) -> None:
     client, app = make_client(tmp_path / "clear.db")
     path = "/api/v1/admin/llm-providers"
-    initial_url = "https://example.com" if change == "allow_private_network" else "http://127.0.0.1:11434"
-    created = client.post(
-        path, json=payload(initial_url), headers=write_headers(client)
+    initial_url = (
+        "https://example.com" if change == "allow_private_network" else "http://127.0.0.1:11434"
     )
+    created = client.post(path, json=payload(initial_url), headers=write_headers(client))
     assert created.status_code == 201, created.text
     provider_id = created.json()["id"]
     changed = client.patch(
@@ -215,10 +216,15 @@ def test_delete_provider_referenced_by_archived_semantic_project(tmp_path: Path)
     ).json()
     changed = client.patch(
         f"/api/v1/projects/{project['id']}",
-        json={"settings": {"deduplication": {
-            "mode": "semantic", "semantic": {"provider_id": provider_id},
-            "privacy_acknowledged": True,
-        }}},
+        json={
+            "settings": {
+                "deduplication": {
+                    "mode": "semantic",
+                    "semantic": {"provider_id": provider_id},
+                    "privacy_acknowledged": True,
+                }
+            }
+        },
         headers=headers,
     )
     assert changed.status_code == 200, changed.text
@@ -244,6 +250,58 @@ def test_connection_test_respects_llm_capacity(tmp_path: Path) -> None:
     )
     assert result.status_code == 503
     assert result.json()["error"]["code"] == "llm_busy"
+    app.state.engine.dispose()
+
+
+def test_provider_test_optional_embeddings(tmp_path: Path, fake: FakeLLMServer) -> None:
+    client, app = make_client(tmp_path / "embedding-test.db")
+    path = "/api/v1/admin/llm-providers"
+    headers = write_headers(client)
+    created = client.post(
+        path,
+        json=payload(f"http://127.0.0.1:{fake.server_port}", "local"),
+        headers=headers,
+    )
+    provider_id = created.json()["id"]
+    classic = client.post(f"{path}/{provider_id}/test", headers=headers).json()
+    assert "embeddings" not in classic
+    result = client.post(
+        f"{path}/{provider_id}/test?kind=embeddings&embedding_model=nomic-embed-text",
+        headers=headers,
+    ).json()
+    assert result["ok"] is True
+    assert result["error_category"] is None
+    assert result["dims"] == 64
+    assert result["latency_ms"] >= 0
+    assert result["related_similarity"] > result["unrelated_similarity"]
+    assert json.loads(fake.requests[-1]["body"])["model"] == "nomic-embed-text"
+    assert json.loads(fake.requests[-1]["body"])["input"] == [
+        "how do i reset my account password?",
+        "what steps restore my login password?",
+        "where can i find the monthly invoice?",
+    ]
+    fallback = client.post(f"{path}/{provider_id}/test?kind=embeddings", headers=headers)
+    assert fallback.status_code == 200
+    assert json.loads(fake.requests[-1]["body"])["model"] == "test-model"
+    fake.scenario = "malformed"
+    failed = client.post(
+        f"{path}/{provider_id}/test?kind=embeddings&embedding_model=nomic-embed-text",
+        headers=headers,
+    ).json()
+    assert failed["ok"] is False
+    assert failed["error_category"] == "invalid_response"
+    azure = client.post(
+        path,
+        json=payload(f"http://127.0.0.1:{fake.server_port}", "azure_openai") | {"name": "Azure"},
+        headers=headers,
+    )
+    unsupported = client.post(
+        f"{path}/{azure.json()['id']}/test?kind=embeddings",
+        headers=headers,
+    ).json()
+    assert unsupported["ok"] is False
+    assert unsupported["error_category"] == "unsupported"
+    assert unsupported["dims"] is None
     app.state.engine.dispose()
 
 

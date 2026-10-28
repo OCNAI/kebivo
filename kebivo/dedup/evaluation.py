@@ -95,14 +95,13 @@ async def score_pairs(
     provider: LlmProviderConfig,
     secrets: dict[str, str],
     model: str,
-    dims: int,
     pairs: list[tuple[str, str, bool]],
 ) -> list[tuple[float, bool]]:
     texts = list(dict.fromkeys(text for left, right, _ in pairs for text in (left, right)))
     vectors: dict[str, list[float]] = {}
     for start in range(0, len(texts), 16):
         batch = texts[start : start + 16]
-        result = await embed(provider, secrets, model, batch, dims)
+        result = await embed(provider, secrets, model, batch)
         if result.vectors is None:
             raise ValueError(f"Embedding provider failed: {result.error_category}")
         vectors.update(
@@ -147,7 +146,7 @@ def evaluate_project(db: Session, settings: Settings, project_id: str, use_corpu
         raise ValueError("No labelled pairs available")
     scores = asyncio.run(
         score_pairs(
-            provider, secrets, semantic["embedding_model"], semantic["embedding_dimensions"], pairs
+            provider, secrets, semantic["embedding_model"], pairs
         )
     )
     return f"pairs={len(pairs)} model={semantic['embedding_model']}\n{table(scores)}"

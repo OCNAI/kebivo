@@ -110,6 +110,7 @@ class Worker:
         self.inflight: set[asyncio.Task[None]] = set()
         self.semantic_inflight: set[asyncio.Task[None]] = set()
         self.provider_failures: dict[str, tuple[int, float]] = {}
+        self.backfill_retry_at: dict[str, float] = {}
         self.retention_check_at = time.monotonic() + 300
         self.retention_task: asyncio.Task[None] | None = None
         self.backfill_task: asyncio.Task[None] | None = None
@@ -336,6 +337,7 @@ class Worker:
                     and (source := db.get(LlmProviderConfig, candidate.provider_id)) is not None
                     and source.enabled
                     and self.provider_failures.get(source.id, (0, 0.0))[1] <= time.monotonic()
+                    and self.backfill_retry_at.get(candidate.project_id, 0.0) <= time.monotonic()
                 ),
                 None,
             )
@@ -361,7 +363,7 @@ class Worker:
                 delete(QuestionEmbedding).where(
                     QuestionEmbedding.project_id == job.project_id,
                     (QuestionEmbedding.model != job.model)
-                    | (QuestionEmbedding.dims != job.dims)
+                    | ((QuestionEmbedding.dims != job.dims) if job.dims is not None else False)
                     | QuestionEmbedding.provider_id.is_(None)
                     | (QuestionEmbedding.provider_id != job.provider_id),
                 )
@@ -396,7 +398,7 @@ class Worker:
             pending = [
                 (group.id, event.id, event.question[:2000])
                 for group, event in rows
-                if db.get(QuestionEmbedding, event.id) is None
+                if job.dims is None or db.get(QuestionEmbedding, event.id) is None
             ]
             db.refresh(job)
             db.refresh(provider)
@@ -405,23 +407,28 @@ class Worker:
             return job, provider, secrets, pending
 
     async def _backfill(self) -> None:
+        job_id: str | None = None
         try:
             batch = await asyncio.to_thread(self._backfill_batch)
             if batch is None:
                 return
             job, provider, secrets, pending = batch
+            job_id = job.project_id
+            if self.backfill_retry_at.get(job.project_id, 0.0) > time.monotonic():
+                return
             if self.provider_failures.get(provider.id, (0, 0.0))[1] > time.monotonic():
                 return
             vectors: list[list[float]] = []
             if pending:
                 async with self.llm_semaphore:
                     result = await asyncio.wait_for(
-                        embed(
-                            provider, secrets, job.model, [item[2] for item in pending], job.dims
-                        ),
+                        embed(provider, secrets, job.model, [item[2] for item in pending]),
                         timeout=45,
                     )
                 if not result.vectors:
+                    self.backfill_retry_at[job.project_id] = (
+                        time.monotonic() + PROVIDER_COOLDOWN_SECONDS
+                    )
                     if result.error_category in TRANSPORT_FAILURES | {"http_429"}:
                         failures = self.provider_failures.get(provider.id, (0, 0.0))[0] + 1
                         self.provider_failures[provider.id] = (
@@ -432,6 +439,7 @@ class Worker:
                         )
                     return
                 vectors = [normalize(vector) for vector in result.vectors]
+                self.backfill_retry_at.pop(job.project_id, None)
                 self.provider_failures.pop(provider.id, None)
             await asyncio.to_thread(
                 self._finish_backfill_batch,
@@ -443,6 +451,8 @@ class Worker:
                 vectors,
             )
         except (SecretError, TimeoutError, ValueError) as exc:
+            if job_id is not None:
+                self.backfill_retry_at[job_id] = time.monotonic() + PROVIDER_COOLDOWN_SECONDS
             _log("embedding_backfill_error", category=type(exc).__name__)
 
     def _finish_backfill_batch(
@@ -450,7 +460,7 @@ class Worker:
         project_id: str,
         provider_id: str,
         model: str,
-        dims: int,
+        dims: int | None,
         pending: list[tuple[str, str, str]],
         vectors: list[list[float]],
     ) -> None:
@@ -458,6 +468,30 @@ class Worker:
             job = db.get(EmbeddingBackfill, project_id)
             if job is None or (job.provider_id, job.model, job.dims) != (provider_id, model, dims):
                 return
+            if vectors:
+                current_dims = len(vectors[0])
+                if job.dims is not None and job.dims != current_dims:
+                    project = db.get(Project, project_id)
+                    assert project is not None
+                    semantic = json.loads(project.settings_json)["deduplication"]["semantic"]
+                    job.remaining = semantic.get("max_scan", EMBEDDING_MAX_SCAN_DEFAULT)
+                    job.cursor_seen_at = None
+                    job.cursor_group_id = None
+                    job.dims = current_dims
+                    db.execute(
+                        delete(QuestionEmbedding).where(
+                            QuestionEmbedding.project_id == project_id,
+                            QuestionEmbedding.dims != current_dims,
+                        )
+                    )
+                    return
+                job.dims = current_dims
+                db.execute(
+                    delete(QuestionEmbedding).where(
+                        QuestionEmbedding.project_id == project_id,
+                        QuestionEmbedding.dims != current_dims,
+                    )
+                )
             statement = select(FeedbackGroup).where(FeedbackGroup.project_id == project_id)
             if job.cursor_seen_at is not None:
                 statement = statement.where(
@@ -687,7 +721,6 @@ class Worker:
                             work.secrets,
                             work.settings["embedding_model"],
                             [work.question[:2000]],
-                            work.settings.get("embedding_dimensions", 1536),
                         ),
                         timeout=remaining,
                     )
@@ -908,6 +941,20 @@ class Worker:
                 db.flush()
                 associate(db, event, matched_group, "semantic", work.scores[0][2])
         if work.vector is not None:
+            dims = len(work.vector)
+            db.execute(
+                delete(QuestionEmbedding).where(
+                    QuestionEmbedding.project_id == event.project_id,
+                    QuestionEmbedding.dims != dims,
+                )
+            )
+            backfill = db.get(EmbeddingBackfill, event.project_id)
+            if backfill is not None and backfill.dims != dims:
+                if backfill.dims is not None:
+                    backfill.remaining = work.settings.get("max_scan", EMBEDDING_MAX_SCAN_DEFAULT)
+                    backfill.cursor_seen_at = None
+                    backfill.cursor_group_id = None
+                backfill.dims = dims
             store(
                 db,
                 event_id=event.id,

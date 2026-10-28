@@ -250,7 +250,7 @@ class EmbeddingBackfill(Base):
     )
     provider_id: Mapped[str] = mapped_column(String(36), nullable=False)
     model: Mapped[str] = mapped_column(String(200), nullable=False)
-    dims: Mapped[int] = mapped_column(Integer, nullable=False)
+    dims: Mapped[int | None] = mapped_column(Integer)
     remaining: Mapped[int] = mapped_column(Integer, nullable=False)
     cursor_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cursor_group_id: Mapped[str | None] = mapped_column(String(36))

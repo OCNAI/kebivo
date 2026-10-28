@@ -1,6 +1,7 @@
 """Embedding storage and provider boundaries."""
 
 import asyncio
+import json
 import math
 import threading
 from datetime import UTC, datetime
@@ -35,20 +36,24 @@ def test_codec_and_validation() -> None:
         ],
         "extra": 1,
     }
-    assert validate_embeddings(data, 2, 2) == [[1, 0], [0, 1]]
+    assert validate_embeddings(data, 2) == [[1, 0], [0, 1]]
     invalid: list[dict[str, object]] = [
         {"data": []},
-        {"data": [{"embedding": [1]}]},
+        {"data": [{"embedding": []}]},
         {"data": [{"embedding": [math.nan, 0]}]},
         {"data": [{"embedding": [math.inf, 0]}]},
         {"data": [{"index": 2, "embedding": [1, 0]}]},
     ]
     for bad in invalid:
-        assert validate_embeddings(bad, 1, 2) is None
-    assert validate_embeddings({"data": [{"embedding": [0] * 8193}]}, 1, 8193) is None
+        assert validate_embeddings(bad, 1) is None
+    assert validate_embeddings({"data": [{"embedding": [0] * 8193}]}, 1) is None
+    assert validate_embeddings({"data": [{"embedding": [0] * 768}]}, 1) is not None
+    assert validate_embeddings(
+        {"data": [{"embedding": [0] * 768}, {"embedding": [0] * 64}]}, 2
+    ) is None
 
 
-def test_adapter_and_fake_embeddings() -> None:
+def test_adapter_and_fake_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
     server = FakeLLMServer(("127.0.0.1", 0))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -61,22 +66,29 @@ def test_adapter_and_fake_embeddings() -> None:
     )
     try:
         result = asyncio.run(
-            embed(provider, {}, "fake-64", ["reset password", "forgot passcode"], 64)
+            embed(provider, {}, "fake-64", ["reset password", "forgot passcode"])
         )
         assert result.vectors is not None
         assert cosine(result.vectors[0], result.vectors[1]) > 0.9
         assert server.requests[-1]["path"] == "/embeddings"
         assert '"model":"fake-64"' in server.requests[-1]["body"]
-        vpn = asyncio.run(embed(provider, {}, "fake-64", ["VPN", "VPS"], 64))
+        vpn = asyncio.run(embed(provider, {}, "fake-64", ["VPN", "VPS"]))
         assert vpn.vectors is not None
         assert cosine(*vpn.vectors) < 0.1
+        assert json.loads(server.requests[-1]["body"])["input"] == ["vpn", "vps"]
+        monkeypatch.setattr(
+            "scripts.fake_llm_server._embedding",
+            lambda value: [1.0] * (64 if value == "a" else 768),
+        )
+        mixed = asyncio.run(embed(provider, {}, "fake-64", ["a", "b"]))
+        assert mixed.error_category == "invalid_response"
         provider.provider_type = "azure_openai"
         with pytest.raises(ValueError, match="unsupported"):
-            asyncio.run(embed(provider, {}, "fake-64", ["a"], 64))
+            asyncio.run(embed(provider, {}, "fake-64", ["a"]))
         provider.provider_type = "local"
         server.scenario = "oversized"
         assert (
-            asyncio.run(embed(provider, {}, "fake-64", ["a"], 64)).error_category
+            asyncio.run(embed(provider, {}, "fake-64", ["a"])).error_category
             == "invalid_response"
         )
     finally:
