@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from kebivo.dedup.embeddings import cosine, decode
+
 
 @dataclass(frozen=True)
 class Candidate:
@@ -14,6 +16,49 @@ class Candidate:
     event_id: str
     question: str
     score: float
+
+
+def embedding_candidates(
+    db: Session,
+    project_id: str,
+    event_type: str,
+    model: str,
+    dims: int,
+    exclude_group_id: str | None,
+    limit: int,
+) -> list[tuple[str, str, bytes]]:
+    rows = db.execute(
+        text("""
+        SELECT g.id, e.event_id, e.vector
+        FROM feedback_groups g
+        JOIN question_embeddings e ON e.event_id = g.representative_event_id
+        WHERE g.project_id=:project AND g.event_type=:type
+          AND e.model=:model AND e.dims=:dims
+          AND (:exclude IS NULL OR g.id<>:exclude)
+        ORDER BY g.last_seen_at DESC, g.id DESC LIMIT :limit
+    """),
+        {
+            "project": project_id,
+            "type": event_type,
+            "model": model,
+            "dims": dims,
+            "exclude": exclude_group_id,
+            "limit": limit,
+        },
+    ).all()
+    return [(row[0], row[1], row[2]) for row in rows]
+
+
+def score_embeddings(
+    vector: list[float],
+    rows: list[tuple[str, str, bytes]],
+    limit: int = 5,
+) -> list[tuple[str, str, float]]:
+    scored = [
+        (group_id, event_id, min(1.0, max(0.0, cosine(vector, decode(blob)))))
+        for group_id, event_id, blob in rows
+    ]
+    return sorted(scored, key=lambda item: item[2], reverse=True)[:limit]
 
 
 def candidates(
