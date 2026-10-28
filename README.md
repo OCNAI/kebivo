@@ -21,14 +21,12 @@ Start with the [Quickstart](#quickstart). For framework tutorials, see the [Kebi
 
 When an assistant cannot answer, the documentation owner may never see the question. The same question can fail again, and corrections offered in chat may never reach the people who maintain the content. Kebivo collects those reports in one place, where owners can triage and route them to the tools they use.
 
-When AI assistants cannot answer questions, Kebivo sends those knowledge gaps to a documentation or support owner for review. It groups repeated questions so the owner can see what keeps coming up. It can sit alongside a RAG application or agent framework; it does not retrieve content or update a knowledge base for you.
-
 ## When to use Kebivo
 
 - Your assistant, chatbot or RAG app can identify an unanswered question and report it over REST or MCP.
 - The same questions recur, and content owners need a grouped count and inbox to prioritize them.
 - Different teams own different topics, so you need to route reports by project or tags to Slack, email or signed webhooks.
-- Users suggest corrections, and a person must review them before anyone changes the knowledge source.
+- Users suggest corrections (an opt-in setting, off by default), and a person must review them before anyone changes the knowledge source.
 - You need a self-hosted feedback workflow that runs without a cloud account or AI provider.
 
 Use something else when:
@@ -43,7 +41,7 @@ Use something else when:
 - Create one project per assistant or team, with default tags, a corrections policy, and bearer tokens that are shown once, can expire and can be revoked.
 - Route reports with ordered rules, ANY/ALL tag matching, several destinations per rule, a fallback, and a dry-run simulator.
 - Deliver to signed webhooks with a versioned JSON payload, Slack incoming webhooks, SMTP email, or the built-in inbox. Deliveries have durable retries with backoff, restart recovery, a delivery log and manual retry.
-- Identical questions are grouped automatically. You can also configure an LLM provider for semantic grouping.
+- Questions that match exactly, ignoring case, extra whitespace, quote and dash styles, and trailing `?`, `!` or `.`, are grouped automatically. You can also configure an LLM provider for semantic grouping.
 - Triage reports in the inbox with search, filters, statuses, notes, tags, merge, split and deletion. Each group has a full history.
 - Enable OpenAI-compatible, Azure OpenAI or local (Ollama, LM Studio) providers for semantic grouping on a per-project basis. This is off by default.
 - Run one container with one SQLite file. Startup migrations, online backup and checked restore, retention (on by default), JSON Lines export, and health checks are included.
