@@ -2,8 +2,7 @@
 
 ## Unreleased
 
-- Optional embeddings semantic grouping scores recent same-model group representatives in the worker. Project settings and the audited preview now support `semantic.method: embeddings`; the admin defaults endpoint exposes the similarity threshold and scan limit. Failed embedding calls leave the provisional group intact and routing continues.
-- Embedding dimensions are inferred from provider responses, so local 768-dimension models work without a setting. Input is lowercased before embedding, and the default similarity threshold is 0.93. The admin preview includes representative question excerpts; the provider test has a separate `?kind=embeddings` check that compares related and unrelated questions.
+- Optional embeddings grouping compares question vectors from recent group representatives using an Ollama or OpenAI-compatible endpoint. It includes backfill, an audited preview with question excerpts, a `kind=embeddings` provider test and a `dedup-eval` threshold CLI; dimensions are inferred, input is lowercased, and the default similarity threshold is 0.93. Exact grouping remains the default, and failed embedding calls leave intake and routing available.
 
 ## 0.2.0 — 2026-10-27
 
