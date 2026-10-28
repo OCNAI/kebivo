@@ -1,6 +1,6 @@
 # Kebivo: self-hosted knowledge gap feedback for AI agents
 
-Kebivo is an open-source, self-hosted tool that collects the questions your AI assistant, chatbot or RAG app couldn't answer, groups repeats, and routes them to the people who own the content. Your agent or app reports a gap over REST or MCP, and routing rules deliver it to an admin inbox, email or signed webhooks. It runs as one container with no cloud account or AI provider required, under Apache-2.0.
+Kebivo is an open-source, self-hosted tool that collects the questions your AI assistant, chatbot or RAG app couldn't answer, groups repeats, and routes them to the people who own the content. Your agent or app reports a gap over REST or MCP, and routing rules deliver it to an admin inbox, Slack, email or signed webhooks. It runs as one container with no cloud account or AI provider required, under Apache-2.0.
 
 [![CI](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -27,7 +27,7 @@ When AI assistants cannot answer questions, Kebivo sends those knowledge gaps to
 
 - Your assistant, chatbot or RAG app can identify an unanswered question and report it over REST or MCP.
 - The same questions recur, and content owners need a grouped count and inbox to prioritize them.
-- Different teams own different topics, so you need to route reports by project or tags to email or signed webhooks.
+- Different teams own different topics, so you need to route reports by project or tags to Slack, email or signed webhooks.
 - Users suggest corrections, and a person must review them before anyone changes the knowledge source.
 - You need a self-hosted feedback workflow that runs without a cloud account or AI provider.
 
@@ -42,7 +42,7 @@ Use something else when:
 - Send reports from application code through REST, or give agents the Streamable HTTP MCP tools `report_knowledge_gap` and `submit_knowledge_correction`.
 - Create one project per assistant or team, with default tags, a corrections policy, and bearer tokens that are shown once, can expire and can be revoked.
 - Route reports with ordered rules, ANY/ALL tag matching, several destinations per rule, a fallback, and a dry-run simulator.
-- Deliver to signed webhooks with a versioned JSON payload, SMTP email, or the built-in inbox. Deliveries have durable retries with backoff, restart recovery, a delivery log and manual retry.
+- Deliver to signed webhooks with a versioned JSON payload, Slack incoming webhooks, SMTP email, or the built-in inbox. Deliveries have durable retries with backoff, restart recovery, a delivery log and manual retry.
 - Identical questions are grouped automatically. You can also configure an LLM provider for semantic grouping.
 - Triage reports in the inbox with search, filters, statuses, notes, tags, merge, split and deletion. Each group has a full history.
 - Enable OpenAI-compatible, Azure OpenAI or local (Ollama, LM Studio) providers for semantic grouping on a per-project basis. This is off by default.
