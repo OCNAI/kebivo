@@ -47,7 +47,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 VOLUME ["/data"]
 EXPOSE 8000
 USER appuser
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s --start-interval=2s \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"
 ENTRYPOINT ["/usr/local/bin/kebivo-entrypoint"]
 CMD ["uvicorn", "kebivo.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
