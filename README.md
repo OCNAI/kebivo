@@ -5,28 +5,39 @@
   </picture>
 </p>
 
-# Kebivo: self-hosted knowledge gap feedback for AI agents
+# Kebivo: the inbox for questions your AI couldn't answer
 
-Kebivo is an open-source, self-hosted tool that collects the questions your AI assistant, chatbot or RAG app couldn't answer, groups repeats, and routes them to the people who own the content. Your agent or app reports a gap over REST or MCP, and routing rules deliver it to an admin inbox, Slack, email or signed webhooks. It runs as one container with no cloud account or AI provider required, under Apache-2.0.
+Your AI app reports each question it couldn't answer; Kebivo groups the repeats and routes them to whoever can fix the docs.
+
+![Demo: a question the assistant cannot answer is reported to Kebivo, grouped with repeats, routed to a content owner, and resolved. Product frames come from a real Kebivo container with sample data.](docs/assets/demo.gif)
 
 [![CI](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/OCNAI/kebivo?sort=semver)](https://github.com/OCNAI/kebivo/releases)
 [![Container image](https://img.shields.io/badge/image-ghcr.io%2Focnai%2Fkebivo-2496ED?logo=docker&logoColor=white)](https://github.com/OCNAI/kebivo/pkgs/container/kebivo)
 
-> Kebivo works alongside observability and tracing tools such as Langfuse and Phoenix. Those tools show engineers what happened during a run. Kebivo collects gaps reported by the agent and sends them to the people who maintain the knowledge. It is not a RAG engine: it does not score traces, retrieve documents or answer questions. See [What it does not do](#what-it-does-not-do).
-
-![Demo: an AI assistant can't answer "Where is the VPN setup guide?" and the docs team never hears about it. The agent reports the gap to Kebivo over MCP, a routing rule delivers it to the docs owner by webhook, repeat questions join the same inbox entry and raise its count, and the owner marks it resolved. About 30 seconds, on a loop.](docs/assets/demo.gif)
-
-In the demo, an assistant can't answer a question and the agent calls `report_knowledge_gap` over MCP. A routing rule delivers the report to the docs owner by webhook. Repeat questions join the same group, so the count goes up without a second alert. The owner adds a note and marks the group resolved. The product frames are screenshots of a real Kebivo container with synthetic data; the chat and end card are drawn. The source is in [`docs/assets/demo-src`](docs/assets/demo-src/README.md).
-
 > **Status: 0.2.0.** Run the published image `ghcr.io/ocnai/kebivo:0.2.0` (`linux/amd64`, `linux/arm64`) or build it from this repository. Licensed under [Apache-2.0](LICENSE).
 
-Start with the [Quickstart](#quickstart). For framework tutorials, see the [Kebivo Guides](https://kebivo.com/guides/). For deployment, API behavior and limits, use the [technical documentation](docs/index.md).
+Try it with Docker, OpenSSL and a free port 8000:
+
+```sh
+(umask 077; printf 'SECRET_KEY=%s\nENCRYPTION_KEY=%s\nALLOWED_ORIGINS=http://127.0.0.1:8000\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > kebivo.env)
+docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.2.0
+curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
+```
+
+**Without Kebivo:** the bot says it couldn't find the answer, the user gives up, and the question sits in a log nobody reads.\
+**With Kebivo:** the question shows up once in the inbox with a repeat count, and your routing rules can send it to Slack, email or a webhook for whoever owns those docs.
+
+![Kebivo group inbox with sample data: "How do I paginate the /orders endpoint?" has 7 occurrences, alongside other open knowledge gaps from an API docs assistant.](docs/assets/screenshots/inbox.png)
+
+<sub>Group inbox from a real Kebivo 0.2.0 container with sample data.</sub>
+
+Continue with the [Quickstart](#quickstart) to report a question. For framework tutorials, see the [Kebivo Guides](https://kebivo.com/guides/).
 
 ## Why
 
-When an assistant cannot answer, the documentation owner may never see the question. The same question can fail again, and corrections offered in chat may never reach the people who maintain the content. Kebivo collects those reports in one place, where owners can triage and route them to the tools they use.
+When an assistant cannot answer, the documentation owner may never see the question. The same question can fail again, and corrections offered in chat may never reach the people who maintain the content. Kebivo collects those knowledge gaps in one place, where owners can triage and route them to the tools they use.
 
 ## When to use Kebivo
 
@@ -35,12 +46,6 @@ When an assistant cannot answer, the documentation owner may never see the quest
 - Different teams own different topics, so you need to route reports by project or tags to Slack, email or signed webhooks.
 - Users suggest corrections (an opt-in setting, off by default), and a person must review them before anyone changes the knowledge source.
 - You need a self-hosted feedback workflow that runs without a cloud account or AI provider.
-
-Use something else when:
-
-- You need a tool to answer questions, retrieve documents or apply corrections to your knowledge base.
-- You need a ticketing system, analytics product, multi-user accounts, SSO or roles.
-- You need high availability across multiple processes or a distributed database.
 
 ## Features
 
@@ -68,19 +73,13 @@ All screenshots use synthetic data.
 
 More: [destinations](docs/images/06-destinations.png), [settings](docs/images/08-settings.png), [LLM settings](docs/images/09-llm-settings.png), [sign-in](docs/images/10-sign-in.png). Regenerate them with `make e2e-ui SCREENSHOTS=1`.
 
-## What it does not do
-
-- It does not answer questions, edit your knowledge base or apply corrections. People review everything.
-- It is not a chatbot, a ticketing system or an analytics product. It hands feedback to the tools you use.
-- No multi-user accounts, SSO or roles: there is one local administrator.
-- No hosted service, no telemetry and no account. The default install makes no outbound connection and needs no AI provider.
-- No high availability: one process, one SQLite file on local storage.
+The demo's product frames come from a real container with sample data; its chat and end card are drawn. See the [demo source](docs/assets/demo-src/README.md).
 
 ## Quickstart
 
 You need Docker, OpenSSL, Python 3 and a free port 8000. The published image is typically ready in about 12 seconds after download.
 
-**1. Start Kebivo from the published image.** Keep `kebivo.env` private and back it up apart from the data volume.
+**1. Start Kebivo from the published image.** Skip this step if you ran the three commands above. Keep `kebivo.env` private and back it up apart from the data volume.
 
 ```sh
 (umask 077; printf 'SECRET_KEY=%s\nENCRYPTION_KEY=%s\nALLOWED_ORIGINS=http://127.0.0.1:8000\n' \
@@ -98,68 +97,38 @@ Curl may print a few `Connection reset` errors while migrations run. Readiness r
 read -rsp 'Admin password (12+ characters): ' KEBIVO_ADMIN_PASSWORD; printf '\n'
 printf '%s\n' "$KEBIVO_ADMIN_PASSWORD" | docker exec -i kebivo python -m kebivo.cli bootstrap --email admin@example.org --password-stdin
 unset KEBIVO_ADMIN_PASSWORD
-KEBIVO_PROJECT="$(docker exec kebivo python -m kebivo.cli project create --name 'Helpdesk bot' --json)"
-KEBIVO_PROJECT_ID="$(printf '%s' "$KEBIVO_PROJECT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+KEBIVO_PROJECT="$(docker exec kebivo python -m kebivo.cli project create --name 'API docs assistant' --json)"
 KEBIVO_TOKEN="$(printf '%s' "$KEBIVO_PROJECT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
 ```
 
-**3. Send your first event.**
+**3. Report the same unanswered question twice.** Use a different idempotency key for each occurrence. Reuse a key only when retrying the *same* request.
 
 ```sh
 curl -i http://127.0.0.1:8000/api/v1/feedback \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $KEBIVO_TOKEN" \
-  -H 'Idempotency-Key: first-event-001' \
-  --data '{"event_type":"knowledge_gap","question":"How do I reset my corporate VPN?","tags":["it"]}'
+  -H 'Idempotency-Key: orders-gap-001' \
+  --data '{"event_type":"knowledge_gap","question":"How do I paginate the /orders endpoint?","tags":["api-docs"]}'
+curl -i http://127.0.0.1:8000/api/v1/feedback \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $KEBIVO_TOKEN" \
+  -H 'Idempotency-Key: orders-gap-002' \
+  --data '{"event_type":"knowledge_gap","question":"How do I paginate the /orders endpoint?","tags":["api-docs"]}'
 ```
 
-The response is `202 Accepted` with an `event_id`. Open <http://127.0.0.1:8000/> to sign in and see the report in the Inbox. Use exactly `127.0.0.1`: `localhost` is a different origin, and sign-in names the allowed origin if you use the wrong one. You can also create projects and tokens in the UI.
+Both responses are `202 Accepted` with distinct `event_id` values. Open <http://127.0.0.1:8000/>, sign in, and find **How do I paginate the /orders endpoint?** in the Inbox with **2 occurrences**. Use exactly `127.0.0.1`: `localhost` is a different origin, and sign-in names the allowed origin if you use the wrong one. You can also create projects and tokens in the UI.
 
-**4. Route it to a signed local webhook.** These commands use the same administrator password and project from step 2. The destination returns its signing secret once; keep it private. `allow_private_network: true` lets this destination reach private addresses, so use it only for a trusted receiver.
+For a signed webhook delivery, follow step 4 of the [Docker guide](docs/quickstart.md).
 
-```sh
-read -rsp 'Admin password: ' KEBIVO_ADMIN_PASSWORD; printf '\n'
-KEBIVO_COOKIES="$(mktemp)"
-KEBIVO_LOGIN="$(KEBIVO_ADMIN_PASSWORD="$KEBIVO_ADMIN_PASSWORD" python3 -c 'import json,os; print(json.dumps({"email":"admin@example.org","password":os.environ["KEBIVO_ADMIN_PASSWORD"]}))' |
-  curl -fsS -c "$KEBIVO_COOKIES" -H 'Origin: http://127.0.0.1:8000' -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:8000/api/v1/auth/login)"
-unset KEBIVO_ADMIN_PASSWORD
-KEBIVO_CSRF="$(printf '%s' "$KEBIVO_LOGIN" | python3 -c 'import json,sys; print(json.load(sys.stdin)["csrf_token"])')"
-KEBIVO_DESTINATION="$(curl -fsS -b "$KEBIVO_COOKIES" -H 'Origin: http://127.0.0.1:8000' -H "X-CSRF-Token: $KEBIVO_CSRF" -H 'Content-Type: application/json' \
-  --data '{"name":"Local IT webhook","type":"webhook","allow_private_network":true,"config":{"url":"http://127.0.0.1:9000/hook","signing":true,"auth":{"type":"none"}}}' \
-  http://127.0.0.1:8000/api/v1/destinations)"
-KEBIVO_DESTINATION_ID="$(printf '%s' "$KEBIVO_DESTINATION" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-WEBHOOK_SECRET="$(printf '%s' "$KEBIVO_DESTINATION" | python3 -c 'import json,sys; print(json.load(sys.stdin)["signing_secret"])')"
-```
+> **REST or MCP?** Call REST from your application's fallback when every miss must be captured. With MCP, the model decides whether to call `report_knowledge_gap`, so some misses may go unreported.
 
-Get the [stdlib receiver](examples/webhook_receiver.py) and its [payload schema](docs/webhook-payload.schema.json), then run it in Kebivo's container. This keeps the receiver on container loopback and works with the published image or a Compose build (replace `kebivo` with the Compose app container ID).
+## Where Kebivo fits
 
-```sh
-mkdir -p examples docs
-curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.2.0/examples/webhook_receiver.py -o examples/webhook_receiver.py
-curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.2.0/docs/webhook-payload.schema.json -o docs/webhook-payload.schema.json
-docker cp examples/webhook_receiver.py kebivo:/tmp/webhook_receiver.py
-docker cp docs/webhook-payload.schema.json kebivo:/tmp/webhook-payload.schema.json
-WEBHOOK_SECRET="$WEBHOOK_SECRET" docker exec -e WEBHOOK_SECRET kebivo python /tmp/webhook_receiver.py \
-  --schema /tmp/webhook-payload.schema.json --exit-after 1 > kebivo-webhook.log 2>&1 &
-```
+Kebivo works alongside Langfuse and Phoenix, which help engineers inspect runs. Kebivo collects and routes misses; it does not diagnose why retrieval failed. It does not answer questions, update a knowledge base, or apply proposed corrections; people review the reports. Use something else if you need a ticketing system, analytics, multi-user accounts, SSO, or high availability. Kebivo is self-hosted with one local administrator, one process and one SQLite file. See the [technical documentation](docs/index.md) for deployment and limits.
 
-Add a rule for `it`, then send a new question. The receiver writes a JSON line with `"signature":"valid"` and `"schema":"valid"` to `kebivo-webhook.log`.
+## Build from source
 
-```sh
-curl -fsS -b "$KEBIVO_COOKIES" -H 'Origin: http://127.0.0.1:8000' -H "X-CSRF-Token: $KEBIVO_CSRF" -H 'Content-Type: application/json' \
-  --data "{\"name\":\"Route IT locally\",\"event_types\":[\"knowledge_gap\"],\"tags\":[\"it\"],\"match_mode\":\"any\",\"priority\":1,\"destination_ids\":[\"$KEBIVO_DESTINATION_ID\"],\"match_behavior\":\"stop\"}" \
-  "http://127.0.0.1:8000/api/v1/projects/$KEBIVO_PROJECT_ID/routing-rules"
-curl -i http://127.0.0.1:8000/api/v1/feedback -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $KEBIVO_TOKEN" -H 'Idempotency-Key: routed-event-001' \
-  --data '{"event_type":"knowledge_gap","question":"Where is the IT VPN reset guide?","tags":["it"]}'
-rm -f "$KEBIVO_COOKIES"
-unset KEBIVO_LOGIN KEBIVO_DESTINATION KEBIVO_PROJECT WEBHOOK_SECRET KEBIVO_CSRF
-tail -f kebivo-webhook.log
-```
-
-You can also do the setup in the UI: sign in, create a signed webhook at **Destinations** with URL `http://127.0.0.1:9000/hook` and **Allow private network**, copy its one-time signing secret, then add an `it` rule for it under the project's **Routing** section. Start the receiver with that secret before sending the second event. Check **Delivery log** if the receiver does not print a delivery.
-
-**Build from source instead.** Use this path if you want to change the code. After it starts, replace both `docker exec -i kebivo` and `docker exec kebivo` with `docker compose exec -T app` in step 2.
+Use this path if you want to change the code. After it starts, replace both `docker exec -i kebivo` and `docker exec kebivo` with `docker compose exec -T app` in step 2.
 
 ```sh
 git clone https://github.com/OCNAI/kebivo.git

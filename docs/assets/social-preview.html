@@ -6,18 +6,10 @@
   @font-face { font-family: Inter; font-weight: 800; src: url(demo-src/src/fonts/inter-latin-800-normal.woff2) format('woff2'); }
   * { box-sizing: border-box; margin: 0; }
   body { width: 1280px; height: 640px; overflow: hidden; background: #14201b; color: #fff; font-family: Inter, system-ui, sans-serif; position: relative; }
-  .brand { position: absolute; left: 80px; top: 52px; display: flex; align-items: center; gap: 18px; }
-  .brand img { width: 56px; height: 56px; }
-  .brand span { font-size: 44px; font-weight: 800; letter-spacing: -.04em; }
-  h1 { position: absolute; left: 80px; top: 150px; width: 1120px; font-size: 64px; line-height: 1.1; font-weight: 800; letter-spacing: -.035em; }
-  h1 em { font-style: normal; color: #bfe3d3; }
-  .card { position: absolute; left: 80px; top: 400px; width: 1120px; height: 112px; border-radius: 14px; overflow: hidden; background: #f6f8f6 url(demo-src/shots/inbox-4.png) no-repeat;
-    background-size: 1626px auto; background-position: -89px -510px; box-shadow: 0 18px 40px rgba(0,0,0,.35); }
-  .ring { position: absolute; left: 945px; top: 446px; width: 30px; height: 40px; border: 4px solid #35735e; border-radius: 12px; }
-  .tags { position: absolute; left: 80px; bottom: 56px; font-size: 24px; font-weight: 700; color: #7fa493; letter-spacing: .01em; }
+  .logo { position: absolute; left: 80px; top: 72px; width: 400px; height: 100px; }
+  h1 { position: absolute; left: 80px; top: 232px; width: 1120px; font-size: 92px; line-height: 1.08; font-weight: 800; letter-spacing: -.035em; }
+  .tags { position: absolute; left: 80px; bottom: 64px; font-size: 28px; font-weight: 700; color: #9cc2b1; }
 </style>
-<div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="56" height="56"><rect width="32" height="32" rx="8" fill="#285f4c"/><path d="M11 7v18M11 17l9-10M14 14l7 11" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><span>Kebivo</span></div>
-<h1>When your AI doesn’t know, Kebivo<br><em>tells the people who can fix it.</em></h1>
-<div class="card"></div>
-<div class="ring"></div>
-<div class="tags">Open source · Self-hosted · MCP and REST · SQLite</div>
+<img class="logo" src="logo/lockup-dark.svg" alt="Kebivo">
+<h1>The inbox for questions your AI couldn’t answer</h1>
+<div class="tags">Open source · Self-hosted · MCP and REST</div>
