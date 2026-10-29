@@ -8,7 +8,7 @@ an SDK and are not part of the `make e2e` acceptance suite.
 | Folder | Framework | Connects over | Model in the example |
 | --- | --- | --- | --- |
 | [`langchain/`](langchain/) | LangChain (Python) | REST | None; local keyword matching |
-| [`llamaindex/`](llamaindex/) | LlamaIndex (Python) | REST | None; local keyword matching |
+| [`llamaindex/`](llamaindex/) | LlamaIndex (Python) | MCP | OpenAI or any OpenAI-compatible server |
 | [`claude/`](claude/) | Claude Code, Claude Desktop | MCP | Claude |
 | [`openai-agents/`](openai-agents/) | OpenAI Agents SDK (Python) | MCP | OpenAI or any OpenAI-compatible server |
 | [`langgraph/`](langgraph/) | LangGraph via LangChain `create_agent` | MCP | OpenAI or any OpenAI-compatible server |
