@@ -10,10 +10,19 @@ from sqlalchemy import func, select
 
 from kebivo.dedup.embeddings import encode
 from kebivo.dedup.semantic import score_embeddings
-from kebivo.models import DedupEvaluation, FeedbackGroupMember, QuestionEmbedding
+from kebivo.models import (
+    DedupEvaluation,
+    EmbeddingBackfill,
+    FeedbackGroupMember,
+    LlmProviderConfig,
+    ProcessingJob,
+    QuestionEmbedding,
+)
 from kebivo.tests.test_feedback_submission import post
+from kebivo.tests.test_llm_providers import payload
 from kebivo.tests.test_projects import write_headers
 from kebivo.tests.test_semantic_dedup import process, setup_semantic
+from kebivo.worker.runner import Worker
 
 pytest_plugins = ["kebivo.tests.test_semantic_dedup"]
 
@@ -124,6 +133,104 @@ def test_matching_preview_privacy_and_stale_model(
         assert db.get(DedupEvaluation, fourth).outcome == "no_candidates"
 
 
+@pytest.mark.parametrize("change", ["provider", "endpoint"])
+def test_provider_change_isolates_vectors_before_backfill(
+    tmp_path: Path, fake: Any, change: str
+) -> None:
+    client, app, project, token = setup_semantic(tmp_path, fake)
+    semantic = enable_embeddings(client, app, project)
+    first = post(
+        client, token, {"event_type": "knowledge_gap", "question": "Reset VPN access"}
+    ).json()["event_id"]
+    process(app, first)
+    with app.state.session_factory() as db:
+        old = db.get(QuestionEmbedding, first)
+        assert old is not None
+        old_revision = old.embedding_revision
+    if change == "provider":
+        created = client.post(
+            "/api/v1/admin/llm-providers",
+            json=payload(f"http://127.0.0.1:{fake.server_port}") | {"name": "Second"},
+            headers=write_headers(client),
+        )
+        assert created.status_code == 201, created.text
+        changed = client.patch(
+            f"/api/v1/projects/{project['id']}",
+            json={
+                "settings": {
+                    "deduplication": {
+                        "mode": "semantic",
+                        "semantic": semantic | {"provider_id": created.json()["id"]},
+                        "privacy_acknowledged": True,
+                    }
+                }
+            },
+            headers=write_headers(client),
+        )
+    else:
+        changed = client.patch(
+            f"/api/v1/admin/llm-providers/{semantic['provider_id']}",
+            json={"base_url": f"http://localhost:{fake.server_port}"},
+            headers=write_headers(client),
+        )
+    assert changed.status_code == 200, changed.text
+    with app.state.session_factory() as db:
+        assert db.get(QuestionEmbedding, first) is not None
+        backfill = db.get(EmbeddingBackfill, project["id"])
+        assert backfill is not None and backfill.embedding_revision != old_revision
+    preview = client.post(
+        f"/api/v1/admin/projects/{project['id']}/dedup/preview",
+        json={"event_type": "knowledge_gap", "question": "Reset my VPN access"},
+        headers=write_headers(client),
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["similarities"] == []
+    second = post(
+        client, token, {"event_type": "knowledge_gap", "question": "Reset my VPN access"}
+    ).json()["event_id"]
+    process(app, second)
+    with app.state.session_factory() as db:
+        assert db.get(DedupEvaluation, second).outcome == "no_candidates"
+        assert (
+            db.get(FeedbackGroupMember, first).group_id
+            != db.get(FeedbackGroupMember, second).group_id
+        )
+    import asyncio
+
+    asyncio.run(Worker(app.state.session_factory, app.state.settings)._backfill())
+    with app.state.session_factory() as db:
+        rebuilt = db.get(QuestionEmbedding, first)
+        assert rebuilt is not None and rebuilt.embedding_revision == backfill.embedding_revision
+
+
+def test_inflight_embedding_discarded_after_provider_edit(tmp_path: Path, fake: Any) -> None:
+    import asyncio
+
+    client, app, project, token = setup_semantic(tmp_path, fake)
+    semantic = enable_embeddings(client, app, project)
+    event_id = post(
+        client, token, {"event_type": "knowledge_gap", "question": "Reset VPN access"}
+    ).json()["event_id"]
+    worker = Worker(app.state.session_factory, app.state.settings)
+    with app.state.session_factory() as db:
+        job_id = db.scalar(select(ProcessingJob.id).where(ProcessingJob.event_id == event_id))
+    assert job_id is not None and worker._claim("job", 1) == [job_id]
+    work = worker._prepare_semantic(job_id)
+    assert work is not None
+    asyncio.run(worker._ask_embedding(work))
+    assert work.vector is not None
+    changed = client.patch(
+        f"/api/v1/admin/llm-providers/{semantic['provider_id']}",
+        json={"base_url": f"http://localhost:{fake.server_port}"},
+        headers=write_headers(client),
+    )
+    assert changed.status_code == 200, changed.text
+    worker._process_sync(job_id, work)
+    with app.state.session_factory() as db:
+        assert db.get(DedupEvaluation, event_id).outcome == "skipped_group_changed"
+        assert db.get(QuestionEmbedding, event_id) is None
+
+
 @pytest.mark.parametrize(
     "bad",
     [
@@ -137,7 +244,6 @@ def test_matching_preview_privacy_and_stale_model(
 def test_embedding_settings_reject_invalid(tmp_path: Path, fake: Any, bad: dict[str, Any]) -> None:
     client, app, project, _ = setup_semantic(tmp_path, fake)
     enable_embeddings(client, app, project)
-    from kebivo.models import LlmProviderConfig
 
     with app.state.session_factory() as db:
         provider_id = db.scalar(select(LlmProviderConfig.id))
@@ -182,7 +288,6 @@ def test_endpoint_failure_opens_circuit_and_keeps_delivery(tmp_path: Path, fake:
         Delivery,
         Destination,
         FeedbackEvent,
-        LlmProviderConfig,
         ProcessingJob,
         Project,
     )
@@ -256,8 +361,6 @@ def test_embedding_group_touched_before_commit(tmp_path: Path, fake: Any) -> Non
 
 
 def test_method_switch_requires_ack_and_rejects_azure(tmp_path: Path, fake: Any) -> None:
-    from kebivo.models import LlmProviderConfig
-
     client, app, project, _ = setup_semantic(tmp_path, fake)
     with app.state.session_factory() as db:
         provider_id = db.scalar(select(LlmProviderConfig.id))
