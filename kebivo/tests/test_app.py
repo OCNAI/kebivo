@@ -1,11 +1,14 @@
 import logging
+import sqlite3
 from io import StringIO
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
 
 from kebivo.app import create_app
+from kebivo.models import Base
 from kebivo.settings import Settings, SettingsError
 
 
@@ -18,7 +21,10 @@ def test_liveness_and_readiness(tmp_path: Path) -> None:
     assert live.status_code == 200
     assert live.json() == {"status": "ok"}
     assert ready.status_code == 200
-    assert ready.json() == {"status": "ok", "database": "ok", "search": "ok", "worker": "disabled"}
+    assert ready.json() == {
+        "status": "ok", "database": "ok", "search": "ok", "worker": "disabled",
+        "routing_backlog": {"pending_count": 0, "oldest_pending_age_seconds": None},
+    }
     assert live.headers["x-request-id"]
 
 
@@ -38,6 +44,43 @@ def test_readiness_reports_database_failure_but_liveness_stays_up(tmp_path: Path
         "database": "unavailable",
         "worker": "disabled",
     }
+
+
+def test_readiness_degrades_only_metrics_on_read_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = create_app(Settings("Kebivo", "test", None, str(tmp_path / "app.db")))
+    Base.metadata.create_all(app.state.engine)
+    connect = sqlite3.connect
+
+    def fail_metrics(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+        if kwargs.get("uri"):
+            raise sqlite3.OperationalError("database is locked")
+        return cast(sqlite3.Connection, connect(*args, **kwargs))
+
+    monkeypatch.setattr("kebivo.app.sqlite3.connect", fail_metrics)
+    with TestClient(app) as client:
+        response = client.get("/health/ready")
+    assert response.status_code == 200
+    assert response.json()["database"] == "ok"
+    assert response.json()["routing_backlog"] == {
+        "pending_count": None,
+        "oldest_pending_age_seconds": None,
+    }
+
+
+def test_readiness_reports_corrupt_database(tmp_path: Path) -> None:
+    database = tmp_path / "app.db"
+    app = create_app(Settings("Kebivo", "test", None, str(database), worker_enabled=False))
+    Base.metadata.create_all(app.state.engine)
+
+    with TestClient(app) as client:
+        app.state.engine.dispose()
+        database.write_bytes(b"not a SQLite database")
+        response = client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert response.json()["database"] == "unavailable"
 
 
 def test_readiness_reports_missing_secure_search(monkeypatch: pytest.MonkeyPatch) -> None:

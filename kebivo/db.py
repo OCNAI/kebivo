@@ -26,6 +26,7 @@ def make_engine(database_url: str | None = None) -> Engine:
         kwargs["connect_args"] = {"check_same_thread": False, "timeout": 5}
         database = make_url(url).database
         if database and database != ":memory:":
+            kwargs["pool_timeout"] = 2
             Path(database).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(url, **kwargs)
     if url.startswith("sqlite"):
@@ -37,6 +38,11 @@ def make_engine(database_url: str | None = None) -> Engine:
             cursor.execute("PRAGMA busy_timeout=5000")
             cursor.execute("PRAGMA secure_delete=ON")
             cursor.close()
+
+        @event.listens_for(engine, "checkin")
+        def restore_busy_timeout(dbapi_connection: Any, _connection_record: Any) -> None:
+            if dbapi_connection is not None:
+                dbapi_connection.execute("PRAGMA busy_timeout=5000")
 
         # WAL is persistent per database and must be applied outside transactions.
         with engine.connect() as connection:

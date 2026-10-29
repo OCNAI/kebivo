@@ -1,3 +1,5 @@
+import sqlite3
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -52,6 +54,28 @@ def write_headers(client: TestClient) -> dict[str, str]:
         "Origin": ORIGIN,
         "X-CSRF-Token": client.get("/api/v1/auth/session").json()["csrf_token"],
     }
+
+
+def test_admin_test_event_returns_retryable_busy_under_writer_lock(tmp_path: Path) -> None:
+    path = tmp_path / "test-event-busy.db"
+    client, app = make_client(path)
+    headers = write_headers(client)
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Research", "slug": "research"},
+        headers=headers,
+    ).json()
+    with sqlite3.connect(path) as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        started = time.monotonic()
+        response = client.post(
+            f"/api/v1/projects/{project['id']}/test-event", headers=headers
+        )
+        assert time.monotonic() - started < 5
+        assert response.status_code == 503
+        assert response.headers["retry-after"] == "1"
+        assert response.json()["error"]["code"] == "storage_busy"
+    app.state.engine.dispose()
 
 
 def test_project_settings_tags_lifecycle_and_restart_persistence(tmp_path: Path) -> None:

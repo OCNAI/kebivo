@@ -1,6 +1,9 @@
 """Shared ingestion and gate-review regressions."""
 
 import json
+import sqlite3
+import time
+from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -9,7 +12,8 @@ import anyio
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import event, select
+from sqlalchemy import event, select, text
+from sqlalchemy.exc import OperationalError
 
 from kebivo.db import make_engine
 from kebivo.errors import install_error_handlers
@@ -22,7 +26,7 @@ from kebivo.feedback.ingest import (
     ingest,
 )
 from kebivo.feedback_limits import FixedWindowLimiter
-from kebivo.models import FeedbackEvent, FeedbackEventTag, Tag
+from kebivo.models import FeedbackEvent, FeedbackEventTag, ProcessingJob, Tag, now_utc
 from kebivo.tests.test_feedback_submission import counts, post, setup
 from kebivo.tokens import ProjectTokenPrincipal, authenticate_bearer
 
@@ -114,6 +118,97 @@ def test_ingest_domain_errors_and_channel(tmp_path: Path) -> None:
     with pytest.raises(IdempotencyConflict):
         submit({**payload, "question": "Changed"}, "channel")
     assert counts(app) == before_conflict
+
+
+def test_sqlite_busy_retry_replays_once_and_exhaustion_is_503(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, app, _, token = setup(tmp_path)
+    from kebivo.feedback.service import submit_feedback as actual_submit
+
+    attempts = 0
+
+    def busy_once(*args: Any, **kwargs: Any) -> Any:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OperationalError(
+                "BEGIN IMMEDIATE", {}, sqlite3.OperationalError("database is locked")
+            )
+        return actual_submit(*args, **kwargs)
+
+    monkeypatch.setattr("kebivo.feedback.routes.submit_feedback", busy_once)
+    monkeypatch.setattr("kebivo.feedback.ingest.time.sleep", lambda _: None)
+    payload = {"event_type": "knowledge_gap", "question": "Busy test"}
+    first = post(client, token, payload, "busy-once")
+    assert first.status_code == 202 and attempts == 2
+    replay = post(client, token, payload, "busy-once")
+    assert replay.status_code == 202
+    assert replay.headers["idempotent-replayed"] == "true"
+    assert replay.json()["event_id"] == first.json()["event_id"]
+    assert counts(app)[:4] == (1, 0, 1, 1)
+
+    def always_busy(*args: Any, **kwargs: Any) -> Any:
+        raise OperationalError(
+            "BEGIN IMMEDIATE", {}, sqlite3.OperationalError("database is locked")
+        )
+
+    monkeypatch.setattr("kebivo.feedback.routes.submit_feedback", always_busy)
+    before = counts(app)
+    exhausted = post(client, token, payload, "busy-exhausted")
+    assert exhausted.status_code == 503
+    assert exhausted.headers["retry-after"] == "1"
+    assert exhausted.json()["error"]["code"] == "storage_busy"
+    assert counts(app) == before
+
+
+def test_readiness_backlog_tracks_pending_and_drain(tmp_path: Path) -> None:
+    client, app, _, token = setup(tmp_path)
+    app.state.worker = None
+    event_id = post(client, token, {"event_type": "knowledge_gap", "question": "Queued"}).json()[
+        "event_id"
+    ]
+    with app.state.session_factory() as db:
+        job = db.scalar(select(ProcessingJob).where(ProcessingJob.event_id == event_id))
+        assert job is not None
+        from datetime import timedelta
+
+        job.created_at = now_utc() - timedelta(seconds=20)
+        db.commit()
+    queued = client.get("/health/ready")
+    assert queued.status_code == 200
+    assert queued.json()["routing_backlog"]["pending_count"] == 1
+    assert queued.json()["routing_backlog"]["oldest_pending_age_seconds"] >= 19
+    with app.state.session_factory() as db:
+        job = db.scalar(select(ProcessingJob).where(ProcessingJob.event_id == event_id))
+        assert job is not None
+        job.status = "completed"
+        db.commit()
+    assert client.get("/health/ready").json()["routing_backlog"] == {
+        "pending_count": 0,
+        "oldest_pending_age_seconds": None,
+    }
+
+
+def test_readiness_ignores_pool_pressure_and_held_writer(tmp_path: Path) -> None:
+    client, app, _, token = setup(tmp_path)
+    app.state.worker = None
+    with sqlite3.connect(app.state.database_path) as writer, ExitStack() as stack:
+        writer.execute("BEGIN IMMEDIATE")
+        for _ in range(15):
+            db = stack.enter_context(app.state.session_factory())
+            db.execute(text("SELECT 1"))
+        started = time.monotonic()
+        ready = client.get("/health/ready")
+        assert time.monotonic() - started < 1
+        assert ready.status_code == 200
+        assert ready.json()["routing_backlog"]["pending_count"] == 0
+
+        started = time.monotonic()
+        response = post(client, token, {"event_type": "knowledge_gap", "question": "Pool busy"})
+        assert time.monotonic() - started < 4
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "storage_busy"
 
 
 def test_rest_and_mcp_store_same_feedback_contract(tmp_path: Path) -> None:
