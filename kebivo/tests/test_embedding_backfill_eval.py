@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -184,7 +185,11 @@ def test_embedding_job_retries_after_routing_error(tmp_path: Path, fake: Any) ->
 
 def test_embedding_provider_test_pass_and_fail(tmp_path: Path, fake: Any) -> None:
     client, app, project, _ = setup_semantic(tmp_path, fake)
+    listed = client.get("/api/v1/admin/llm-providers", headers=write_headers(client))
+    assert listed.json()["items"][0]["used_for_embeddings"] is False
     enable_embeddings(client, app, project)
+    listed = client.get("/api/v1/admin/llm-providers", headers=write_headers(client))
+    assert listed.json()["items"][0]["used_for_embeddings"] is True
     with app.state.session_factory() as db:
         provider_id = db.scalar(select(LlmProviderConfig.id))
     path = f"/api/v1/admin/llm-providers/{provider_id}/test"
@@ -198,6 +203,26 @@ def test_embedding_provider_test_pass_and_fail(tmp_path: Path, fake: Any) -> Non
     assert failed.status_code == 200 and failed.json()["error_category"] == "invalid_response"
     with app.state.session_factory() as db:
         assert db.scalar(select(func.count()).select_from(QuestionEmbedding)) == 0
+
+
+def test_calibration_script_scores_corpus_against_fake_server(fake: Any) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/calibrate_embeddings.py",
+            "--url",
+            f"http://127.0.0.1:{fake.server_port}",
+            "--model",
+            "fake-64",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "model=fake-64 pairs=150" in result.stdout
+    assert "threshold precision recall" in result.stdout
 
 
 @pytest.mark.parametrize("scenario", ["malformed", "429"])
