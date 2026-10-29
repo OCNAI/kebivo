@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo/lockup-dark.svg">
+    <img src="docs/assets/logo/lockup.svg" alt="Kebivo" width="256" height="64">
+  </picture>
+</p>
+
 # Kebivo: self-hosted knowledge gap feedback for AI agents
 
 Collect the questions your AI assistant could not answer.

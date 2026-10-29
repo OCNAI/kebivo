@@ -1,6 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <rect width="32" height="32" rx="9" fill="#35735e"/>
-  <g fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M11 8v16"/><path d="M11.5 16.5 21 8.5"/><path d="M15.5 13.1 21.5 24"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><defs><clipPath id="cclight"><rect x="26" y="26" width="34" height="34" rx="6"/></clipPath></defs>
+<circle cx="25" cy="25" r="21" fill="#1f4d3d"/>
+<rect x="26" y="26" width="34" height="34" rx="6" fill="#285f4c"/>
+<circle cx="25" cy="25" r="21" fill="#e3f0ea" clip-path="url(#cclight)"/></svg>
