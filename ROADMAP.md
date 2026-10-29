@@ -28,7 +28,7 @@ Today a [webhook destination](docs/destinations.md) plus a small relay reaches m
 
 ### Ways to send feedback
 
-Today: the REST API, the MCP server, the [Python `kebivo-client`](sdk/python/README.md) and [TypeScript](sdk/typescript/README.md) SDKs, and the Python SDK's optional [LangChain callback](docs/rest-api.md#langchain-and-langgraph) for empty retrievals. Copy-paste [framework examples](examples/frameworks/) cover Claude, LlamaIndex, the OpenAI Agents SDK, LangGraph, the Vercel AI SDK, Open WebUI and Dify.
+Today: the REST API, the MCP server, the [Python `kebivo-client`](sdk/python/README.md) and [TypeScript](sdk/typescript/README.md) SDKs, and the Python SDK's optional [LangChain callback](docs/rest-api.md#langchain-and-langgraph) for empty retrievals. Copy-paste [framework examples](examples/frameworks/) cover Claude, LlamaIndex, Pydantic AI, the OpenAI Agents SDK, LangGraph, the Vercel AI SDK, Open WebUI and Dify.
 
 - Deeper LangGraph integration beyond the retriever callback
 - Framework middleware that reports a gap when an answer has no supporting sources
