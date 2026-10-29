@@ -273,7 +273,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Report readiness only when SQLite can be opened and queried."""
         try:
             _probe_sqlite(app.state.database_path)
-            if inspect(app.state.engine).has_table("processing_jobs"):
+        except (OSError, sqlite3.Error, DBAPIError):
+            worker_state = "disabled" if app.state.worker is None else "stopped"
+            return JSONResponse(
+                status_code=503,
+                content={"status": "not_ready", "database": "unavailable", "worker": worker_state},
+            )
+        backlog: dict[str, int | None] = {
+            "pending_count": None,
+            "oldest_pending_age_seconds": None,
+        }
+        try:
+            if app.state.database_path == ":memory:":
                 with app.state.session_factory() as db:
                     pending_count, oldest = db.execute(
                         select(func.count(), func.min(ProcessingJob.created_at)).where(
@@ -281,19 +292,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         )
                     ).one()
             else:
-                pending_count, oldest = 0, None
-            oldest_age = (
-                max(0, int((datetime.now(UTC) - oldest.replace(tzinfo=UTC)).total_seconds()))
-                if oldest is not None
-                else None
-            )
-            backlog = {"pending_count": pending_count, "oldest_pending_age_seconds": oldest_age}
-        except (OSError, sqlite3.Error, DBAPIError):
-            worker_state = "disabled" if app.state.worker is None else "stopped"
-            return JSONResponse(
-                status_code=503,
-                content={"status": "not_ready", "database": "unavailable", "worker": worker_state},
-            )
+                from urllib.parse import quote
+
+                uri = f"file:{quote(str(Path(app.state.database_path).resolve()))}?mode=ro"
+                with sqlite3.connect(uri, uri=True, timeout=0.1) as connection:
+                    connection.execute("PRAGMA busy_timeout=100")
+                    pending_count, oldest = connection.execute(
+                        "SELECT count(*), min(created_at) FROM processing_jobs "
+                        "WHERE status = 'pending'"
+                    ).fetchone()
+            if isinstance(oldest, str):
+                oldest = datetime.fromisoformat(oldest)
+            backlog = {
+                "pending_count": pending_count,
+                "oldest_pending_age_seconds": (
+                    max(0, int((datetime.now(UTC) - oldest.replace(tzinfo=UTC)).total_seconds()))
+                    if oldest is not None
+                    else None
+                ),
+            }
+        except (OSError, sqlite3.Error, DBAPIError) as exc:
+            if "no such table: processing_jobs" in str(exc):
+                backlog["pending_count"] = 0
         if not app.state.search_ready:
             return JSONResponse(
                 status_code=503,

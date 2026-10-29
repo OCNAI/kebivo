@@ -2,6 +2,8 @@
 
 import json
 import sqlite3
+import time
+from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -10,7 +12,7 @@ import anyio
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import event, select
+from sqlalchemy import event, select, text
 from sqlalchemy.exc import OperationalError
 
 from kebivo.db import make_engine
@@ -126,20 +128,20 @@ def test_sqlite_busy_retry_replays_once_and_exhaustion_is_503(
 
     attempts = 0
 
-    def busy_twice(*args: Any, **kwargs: Any) -> Any:
+    def busy_once(*args: Any, **kwargs: Any) -> Any:
         nonlocal attempts
         attempts += 1
-        if attempts <= 2:
+        if attempts == 1:
             raise OperationalError(
                 "BEGIN IMMEDIATE", {}, sqlite3.OperationalError("database is locked")
             )
         return actual_submit(*args, **kwargs)
 
-    monkeypatch.setattr("kebivo.feedback.routes.submit_feedback", busy_twice)
+    monkeypatch.setattr("kebivo.feedback.routes.submit_feedback", busy_once)
     monkeypatch.setattr("kebivo.feedback.ingest.time.sleep", lambda _: None)
     payload = {"event_type": "knowledge_gap", "question": "Busy test"}
     first = post(client, token, payload, "busy-once")
-    assert first.status_code == 202 and attempts == 3
+    assert first.status_code == 202 and attempts == 2
     replay = post(client, token, payload, "busy-once")
     assert replay.status_code == 202
     assert replay.headers["idempotent-replayed"] == "true"
@@ -186,6 +188,27 @@ def test_readiness_backlog_tracks_pending_and_drain(tmp_path: Path) -> None:
         "pending_count": 0,
         "oldest_pending_age_seconds": None,
     }
+
+
+def test_readiness_ignores_pool_pressure_and_held_writer(tmp_path: Path) -> None:
+    client, app, _, token = setup(tmp_path)
+    app.state.worker = None
+    with sqlite3.connect(app.state.database_path) as writer, ExitStack() as stack:
+        writer.execute("BEGIN IMMEDIATE")
+        for _ in range(15):
+            db = stack.enter_context(app.state.session_factory())
+            db.execute(text("SELECT 1"))
+        started = time.monotonic()
+        ready = client.get("/health/ready")
+        assert time.monotonic() - started < 1
+        assert ready.status_code == 200
+        assert ready.json()["routing_backlog"]["pending_count"] == 0
+
+        started = time.monotonic()
+        response = post(client, token, {"event_type": "knowledge_gap", "question": "Pool busy"})
+        assert time.monotonic() - started < 4
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "storage_busy"
 
 
 def test_rest_and_mcp_store_same_feedback_contract(tmp_path: Path) -> None:

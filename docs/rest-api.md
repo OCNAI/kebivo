@@ -26,7 +26,7 @@ Create a token in the admin UI (open a project, then **Project tokens**) or with
 
 Tokens can have an expiry date and can be revoked at any time. A token stops working when it expires or is revoked, or when its project is disabled or archived. Project tokens cannot call admin APIs, and an admin session cannot submit arbitrary feedback through `POST /api/v1/feedback`. Keep tokens in a secret store or environment variable, never in source code or client-side JavaScript.
 
-An administrator can send a sample gap with `POST /api/v1/projects/{project_id}/test-event` using the session cookie, an allowed `Origin`, and `X-CSRF-Token`. Project bearer tokens receive 401. The request has no body; a successful response is `202` with `event_id` and `group_id`. Its question is `Kebivo test event: How do I reset my corporate VPN?`; it adds the `kebivo-test` tag and follows the same ingestion, grouping, routing and delivery path as a REST report. Each administrator can send 10 test events per minute; excess requests return 429 with `Retry-After`. Archived or disabled projects return 409.
+An administrator can send a sample gap with `POST /api/v1/projects/{project_id}/test-event` using the session cookie, an allowed `Origin`, and `X-CSRF-Token`. Project bearer tokens receive 401. The request has no body; a successful response is `202` with `event_id` and `group_id`. Its question is `Kebivo test event: How do I reset my corporate VPN?`; it adds the `kebivo-test` tag and follows the same ingestion, grouping, routing and delivery path as a REST report. Each administrator can send 10 test events per minute; excess requests return 429 with `Retry-After`. Storage contention returns `503 storage_busy` with `Retry-After: 1`. Test events have no idempotency key, so retrying after an uncertain network result can create another event. Archived or disabled projects return 409.
 
 ## Request
 
@@ -95,7 +95,7 @@ The `request_id` is also in the `X-Request-ID` response header; include it when 
 | 415 | `unsupported_media_type` | `Content-Type` is not `application/json`. | No. |
 | 422 | `validation_error` | A field is missing, unknown, too long or has the wrong type. `details.fields` lists each problem. | No. |
 | 429 | `rate_limited` | Too many requests. | Yes, after `Retry-After` seconds. |
-| 503 | `storage_busy` | SQLite could not acquire its writer lock after bounded retries. No acceptance is reported. | Yes, after `Retry-After` seconds with the same key. |
+| 503 | `storage_busy` | SQLite could not acquire a writer lock or pooled connection within the bounded wait. No acceptance is reported. | Yes, after `Retry-After` seconds with the same key. |
 | 5xx | `internal_error` or a proxy error | Server or proxy failure. | Yes, with backoff and the same key. |
 
 Network errors and timeouts are also safe to retry with the same idempotency key.

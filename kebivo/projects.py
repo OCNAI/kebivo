@@ -344,6 +344,7 @@ def install_project_routes(app: Any) -> None:
                 409, "project_inactive", "Project must be active to send a test event"
             )
         request.app.state.feedback_limiter.check("admin_test_event", admin.id, 10)
+        db.close()
         try:
             result = await ingest(
                 request.app.state.session_factory,

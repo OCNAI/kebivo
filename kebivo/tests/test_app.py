@@ -1,11 +1,14 @@
 import logging
+import sqlite3
 from io import StringIO
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
 
 from kebivo.app import create_app
+from kebivo.models import Base
 from kebivo.settings import Settings, SettingsError
 
 
@@ -40,6 +43,29 @@ def test_readiness_reports_database_failure_but_liveness_stays_up(tmp_path: Path
         "status": "not_ready",
         "database": "unavailable",
         "worker": "disabled",
+    }
+
+
+def test_readiness_degrades_only_metrics_on_read_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = create_app(Settings("Kebivo", "test", None, str(tmp_path / "app.db")))
+    Base.metadata.create_all(app.state.engine)
+    connect = sqlite3.connect
+
+    def fail_metrics(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+        if kwargs.get("uri"):
+            raise sqlite3.OperationalError("database is locked")
+        return cast(sqlite3.Connection, connect(*args, **kwargs))
+
+    monkeypatch.setattr("kebivo.app.sqlite3.connect", fail_metrics)
+    with TestClient(app) as client:
+        response = client.get("/health/ready")
+    assert response.status_code == 200
+    assert response.json()["database"] == "ok"
+    assert response.json()["routing_backlog"] == {
+        "pending_count": None,
+        "oldest_pending_age_seconds": None,
     }
 
 
