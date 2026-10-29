@@ -306,8 +306,11 @@ def _audit_project(
     )
 
 
-def _reset_backfill(job: EmbeddingBackfill, semantic: dict[str, Any]) -> None:
+def _reset_backfill(
+    job: EmbeddingBackfill, semantic: dict[str, Any], embedding_revision: str
+) -> None:
     job.provider_id = semantic["provider_id"]
+    job.embedding_revision = embedding_revision
     job.model = semantic["embedding_model"]
     job.dims = None
     job.remaining = semantic["max_scan"]
@@ -530,7 +533,9 @@ def install_project_routes(app: Any) -> None:
                 if backfill is None:
                     backfill = EmbeddingBackfill(project_id=project.id)
                     db.add(backfill)
-                _reset_backfill(backfill, new_semantic)
+                provider = db.get(LlmProviderConfig, new_semantic["provider_id"])
+                assert provider is not None
+                _reset_backfill(backfill, new_semantic, provider.embedding_revision)
             elif not embedding_enabled:
                 backfill = db.get(EmbeddingBackfill, project.id)
                 if backfill is not None:

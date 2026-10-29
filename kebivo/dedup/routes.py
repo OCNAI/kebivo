@@ -184,11 +184,31 @@ def install_dedup_routes(app: Any) -> None:
                 return embedding_response
 
             def scan() -> list[tuple[str, str, float]]:
+                assert provider is not None
                 with request.app.state.session_factory() as scan_db:
+                    current_provider = scan_db.get(LlmProviderConfig, provider.id)
+                    current_project = scan_db.get(Project, project.id)
+                    current_dedup = (
+                        json.loads(current_project.settings_json).get("deduplication", {})
+                        if current_project
+                        else {}
+                    )
+                    current_semantic = current_dedup.get("semantic", {})
+                    if (
+                        current_provider is None
+                        or current_provider.embedding_revision != provider.embedding_revision
+                        or current_dedup.get("mode") != "semantic"
+                        or current_semantic.get("method") != "embeddings"
+                        or current_semantic.get("provider_id") != provider.id
+                        or current_semantic.get("embedding_model") != semantic["embedding_model"]
+                    ):
+                        return []
                     rows = embedding_candidates(
                         scan_db,
                         project.id,
                         body.event_type,
+                        provider.id,
+                        provider.embedding_revision,
                         semantic["embedding_model"],
                         len(vector),
                         None,

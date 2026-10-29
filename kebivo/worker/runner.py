@@ -350,6 +350,8 @@ class Worker:
                 dedup.get("mode") != "semantic"
                 or semantic.get("method") != "embeddings"
                 or semantic.get("embedding_model") != job.model
+                or semantic.get("provider_id") != job.provider_id
+                or provider.embedding_revision != job.embedding_revision
             ):
                 return None
             secrets = (
@@ -365,7 +367,9 @@ class Worker:
                     (QuestionEmbedding.model != job.model)
                     | ((QuestionEmbedding.dims != job.dims) if job.dims is not None else False)
                     | QuestionEmbedding.provider_id.is_(None)
-                    | (QuestionEmbedding.provider_id != job.provider_id),
+                    | (QuestionEmbedding.provider_id != job.provider_id)
+                    | (QuestionEmbedding.embedding_revision != job.embedding_revision)
+                    | QuestionEmbedding.embedding_revision.is_(None),
                 )
             )
             db.commit()
@@ -445,6 +449,7 @@ class Worker:
                 self._finish_backfill_batch,
                 job.project_id,
                 job.provider_id,
+                job.embedding_revision,
                 job.model,
                 job.dims,
                 pending,
@@ -459,6 +464,7 @@ class Worker:
         self,
         project_id: str,
         provider_id: str,
+        embedding_revision: str | None,
         model: str,
         dims: int | None,
         pending: list[tuple[str, str, str]],
@@ -466,7 +472,14 @@ class Worker:
     ) -> None:
         with self.factory() as db, db.begin():
             job = db.get(EmbeddingBackfill, project_id)
-            if job is None or (job.provider_id, job.model, job.dims) != (provider_id, model, dims):
+            provider = db.get(LlmProviderConfig, provider_id)
+            if (
+                job is None
+                or provider is None
+                or provider.embedding_revision != embedding_revision
+                or (job.provider_id, job.embedding_revision, job.model, job.dims)
+                != (provider_id, embedding_revision, model, dims)
+            ):
                 return
             if vectors:
                 current_dims = len(vectors[0])
@@ -518,6 +531,7 @@ class Worker:
                         project_id=project_id,
                         event_type=event.event_type,
                         provider_id=job.provider_id,
+                        embedding_revision=job.embedding_revision,
                         model=model,
                         values=vector,
                     )
@@ -671,7 +685,7 @@ class Worker:
             return work
 
     def _score_embedding(self, work: SemanticWork) -> None:
-        assert work.vector is not None
+        assert work.vector is not None and work.provider is not None
         with self.factory() as db:
             event = db.get(FeedbackEvent, work.event_id)
             assert event is not None
@@ -679,6 +693,8 @@ class Worker:
                 db,
                 work.project_id,
                 event.event_type,
+                work.provider.id,
+                work.provider.embedding_revision,
                 work.settings["embedding_model"],
                 len(work.vector),
                 work.group_id,
@@ -921,7 +937,24 @@ class Worker:
         group = db.get(FeedbackGroup, work.group_id)
         outcome = work.outcome
         matched_group = None
-        if group is None or not self._untouched(db, event.id, group):
+        project = db.get(Project, event.project_id)
+        provider = db.get(LlmProviderConfig, work.provider.id) if work.provider else None
+        dedup = json.loads(project.settings_json).get("deduplication", {}) if project else {}
+        semantic = dedup.get("semantic", {})
+        current = (
+            provider is not None
+            and work.provider is not None
+            and provider.embedding_revision == work.provider.embedding_revision
+            and dedup.get("mode") == "semantic"
+            and semantic.get("method") == "embeddings"
+            and semantic.get("provider_id") == work.provider.id
+            and semantic.get("embedding_model") == work.settings["embedding_model"]
+        )
+        if work.provider is not None and not current:
+            outcome = "skipped_group_changed"
+            work.vector = None
+            work.scores = []
+        elif group is None or not self._untouched(db, event.id, group):
             outcome = "skipped_group_changed"
         elif outcome == "matched" and work.scores:
             matched_group = db.get(FeedbackGroup, work.scores[0][0])
@@ -961,6 +994,7 @@ class Worker:
                 project_id=event.project_id,
                 event_type=event.event_type,
                 provider_id=work.provider.id if work.provider else None,
+                embedding_revision=work.provider.embedding_revision if work.provider else None,
                 model=work.settings["embedding_model"],
                 values=work.vector,
             )

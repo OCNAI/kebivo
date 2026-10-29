@@ -53,6 +53,7 @@ def store(
     provider_id: str | None,
     model: str,
     values: Sequence[float],
+    embedding_revision: str | None = None,
 ) -> None:
     db.execute(
         insert(QuestionEmbedding)
@@ -61,6 +62,7 @@ def store(
             project_id=project_id,
             event_type=event_type,
             provider_id=provider_id,
+            embedding_revision=embedding_revision,
             model=model,
             dims=len(values),
             vector=encode(values),

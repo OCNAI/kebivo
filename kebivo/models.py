@@ -137,6 +137,9 @@ class Destination(Base):
 class LlmProviderConfig(Base):
     __tablename__ = "llm_provider_configs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    embedding_revision: Mapped[str] = mapped_column(
+        String(36), nullable=False, default=lambda: str(uuid4()), server_default=""
+    )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     provider_type: Mapped[str] = mapped_column(String(30), nullable=False)
     base_url: Mapped[str] = mapped_column(String(2048), nullable=False)
@@ -234,6 +237,7 @@ class QuestionEmbedding(Base):
     provider_id: Mapped[str | None] = mapped_column(
         ForeignKey("llm_provider_configs.id", ondelete="SET NULL")
     )
+    embedding_revision: Mapped[str | None] = mapped_column(String(36))
     model: Mapped[str] = mapped_column(String(200), nullable=False)
     dims: Mapped[int] = mapped_column(Integer, nullable=False)
     vector: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
@@ -249,6 +253,7 @@ class EmbeddingBackfill(Base):
         ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
     )
     provider_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    embedding_revision: Mapped[str | None] = mapped_column(String(36))
     model: Mapped[str] = mapped_column(String(200), nullable=False)
     dims: Mapped[int | None] = mapped_column(Integer)
     remaining: Mapped[int] = mapped_column(Integer, nullable=False)
