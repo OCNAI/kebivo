@@ -49,6 +49,8 @@ class Outbound:
     headers: dict[str, str] = field(default_factory=dict)
     # Optional check of a 2xx response body, for APIs that report errors with 200.
     accepted: Callable[[bytes], bool] | None = None
+    # GitHub also reports rate limits as 403; other APIs use 403 for permission errors.
+    rate_limit_403: bool = False
 
 
 Mapper = Callable[[dict[str, Any]], Outbound]
@@ -104,8 +106,18 @@ def forward(outbound: Outbound, timeout: float) -> tuple[int, dict[str, str]]:
     except urllib.error.HTTPError as error:
         detail = error.read()[:500].decode(errors="replace")
         print(json.dumps({"target_status": error.code, "target_body": detail}), file=sys.stderr)
-        if error.code == 429:
+        rate_limited = error.code == 403 and outbound.rate_limit_403 and (
+            error.headers.get("X-RateLimit-Remaining") == "0"
+            or error.headers.get("Retry-After", "").isdigit()
+            or "rate limit" in detail.lower()
+        )
+        if error.code == 429 or rate_limited:
             retry_after = error.headers.get("Retry-After", "")
+            if outbound.rate_limit_403 and not retry_after.isdigit():
+                reset = error.headers.get("X-RateLimit-Reset", "")
+                retry_after = (
+                    str(max(1, int(reset) - int(time.time()))) if reset.isdigit() else "60"
+                )
             return 429, {"Retry-After": retry_after} if retry_after.isdigit() else {}
         return (502 if error.code >= 500 else 424), {}
     except (urllib.error.URLError, TimeoutError) as error:
