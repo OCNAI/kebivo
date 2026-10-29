@@ -18,7 +18,8 @@ from kebivo.destinations.validation import ConfigError
 from kebivo.errors import error_response
 from kebivo.llm.adapter import complete, embed
 from kebivo.llm.validation import validate
-from kebivo.models import AuditEvent, LlmProviderConfig, Project, now_utc
+from kebivo.models import AuditEvent, EmbeddingBackfill, LlmProviderConfig, Project, now_utc
+from kebivo.projects import _reset_backfill
 from kebivo.security.secretbox import SecretBox, SecretError
 
 PURPOSE = "llm-provider-secrets"
@@ -263,6 +264,33 @@ def install_llm_provider_routes(app: Any) -> None:
         except ConfigError as exc:
             return _fail(request, 422, "validation_error", f"Invalid {exc.field}")
         _apply(row, data, request, hidden)
+        if any(
+            key in body.model_fields_set
+            for key in (
+                "provider_type",
+                "base_url",
+                "deployment",
+                "api_version",
+                "api_key_env",
+                "api_key",
+                "headers",
+                "allow_private_network",
+            )
+        ):
+            row.embedding_revision = str(uuid4())
+            for project in db.scalars(select(Project)).all():
+                dedup = json.loads(project.settings_json).get("deduplication", {})
+                semantic = dedup.get("semantic", {})
+                if (
+                    dedup.get("mode") == "semantic"
+                    and semantic.get("method") == "embeddings"
+                    and semantic.get("provider_id") == row.id
+                ):
+                    backfill = db.get(EmbeddingBackfill, project.id)
+                    if backfill is None:
+                        backfill = EmbeddingBackfill(project_id=project.id)
+                        db.add(backfill)
+                    _reset_backfill(backfill, semantic, row.embedding_revision)
         row.updated_at = now_utc()
         _audit(db, admin.id, "llm_provider.updated", row.id)
         try:

@@ -22,6 +22,8 @@ def embedding_candidates(
     db: Session,
     project_id: str,
     event_type: str,
+    provider_id: str,
+    embedding_revision: str,
     model: str,
     dims: int,
     exclude_group_id: str | None,
@@ -33,6 +35,7 @@ def embedding_candidates(
         FROM feedback_groups g
         JOIN question_embeddings e ON e.event_id = g.representative_event_id
         WHERE g.project_id=:project AND g.event_type=:type
+          AND e.provider_id=:provider AND e.embedding_revision=:revision
           AND e.model=:model AND e.dims=:dims
           AND (:exclude IS NULL OR g.id<>:exclude)
         ORDER BY g.last_seen_at DESC, g.id DESC LIMIT :limit
@@ -40,6 +43,8 @@ def embedding_candidates(
         {
             "project": project_id,
             "type": event_type,
+            "provider": provider_id,
+            "revision": embedding_revision,
             "model": model,
             "dims": dims,
             "exclude": exclude_group_id,

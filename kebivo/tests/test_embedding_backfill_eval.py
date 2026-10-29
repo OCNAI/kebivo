@@ -109,8 +109,13 @@ def test_backfill_and_event_embedding_same_vector_complete(tmp_path: Path, fake:
     assert work.vector is not None
 
     worker._finish_backfill_batch(
-        backfill.project_id, backfill.provider_id, backfill.model, backfill.dims,
-        pending, [work.vector],
+        backfill.project_id,
+        backfill.provider_id,
+        backfill.embedding_revision,
+        backfill.model,
+        backfill.dims,
+        pending,
+        [work.vector],
     )
     worker._process_sync(job_id, work)
     with app.state.session_factory() as db:
@@ -119,6 +124,37 @@ def test_backfill_and_event_embedding_same_vector_complete(tmp_path: Path, fake:
         assert db.get(FeedbackEvent, event_id).processing_status == "completed"
         assert db.scalar(select(func.count()).select_from(QuestionEmbedding)) == 1
         assert db.scalar(select(func.count()).select_from(DedupEvaluation)) == 1
+
+
+def test_inflight_backfill_does_not_write_after_provider_edit(tmp_path: Path, fake: Any) -> None:
+    client, app, project, token = setup_semantic(tmp_path, fake)
+    semantic = enable_embeddings(client, app, project)
+    event_id = post(
+        client, token, {"event_type": "knowledge_gap", "question": "Reset VPN access"}
+    ).json()["event_id"]
+    worker = Worker(app.state.session_factory, app.state.settings)
+    batch = worker._backfill_batch()
+    assert batch is not None
+    old_job, _, _, pending = batch
+    changed = client.patch(
+        f"/api/v1/admin/llm-providers/{semantic['provider_id']}",
+        json={"base_url": f"http://localhost:{fake.server_port}"},
+        headers=write_headers(client),
+    )
+    assert changed.status_code == 200, changed.text
+    worker._finish_backfill_batch(
+        old_job.project_id,
+        old_job.provider_id,
+        old_job.embedding_revision,
+        old_job.model,
+        old_job.dims,
+        pending,
+        [[1.0] * 64],
+    )
+    with app.state.session_factory() as db:
+        assert db.get(QuestionEmbedding, event_id) is None
+        current = db.get(EmbeddingBackfill, project["id"])
+        assert current is not None and current.embedding_revision != old_job.embedding_revision
 
 
 def test_embedding_job_retries_after_routing_error(tmp_path: Path, fake: Any) -> None:
