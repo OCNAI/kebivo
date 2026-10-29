@@ -23,6 +23,7 @@ from kebivo.feedback.ingest import (
     InvalidSubmission,
     NotAuthorized,
     RateLimited,
+    StorageBusy,
     ingest,
 )
 from kebivo.feedback.service import IdempotencyConflict
@@ -281,6 +282,10 @@ def install_mcp_route(app: Any) -> Server[Any] | None:
             return _result(
                 {"error": {"code": "rate_limited", "retry_after_seconds": exc.retry_after}},
                 error=True,
+            )
+        except StorageBusy:
+            return _result(
+                {"error": {"code": "storage_busy", "retry_after_seconds": 1}}, error=True
             )
         except Exception as exc:
             logging.getLogger("kebivo.mcp").error("mcp_tool_failed: %s", type(exc).__name__)

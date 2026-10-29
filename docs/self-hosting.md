@@ -236,6 +236,7 @@ If the host or a backup may be compromised, rotate all of the above: tokens, adm
 | `docker compose up` says `Set SECRET_KEY ...` | The variable is missing from `.env`. |
 | Sign-in fails with a forbidden error | The URL in the browser must match an entry in `ALLOWED_ORIGINS` exactly, including scheme and port. |
 | `/health/ready` returns `503` | `"database":"unavailable"`: the volume or file is not readable. `"search":"unavailable"`: the search index failed to start. `"worker":"stopped"`: the worker crashed; check the logs and restart. `"worker":"disabled"` with status `ok` only means `WORKER_ENABLED=false`. |
+| `/health/ready` shows a rising `routing_backlog.pending_count` | Routing jobs are waiting. `oldest_pending_age_seconds` shows how long the oldest has waited. A growing queue with `worker: ok` means the worker is running but intake exceeds its processing rate; a stopped worker returns 503. Queued work alone does not fail readiness. |
 | Port 8000 is in use | Set `APP_PORT` in `.env` and use that port in your URLs and `ALLOWED_ORIGINS`. |
 | Rate limits hit everyone at once behind a proxy | `TRUSTED_PROXY_IPS` is not set, so every request appears to come from the proxy. |
 | MCP returns `421` | The `Host` the client uses is not in `ALLOWED_ORIGINS` or `MCP_ALLOWED_HOSTS`, or the proxy does not forward the original `Host`. |
@@ -245,3 +246,17 @@ If the host or a backup may be compromised, rotate all of the above: tokens, adm
 | Group counts look wrong | `docker compose exec app python -m kebivo.cli check-groups`. |
 
 Report security problems as described in [`SECURITY.md`](../SECURITY.md), not in a public issue.
+
+## Intake capacity check
+
+The 0.2.0 one-host observation used 4 CPU cores, 7.6 GiB RAM, 10,000 reports, 8 concurrent writers, and a load generator on the same host. It saw 9 SQLite lock HTTP 500s, p95 response time 1.1 seconds, and a 5.2-second maximum. A 12,000-job routing queue drained at roughly 24–30 jobs per second. These are observations from one host, not capacity guarantees. Keep the database on local storage and watch `routing_backlog` during bursts. Increase host capacity or reduce intake if the pending age keeps growing; SQLite still has one writer, and a sustained overload may return retryable 503s.
+
+To reproduce a burst on a disposable instance with a project token, set `FEEDBACK_RATE_LIMIT_PER_TOKEN=20000` and `FEEDBACK_RATE_LIMIT_PER_IP=20000` before starting the server. Point the script at the same SQLite file used by that server; do not run it against production feedback:
+
+```sh
+export KEBIVO_BURST_TOKEN='<disposable project token>'
+python3 scripts/feedback-burst.py --url http://127.0.0.1:8000 --database /path/to/app.sqlite3 --events 10000 --writers 8
+curl -fsS http://127.0.0.1:8000/health/ready
+```
+
+The script prints counts by HTTP status (including 202, 429, and 503), persisted event count, p95, and maximum latency. It exits with an error if 202 responses do not match persisted events or if any HTTP 500 occurs. Use the same settings and host for before/after comparisons; network and disk differences change the result.

@@ -1,11 +1,14 @@
 """Protocol-neutral feedback validation and durable acceptance."""
 
+import sqlite3
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from fastapi import HTTPException
 from pydantic import ValidationError
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.concurrency import run_in_threadpool
 
@@ -38,6 +41,22 @@ class InvalidIdempotencyKey(Exception):
 @dataclass(frozen=True)
 class RateLimited(Exception):
     retry_after: int
+
+
+class StorageBusy(Exception):
+    """The feedback transaction could not acquire SQLite's writer lock."""
+
+
+def _sqlite_busy(exc: OperationalError) -> bool:
+    original = exc.orig
+    if not isinstance(original, sqlite3.OperationalError):
+        return False
+    code = getattr(original, "sqlite_errorcode", None)
+    return (
+        (code & 0xFF) in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+        if code
+        else str(original).lower() in {"database is locked", "database table is locked"}
+    )
 
 
 async def ingest(
@@ -94,15 +113,24 @@ async def ingest(
         raise RateLimited(int((exc.headers or {}).get("Retry-After", "1"))) from None
 
     def persist() -> SubmissionResult:
-        with session_factory() as db:
-            return _submit(
-                db,
-                principal,
-                submission,
-                key,
-                window_hours=settings.idempotency_window_hours,
-                submitted_via=submitted_via,
-            )
+        for attempt in range(3):
+            try:
+                with session_factory() as db:
+                    return _submit(
+                        db,
+                        principal,
+                        submission,
+                        key,
+                        window_hours=settings.idempotency_window_hours,
+                        submitted_via=submitted_via,
+                    )
+            except OperationalError as exc:
+                if not _sqlite_busy(exc):
+                    raise
+                if attempt == 2:
+                    raise StorageBusy from exc
+                time.sleep(0.1 * (attempt + 1))
+        raise AssertionError("unreachable")
 
     return await run_in_threadpool(persist)
 
@@ -113,5 +141,6 @@ __all__ = [
     "InvalidSubmission",
     "NotAuthorized",
     "RateLimited",
+    "StorageBusy",
     "ingest",
 ]

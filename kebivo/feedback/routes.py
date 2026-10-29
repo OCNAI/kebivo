@@ -14,6 +14,7 @@ from kebivo.feedback.ingest import (
     InvalidSubmission,
     NotAuthorized,
     RateLimited,
+    StorageBusy,
     ingest,
 )
 from kebivo.feedback.schemas import CorrectionSubmission, GapSubmission
@@ -112,6 +113,7 @@ def install_feedback_routes(app: FastAPI) -> None:
                     415: "Unsupported media type",
                     422: "Invalid fields",
                     429: "Rate limited",
+                    503: "SQLite writer busy; retry after Retry-After",
                 }.items()
             },
         },
@@ -160,6 +162,12 @@ def install_feedback_routes(app: FastAPI) -> None:
                 status_code=429,
                 detail="Feedback rate limit exceeded",
                 headers={"Retry-After": str(exc.retry_after)},
+            ) from None
+        except StorageBusy:
+            raise HTTPException(
+                status_code=503,
+                detail="Feedback storage busy; retry with the same idempotency key",
+                headers={"Retry-After": "1"},
             ) from None
         except IdempotencyConflict:
             raise HTTPException(status_code=409, detail="Idempotency conflict") from None
