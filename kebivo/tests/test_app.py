@@ -69,6 +69,20 @@ def test_readiness_degrades_only_metrics_on_read_failure(
     }
 
 
+def test_readiness_reports_corrupt_database(tmp_path: Path) -> None:
+    database = tmp_path / "app.db"
+    app = create_app(Settings("Kebivo", "test", None, str(database), worker_enabled=False))
+    Base.metadata.create_all(app.state.engine)
+
+    with TestClient(app) as client:
+        app.state.engine.dispose()
+        database.write_bytes(b"not a SQLite database")
+        response = client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert response.json()["database"] == "unavailable"
+
+
 def test_readiness_reports_missing_secure_search(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("kebivo.app._probe_fts5", lambda: False)
     with TestClient(create_app(Settings("test", "test", None, ":memory:"))) as client:

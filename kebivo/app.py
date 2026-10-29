@@ -8,9 +8,10 @@ import sqlite3
 import time
 import uuid
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -292,10 +293,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         )
                     ).one()
             else:
-                from urllib.parse import quote
-
                 uri = f"file:{quote(str(Path(app.state.database_path).resolve()))}?mode=ro"
-                with sqlite3.connect(uri, uri=True, timeout=0.1) as connection:
+                with closing(sqlite3.connect(uri, uri=True, timeout=0.1)) as connection:
                     connection.execute("PRAGMA busy_timeout=100")
                     pending_count, oldest = connection.execute(
                         "SELECT count(*), min(created_at) FROM processing_jobs "
@@ -311,9 +310,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     else None
                 ),
             }
-        except (OSError, sqlite3.Error, DBAPIError) as exc:
+        except sqlite3.DatabaseError as exc:
             if "no such table: processing_jobs" in str(exc):
                 backlog["pending_count"] = 0
+            elif "locked" not in str(exc).lower() and "busy" not in str(exc).lower():
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "status": "not_ready",
+                        "database": "unavailable",
+                        "worker": "disabled" if app.state.worker is None else "stopped",
+                    },
+                )
+        except (OSError, DBAPIError):
+            pass
         if not app.state.search_ready:
             return JSONResponse(
                 status_code=503,
