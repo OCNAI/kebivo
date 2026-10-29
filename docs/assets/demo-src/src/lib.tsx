@@ -1,5 +1,5 @@
 import {Img, Layout, Rect, Txt} from '@motion-canvas/2d';
-import logo from './logo.svg';
+import logo from '../../logo/lockup.svg';
 import {Reference, createRef} from '@motion-canvas/core';
 
 export const C = {
@@ -85,7 +85,7 @@ export function shotCard(ref: Reference<Rect>, src: string, sw: number, sh: numb
 }
 
 export function mark(size: number) {
-  return <Img src={logo} width={size} height={size} />;
+  return <Img src={logo} width={size} height={size / 4} />;
 }
 
 export {createRef};

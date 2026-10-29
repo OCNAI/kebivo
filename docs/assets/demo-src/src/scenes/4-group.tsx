@@ -3,10 +3,8 @@ import {all, createRef, easeOutBack, fadeTransition, waitFor} from '@motion-canv
 import {C, H, SANS, W, caption, progress, shotCard} from '../lib';
 import inbox1 from '../../shots/inbox-1.png';
 import inbox2 from '../../shots/inbox-2.png';
-import inbox3 from '../../shots/inbox-3.png';
-import inbox4 from '../../shots/inbox-4.png';
 
-// Scene 3: the same question keeps arriving; the real inbox shows one group whose count climbs 1 to 4.
+// Scene 3: the second report joins the same group in the real inbox.
 const CARD_Y = 140;
 const crop = {x: 140, y: 800, w: 1760, h: 430};
 const CARD_W = 1160;
@@ -17,18 +15,18 @@ export default makeScene2D(function* (view) {
   const card = createRef<Rect>();
   const pill = createRef<Rect>();
   const n = createRef<Txt>();
-  const shots = [inbox2, inbox3, inbox4];
+  const shots = [inbox2];
   const imgs = shots.map(() => createRef<Img>());
   const s = CARD_W / crop.w;
 
   view.add(
     <>
-      {caption(cap, 'Repeats join the same entry. The count goes up, with no second alert.', C.dark)}
+      {caption(cap, 'A repeat question joins the same inbox entry.', C.dark)}
       {shotCard(card, inbox1, 2560, 1440, crop, CARD_W)}
       <Rect layout ref={pill} x={330} y={CARD_Y - 190} fill={C.green} radius={40} padding={[10, 30]} opacity={0} scale={0.6}>
         <Txt ref={n} text="1 occurrence" fontFamily={SANS} fontWeight={800} fontSize={46} letterSpacing={-1} fill="#fff" />
       </Rect>
-      {/* Dim the other groups so the eye stays on the VPN row (first row is 73 to 158 px into the crop). */}
+      {/* Dim the other groups so the eye stays on the /orders row (first row is 73 to 158 px into the crop). */}
       <Rect y={CARD_Y + (crop.h * s) / 2 - (crop.h - 158) * s / 2} width={CARD_W} height={(crop.h - 158) * s} fill="rgba(246,248,246,0.72)" />
       {progress(4, false)}
     </>,
@@ -53,8 +51,9 @@ export default makeScene2D(function* (view) {
   yield* all(pill().opacity(1, 0.3), pill().scale(1, 0.4, easeOutBack));
   yield* waitFor(0.8);
   for (let i = 0; i < shots.length; i++) {
+    yield* imgs[i]().opacity(1, 0.3);
     n().text(`${i + 2} occurrences`);
-    yield* all(imgs[i]().opacity(1, 0.3), pill().scale(1.12, 0.15).back(0.2));
-    yield* waitFor(i === shots.length - 1 ? 1.8 : 0.8);
+    yield* pill().scale(1.12, 0.15).back(0.2);
+    yield* waitFor(2.0);
   }
 });

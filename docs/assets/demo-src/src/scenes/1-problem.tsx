@@ -16,7 +16,7 @@ export default makeScene2D(function* (view) {
       {caption(cap, 'Your AI gets a question your docs don’t cover.', '#fff')}
       <Txt
         ref={cap2}
-        text="And the people who write the docs never hear about it."
+        text="The API docs team needs to hear about it."
         x={-W / 2 + 80}
         y={-H / 2 + 70}
         offset={[-1, -1]}
@@ -32,7 +32,7 @@ export default makeScene2D(function* (view) {
       />
       <Txt ref={label} text="YOUR AI ASSISTANT" x={-W / 2 + 80} y={10} offset={[-1, 0]} fontFamily={SANS} fontWeight={700} fontSize={20} letterSpacing={3} fill="#7fa493" />
       <Rect layout ref={user} x={W / 2 - 80} y={90} offset={[1, 0]} padding={[22, 32]} radius={[28, 28, 6, 28]} fill="#2f4a3f">
-        <Txt text="Where is the VPN setup guide?" fontFamily={SANS} fontWeight={700} fontSize={34} fill="#fff" />
+        <Txt text="How do I paginate the /orders endpoint?" fontFamily={SANS} fontWeight={700} fontSize={34} fill="#fff" width={660} textWrap />
       </Rect>
       <Rect layout ref={agent} x={-W / 2 + 80} y={210} offset={[-1, 0]} padding={[22, 32]} radius={[28, 28, 28, 6]} fill="#fff" opacity={0} scale={0.9} stroke={C.amber} lineWidth={0}>
         <Txt text="I don’t know. I couldn’t find that in my sources." fontFamily={SANS} fontWeight={700} fontSize={34} fill={C.ink} textWrap width={640} />

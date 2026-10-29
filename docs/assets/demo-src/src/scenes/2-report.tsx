@@ -21,7 +21,7 @@ export default makeScene2D(function* (view) {
 
   view.add(
     <>
-      {caption(cap, 'Your agent reports the gap to Kebivo over MCP.', C.dark)}
+      {caption(cap, 'Your agent can report the gap over MCP.', C.dark)}
       <Rect
         ref={card}
         y={90}
@@ -55,8 +55,8 @@ export default makeScene2D(function* (view) {
 
   yield* card().opacity(1, 0.3);
   yield* l1().text('tools/call  report_knowledge_gap', 0.9);
-  yield* l2().text('question: "Where is the VPN setup guide?"', 1.0);
-  yield* l3().text('tags:     it, vpn', 0.5);
+  yield* l2().text('question: "How do I paginate the /orders endpoint?"', 1.0);
+  yield* l3().text('tags:     api, pagination', 0.5);
   yield* waitFor(0.4);
   yield* all(ok().opacity(1, 0.25), l4().text(`event_id ${result.event_id.slice(0, 8)}…`, 0.5));
   yield* waitFor(1.6);
