@@ -5,7 +5,7 @@ button, input, textarea { font: inherit; }
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; background: radial-gradient(ellipse at 50% 35%, #edf3ed 0%, #f7f8f6 55%); }
 .topbar { min-height: 70px; padding: 0 clamp(20px, 5vw, 72px); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e6ebe6; background: rgba(255,255,255,.78); }
 .brand { display: inline-flex; align-items: center; gap: 11px; color: #263d35; text-decoration: none; font-weight: 700; letter-spacing: -.025em; }
-.brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: white; background: #35735e; font-weight: 700; }
+.brand-mark { display:block; width: 32px; height: 32px; }
 .phase-label, .eyebrow { color: #78877f; font-size: 11px; letter-spacing: .14em; font-weight: 700; text-transform: uppercase; }
 .top-nav { display:flex; gap:8px; margin-left:auto; margin-right:22px; } .top-nav a { color:#596b61; text-decoration:none; padding:8px 12px; border-radius:7px; font-size:13px; } .top-nav a[aria-current=page] { background:#edf5ef; color:#285f4c; font-weight:700; }
 main { width: 100%; flex: 1; padding: 42px 24px; }
