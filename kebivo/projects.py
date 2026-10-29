@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from kebivo.admin_groups import _reject_bearer
 from kebivo.auth import AdminAuth, _peer_ip
-from kebivo.feedback.ingest import RateLimited, ingest
+from kebivo.feedback.ingest import RateLimited, StorageBusy, ingest
 from kebivo.feedback.tags import normalize_tag_v1
 from kebivo.models import (
     AdminUser,
@@ -344,6 +344,7 @@ def install_project_routes(app: Any) -> None:
                 409, "project_inactive", "Project must be active to send a test event"
             )
         request.app.state.feedback_limiter.check("admin_test_event", admin.id, 10)
+        db.close()
         try:
             result = await ingest(
                 request.app.state.session_factory,
@@ -366,6 +367,12 @@ def install_project_routes(app: Any) -> None:
                 status_code=429,
                 detail="Feedback rate limit exceeded",
                 headers={"Retry-After": str(exc.retry_after)},
+            ) from None
+        except StorageBusy:
+            raise HTTPException(
+                status_code=503,
+                detail="Feedback storage busy; retry",
+                headers={"Retry-After": "1"},
             ) from None
         group_id = db.scalar(
             select(FeedbackGroupMember.group_id).where(

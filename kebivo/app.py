@@ -8,13 +8,16 @@ import sqlite3
 import time
 import uuid
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
+from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import inspect, text
+from sqlalchemy import func, inspect, select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
@@ -36,6 +39,7 @@ from kebivo.feedback_guard import FeedbackBodyGuard
 from kebivo.feedback_limits import FixedWindowLimiter
 from kebivo.llm.routes import install_llm_provider_routes
 from kebivo.mcp_server import install_mcp_route
+from kebivo.models import ProcessingJob
 from kebivo.projects import install_project_routes
 from kebivo.routing.routes import install_routing_routes
 from kebivo.security.secretbox import SecretBox
@@ -266,16 +270,60 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/health/ready", tags=["health"], response_model=None)
-    def ready() -> JSONResponse | dict[str, str]:
+    def ready() -> JSONResponse | dict[str, object]:
         """Report readiness only when SQLite can be opened and queried."""
         try:
             _probe_sqlite(app.state.database_path)
-        except (OSError, sqlite3.Error):
+        except (OSError, sqlite3.Error, DBAPIError):
             worker_state = "disabled" if app.state.worker is None else "stopped"
             return JSONResponse(
                 status_code=503,
                 content={"status": "not_ready", "database": "unavailable", "worker": worker_state},
             )
+        backlog: dict[str, int | None] = {
+            "pending_count": None,
+            "oldest_pending_age_seconds": None,
+        }
+        try:
+            if app.state.database_path == ":memory:":
+                with app.state.session_factory() as db:
+                    pending_count, oldest = db.execute(
+                        select(func.count(), func.min(ProcessingJob.created_at)).where(
+                            ProcessingJob.status == "pending"
+                        )
+                    ).one()
+            else:
+                uri = f"file:{quote(str(Path(app.state.database_path).resolve()))}?mode=ro"
+                with closing(sqlite3.connect(uri, uri=True, timeout=0.1)) as connection:
+                    connection.execute("PRAGMA busy_timeout=100")
+                    pending_count, oldest = connection.execute(
+                        "SELECT count(*), min(created_at) FROM processing_jobs "
+                        "WHERE status = 'pending'"
+                    ).fetchone()
+            if isinstance(oldest, str):
+                oldest = datetime.fromisoformat(oldest)
+            backlog = {
+                "pending_count": pending_count,
+                "oldest_pending_age_seconds": (
+                    max(0, int((datetime.now(UTC) - oldest.replace(tzinfo=UTC)).total_seconds()))
+                    if oldest is not None
+                    else None
+                ),
+            }
+        except sqlite3.DatabaseError as exc:
+            if "no such table: processing_jobs" in str(exc):
+                backlog["pending_count"] = 0
+            elif "locked" not in str(exc).lower() and "busy" not in str(exc).lower():
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "status": "not_ready",
+                        "database": "unavailable",
+                        "worker": "disabled" if app.state.worker is None else "stopped",
+                    },
+                )
+        except (OSError, DBAPIError):
+            pass
         if not app.state.search_ready:
             return JSONResponse(
                 status_code=503,
@@ -295,9 +343,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if worker_state == "stopped":
             return JSONResponse(
                 status_code=503,
-                content={"status": "not_ready", "database": "ok", "worker": worker_state},
+                content={
+                    "status": "not_ready",
+                    "database": "ok",
+                    "worker": worker_state,
+                    "routing_backlog": backlog,
+                },
             )
-        return {"status": "ok", "database": "ok", "search": "ok", "worker": worker_state}
+        return {
+            "status": "ok",
+            "database": "ok",
+            "search": "ok",
+            "worker": worker_state,
+            "routing_backlog": backlog,
+        }
 
     # Register the implemented auth, project administration, and token APIs.
     install_auth_routes(app)

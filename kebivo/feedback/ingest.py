@@ -1,11 +1,15 @@
 """Protocol-neutral feedback validation and durable acceptance."""
 
+import sqlite3
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from fastapi import HTTPException
 from pydantic import ValidationError
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeout
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.concurrency import run_in_threadpool
 
@@ -40,6 +44,22 @@ class RateLimited(Exception):
     retry_after: int
 
 
+class StorageBusy(Exception):
+    """The feedback transaction could not acquire SQLite's writer lock."""
+
+
+def _sqlite_busy(exc: OperationalError) -> bool:
+    original = exc.orig
+    if not isinstance(original, sqlite3.OperationalError):
+        return False
+    code = getattr(original, "sqlite_errorcode", None)
+    return (
+        (code & 0xFF) in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+        if code
+        else str(original).lower() in {"database is locked", "database table is locked"}
+    )
+
+
 async def ingest(
     session_factory: sessionmaker[Session],
     settings: Any,
@@ -59,7 +79,10 @@ async def ingest(
         with session_factory() as db:
             return db.get(Project, principal.project_id)
 
-    project = await run_in_threadpool(load_project)
+    try:
+        project = await run_in_threadpool(load_project)
+    except PoolTimeout:
+        raise StorageBusy from None
     if project is None or not project.is_active or project.archived_at is not None:
         raise NotAuthorized("unauthorized")
     event_type = payload.get("event_type")
@@ -94,15 +117,29 @@ async def ingest(
         raise RateLimited(int((exc.headers or {}).get("Retry-After", "1"))) from None
 
     def persist() -> SubmissionResult:
-        with session_factory() as db:
-            return _submit(
-                db,
-                principal,
-                submission,
-                key,
-                window_hours=settings.idempotency_window_hours,
-                submitted_via=submitted_via,
-            )
+        for attempt in range(2):
+            try:
+                with session_factory() as db:
+                    # Keep the server's retry budget inside the SDK's default 10 s timeout.
+                    connection = db.connection()
+                    connection.exec_driver_sql("PRAGMA busy_timeout=1500")
+                    return _submit(
+                        db,
+                        principal,
+                        submission,
+                        key,
+                        window_hours=settings.idempotency_window_hours,
+                        submitted_via=submitted_via,
+                    )
+            except OperationalError as exc:
+                if not _sqlite_busy(exc):
+                    raise
+                if attempt == 1:
+                    raise StorageBusy from exc
+                time.sleep(0.1 * (attempt + 1))
+            except PoolTimeout:
+                raise StorageBusy from None
+        raise AssertionError("unreachable")
 
     return await run_in_threadpool(persist)
 
@@ -113,5 +150,6 @@ __all__ = [
     "InvalidSubmission",
     "NotAuthorized",
     "RateLimited",
+    "StorageBusy",
     "ingest",
 ]

@@ -144,8 +144,8 @@ def require_admin(request: Request) -> tuple[AdminUser, AdminSession, str]:
         supplied_csrf = request.headers.get("x-csrf-token", "")
         if not hmac.compare_digest(supplied_csrf, csrf_token(request.app.state.settings, token)):
             raise HTTPException(status_code=403, detail="Invalid CSRF token")
-    # Simulation is read-only, including its authentication path.
-    if not request.url.path.endswith("/routing/simulate"):
+    # These paths must not write during authentication.
+    if not request.url.path.endswith(("/routing/simulate", "/test-event")):
         session_row.last_seen_at = now
         db.commit()
     return admin, session_row, csrf_token(request.app.state.settings, token)
