@@ -31,7 +31,7 @@ docker compose exec app python -m kebivo.cli bootstrap --email admin@example.org
 
 `<REPOSITORY_URL>` is the address you cloned from. Readiness returns `"status":"ok"` with `"database":"ok","search":"ok","worker":"ok"` once migrations are done. The last command prompts for the administrator password. Then open <http://127.0.0.1:8000/> and sign in. The [README quickstart](../README.md#quickstart) continues from here to the first feedback event.
 
-Compose runs only the `app` service. It builds the image `kebivo:local`, stores SQLite at `/data/app.sqlite3` in the named volume `app-data`, publishes the port on `127.0.0.1` only, probes `/health/ready` every 30 seconds, and restarts the container unless you stop it. The container runs as an unprivileged user (UID 10001).
+Compose runs only the `app` service. It builds the image `kebivo:local`, stores SQLite at `/data/app.sqlite3` in the named volume `app-data`, publishes the port on `127.0.0.1` only, probes `/health/ready` every 30 seconds, and restarts the container unless you stop it. The image has the same readiness healthcheck for plain `docker run`; Compose keeps its explicit check so the service uses these settings even with an image override. `docker ps` shows `(healthy)` after a successful probe. The container runs as an unprivileged user (UID 10001).
 
 | Command | Effect |
 | --- | --- |
