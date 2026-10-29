@@ -29,6 +29,10 @@ curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/he
 **Without Kebivo:** the bot says it couldn't find the answer, the user gives up, and the question sits in a log nobody reads.\
 **With Kebivo:** the question shows up once in the inbox with a repeat count, and your routing rules can send it to Slack, email or a webhook for whoever owns those docs.
 
+![Kebivo group inbox with sample data: "How do I paginate the /orders endpoint?" has 7 occurrences, alongside other open knowledge gaps from an API docs assistant.](docs/assets/screenshots/inbox.png)
+
+<sub>Group inbox from a real Kebivo 0.2.0 container with sample data.</sub>
+
 Continue with the [Quickstart](#quickstart) to report a question. For framework tutorials, see the [Kebivo Guides](https://kebivo.com/guides/).
 
 ## Why
