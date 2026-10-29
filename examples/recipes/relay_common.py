@@ -1,6 +1,6 @@
 """Shared part of the webhook relay recipes: verify, deduplicate, forward.
 
-Each recipe (slack/, linear/, jira/) imports this module and supplies one
+Each recipe imports this module and supplies one
 function that turns a verified Kebivo payload into an outbound HTTP request.
 Standard library only. Copy this file next to the recipe you use.
 
