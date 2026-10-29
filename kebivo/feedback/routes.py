@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import TimeoutError as PoolTimeout
 from starlette.concurrency import run_in_threadpool
 
 from kebivo.auth import _peer_ip
@@ -119,7 +120,16 @@ def install_feedback_routes(app: FastAPI) -> None:
         },
     )
     async def post_feedback(request: Request) -> JSONResponse:
-        principal, _project = await run_in_threadpool(authenticate_project_token, request)
+        try:
+            principal, _project = await run_in_threadpool(authenticate_project_token, request)
+        except PoolTimeout:
+            raise HTTPException(
+                status_code=503,
+                detail="Feedback storage busy; retry with the same idempotency key",
+                headers={"Retry-After": "1"},
+            ) from None
+        finally:
+            request.state.db.close()
         try:
             payload = json.loads(await request.body())
         except (ValueError, UnicodeError, RecursionError):

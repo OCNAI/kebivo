@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeout
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.concurrency import run_in_threadpool
 
@@ -78,7 +79,10 @@ async def ingest(
         with session_factory() as db:
             return db.get(Project, principal.project_id)
 
-    project = await run_in_threadpool(load_project)
+    try:
+        project = await run_in_threadpool(load_project)
+    except PoolTimeout:
+        raise StorageBusy from None
     if project is None or not project.is_active or project.archived_at is not None:
         raise NotAuthorized("unauthorized")
     event_type = payload.get("event_type")
@@ -113,9 +117,12 @@ async def ingest(
         raise RateLimited(int((exc.headers or {}).get("Retry-After", "1"))) from None
 
     def persist() -> SubmissionResult:
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 with session_factory() as db:
+                    # Keep the server's retry budget inside the SDK's default 10 s timeout.
+                    connection = db.connection()
+                    connection.exec_driver_sql("PRAGMA busy_timeout=1500")
                     return _submit(
                         db,
                         principal,
@@ -127,9 +134,11 @@ async def ingest(
             except OperationalError as exc:
                 if not _sqlite_busy(exc):
                     raise
-                if attempt == 2:
+                if attempt == 1:
                     raise StorageBusy from exc
                 time.sleep(0.1 * (attempt + 1))
+            except PoolTimeout:
+                raise StorageBusy from None
         raise AssertionError("unreachable")
 
     return await run_in_threadpool(persist)
