@@ -14,7 +14,7 @@ Kebivo stays small on purpose: one container, one SQLite file, no telemetry, and
 
 ### Destinations
 
-Today a [webhook destination](docs/destinations.md) plus a small relay reaches most tools. The repository ships relay [recipes](examples/recipes/) for Slack, Linear and Jira.
+Today a [webhook destination](docs/destinations.md) plus a small relay reaches most tools. The repository ships relay [recipes](examples/recipes/) for Slack, Linear, Jira and Teams.
 
 | Candidate | Today |
 | --- | --- |
@@ -22,7 +22,7 @@ Today a [webhook destination](docs/destinations.md) plus a small relay reaches m
 | Native Jira destination | Webhook + Jira relay recipe |
 | Native Linear destination | Webhook + Linear relay recipe |
 | GitHub Issues and GitLab Issues destinations | Webhook + your own relay |
-| Microsoft Teams destination | Webhook + your own relay |
+| Microsoft Teams destination | Webhook + [Teams relay recipe](examples/recipes/teams/) |
 | Google Sheets and SharePoint list destinations | Webhook + your own relay |
 | PostgreSQL destination (write each report to a table) | Webhook or the JSON Lines [export](docs/export.md) |
 
