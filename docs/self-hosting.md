@@ -257,7 +257,7 @@ In a disposable worker-enabled run with rate limits raised, 1,000 reports at 8 w
 
 To reproduce a burst on a disposable instance with a project token, set `FEEDBACK_RATE_LIMIT_PER_TOKEN=20000` and `FEEDBACK_RATE_LIMIT_PER_IP=20000` before starting the server. Point the script at the same SQLite file used by that server; do not run it against production feedback:
 
-The script accepts loopback targets by default. `--allow-remote` is required for any other host because it sends the project token to the chosen URL. It opens the database read-only and exits nonzero on HTTP 500, network errors, or a mismatch between `202` responses and persisted rows; a retryable `503` can be an expected overload result.
+The script accepts loopback targets by default. `--allow-remote` is required for any other host because it sends the project token to the chosen URL. It opens the database read-only and exits nonzero unless at least one response is `202`, every response is `202`, `429`, or `503`, and the number of `202` responses matches persisted rows. A retryable `429` or `503` can be an expected overload result.
 
 ```sh
 export KEBIVO_BURST_TOKEN='<disposable project token>'
@@ -265,4 +265,4 @@ python3 scripts/feedback-burst.py --url http://127.0.0.1:8000 --database /path/t
 curl -fsS http://127.0.0.1:8000/health/ready
 ```
 
-The script prints counts by HTTP status (including 202, 429, and 503), persisted event count, p95, and maximum latency. It exits with an error if 202 responses do not match persisted events or if any HTTP 500 occurs. Use the same settings and host for before/after comparisons; network and disk differences change the result.
+The script prints counts by HTTP status (including 202, 429, and 503), persisted event count, p95, and maximum latency. On failure, it also prints counts for unexpected responses. Use the same settings and host for before/after comparisons; network and disk differences change the result.
