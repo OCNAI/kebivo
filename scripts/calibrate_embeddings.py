@@ -12,7 +12,6 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", required=True, help="OpenAI-compatible API base URL")
     parser.add_argument("--model", required=True)
-    parser.add_argument("--dims", type=int, required=True)
     parser.add_argument("--api-key-env", help="environment variable containing API key")
     args = parser.parse_args()
     provider = LlmProviderConfig(
@@ -26,7 +25,7 @@ def main() -> None:
         api_key_env=args.api_key_env,
     )
     pairs = corpus()
-    scores = asyncio.run(score_pairs(provider, {}, args.model, args.dims, pairs))
+    scores = asyncio.run(score_pairs(provider, {}, args.model, pairs))
     print(f"model={args.model} pairs={len(pairs)}")
     print(table(scores))
 

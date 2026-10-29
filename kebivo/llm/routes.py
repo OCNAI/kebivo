@@ -88,6 +88,20 @@ def _save_secrets(row: LlmProviderConfig, request: Request, secrets: dict[str, s
         row.secrets_key_id = None
 
 
+def _embedding_projects(db: Session, provider_id: str) -> list[tuple[Project, dict[str, Any]]]:
+    matches = []
+    for project in db.scalars(select(Project)):
+        dedup = json.loads(project.settings_json).get("deduplication", {})
+        semantic = dedup.get("semantic", {})
+        if (
+            dedup.get("mode") == "semantic"
+            and semantic.get("method") == "embeddings"
+            and semantic.get("provider_id") == provider_id
+        ):
+            matches.append((project, semantic))
+    return matches
+
+
 def _public(row: LlmProviderConfig, request: Request) -> dict[str, Any]:
     try:
         secrets = _secrets(row, request)
@@ -111,6 +125,7 @@ def _public(row: LlmProviderConfig, request: Request) -> dict[str, Any]:
         "headers": [{"name": name, "configured": True} for name in json.loads(row.headers_json)],
         "last_test_at": row.last_test_at.isoformat() if row.last_test_at else None,
         "last_test_ok": row.last_test_ok,
+        "used_for_embeddings": bool(_embedding_projects(request.state.db, row.id)),
         "created_at": row.created_at.isoformat(),
         "updated_at": row.updated_at.isoformat(),
     }
@@ -278,19 +293,12 @@ def install_llm_provider_routes(app: Any) -> None:
             )
         ):
             row.embedding_revision = str(uuid4())
-            for project in db.scalars(select(Project)).all():
-                dedup = json.loads(project.settings_json).get("deduplication", {})
-                semantic = dedup.get("semantic", {})
-                if (
-                    dedup.get("mode") == "semantic"
-                    and semantic.get("method") == "embeddings"
-                    and semantic.get("provider_id") == row.id
-                ):
-                    backfill = db.get(EmbeddingBackfill, project.id)
-                    if backfill is None:
-                        backfill = EmbeddingBackfill(project_id=project.id)
-                        db.add(backfill)
-                    _reset_backfill(backfill, semantic, row.embedding_revision)
+            for project, semantic in _embedding_projects(db, row.id):
+                backfill = db.get(EmbeddingBackfill, project.id)
+                if backfill is None:
+                    backfill = EmbeddingBackfill(project_id=project.id)
+                    db.add(backfill)
+                _reset_backfill(backfill, semantic, row.embedding_revision)
         row.updated_at = now_utc()
         _audit(db, admin.id, "llm_provider.updated", row.id)
         try:
@@ -345,16 +353,8 @@ def install_llm_provider_routes(app: Any) -> None:
         if kind == "embeddings":
             model = embedding_model
             if model is None:
-                for project in db.scalars(select(Project)):
-                    dedup = json.loads(project.settings_json).get("deduplication", {})
-                    semantic = dedup.get("semantic", {})
-                    if (
-                        dedup.get("mode") == "semantic"
-                        and semantic.get("method") == "embeddings"
-                        and semantic.get("provider_id") == row.id
-                    ):
-                        model = semantic.get("embedding_model")
-                        break
+                for _, semantic in _embedding_projects(db, row.id)[:1]:
+                    model = semantic.get("embedding_model")
             model = model or row.model
             if row.provider_type == "azure_openai":
                 result = {

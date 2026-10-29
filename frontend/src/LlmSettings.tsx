@@ -1,7 +1,7 @@
 import React from 'react';
 import { ApiError, apiRequest } from './api';
 
-type Provider = { id: string; name: string; provider_type: string; base_url: string; model: string | null; deployment: string | null; api_version: string | null; structured_output: string; timeout_seconds: number; enabled: boolean; allow_private_network: boolean; api_key_env: string | null; api_key: { configured: boolean; source: string }; last_test_at: string | null };
+type Provider = { id: string; name: string; provider_type: string; base_url: string; model: string | null; deployment: string | null; api_version: string | null; structured_output: string; timeout_seconds: number; enabled: boolean; allow_private_network: boolean; api_key_env: string | null; api_key: { configured: boolean; source: string }; last_test_at: string | null; used_for_embeddings?: boolean };
 export function LlmSettings() {
   const [items, setItems] = React.useState<Provider[]>([]), [editing, setEditing] = React.useState<Provider | null | false>(false), [formType, setFormType] = React.useState('openai_compatible'), [busy, setBusy] = React.useState(false), [error, setError] = React.useState(''), [message, setMessage] = React.useState(''), [test, setTest] = React.useState<Record<string, unknown> | null>(null), [embeddingTest, setEmbeddingTest] = React.useState<Record<string, unknown> | null>(null);
   const refresh = React.useCallback(() => apiRequest<{items: Provider[]}>('admin/llm-providers').then(r => setItems(r.items)), []);
@@ -13,10 +13,10 @@ export function LlmSettings() {
   async function remove(provider: Provider) { setError(''); try { await apiRequest(`admin/llm-providers/${provider.id}`, {method:'DELETE'}); await refresh(); setMessage('Provider deleted.'); } catch (e) { setError(e instanceof ApiError && e.code === 'provider_in_use' ? 'Provider is in use by a project. Change that project’s semantic provider before deleting.' : e instanceof Error ? e.message : 'Delete failed.'); } }
   async function testProvider(provider: Provider) {
     setTest({loading:true});
-    const azure = provider.provider_type === 'azure_openai';
-    setEmbeddingTest(azure ? {unsupported:true} : {loading:true});
+    const azure = provider.provider_type === 'azure_openai', runEmbeddings = provider.used_for_embeddings && !azure;
+    setEmbeddingTest(!provider.used_for_embeddings ? null : azure ? {unsupported:true} : {loading:true});
     const chat = apiRequest<Record<string, unknown>>(`admin/llm-providers/${provider.id}/test`, {method:'POST'}).then(setTest).catch(e => setTest({failure: e instanceof Error ? e.message : 'Connection test failed'}));
-    const embeddings = azure ? Promise.resolve() : apiRequest<Record<string, unknown>>(`admin/llm-providers/${provider.id}/test?kind=embeddings`, {method:'POST'}).then(setEmbeddingTest).catch(e => setEmbeddingTest({failure: e instanceof ApiError ? e.code || 'request_failed' : 'request_failed'}));
+    const embeddings = !runEmbeddings ? Promise.resolve() : apiRequest<Record<string, unknown>>(`admin/llm-providers/${provider.id}/test?kind=embeddings`, {method:'POST'}).then(setEmbeddingTest).catch(e => setEmbeddingTest({failure: e instanceof ApiError ? e.code || 'request_failed' : 'request_failed'}));
     await Promise.all([chat, embeddings]);
   }
   return <section aria-labelledby="llm-title"><div className="dashboard-heading"><div><h2 id="llm-title">LLM providers</h2><p className="subtle">Optional providers are used only by projects with semantic matching enabled.</p></div><button onClick={() => {setEditing(null);setTest(null);setEmbeddingTest(null);}}>Add provider</button></div>{error && <p role="alert" className="error-message">{error}</p>}{message && <p role="status" className="notice">{message}</p>}
