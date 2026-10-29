@@ -24,7 +24,7 @@ Today a [webhook destination](docs/destinations.md) plus a small relay reaches m
 | GitHub Issues and GitLab Issues destinations | Webhook + your own relay |
 | Microsoft Teams destination | Webhook + your own relay |
 | Google Sheets and SharePoint list destinations | Webhook + your own relay |
-| PostgreSQL destination (write each report to a table) | Webhook or the JSON Lines [export](docs/export.md) |
+| PostgreSQL destination (write each report to a table) | Webhook or the JSON Lines [export](docs/export.md); [SQLite loader example](examples/export_to_sqlite.py) for database and BI use |
 
 ### Ways to send feedback
 
