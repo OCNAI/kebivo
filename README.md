@@ -7,7 +7,7 @@
 
 # Kebivo: the inbox for questions your AI couldn't answer
 
-Collect knowledge gaps from your AI app, group repeat questions, and route them to the people who can fix the content.
+Your AI app reports each question it couldn't answer; Kebivo groups the repeats and routes them to whoever can fix the docs.
 
 ![Demo: a question the assistant cannot answer is reported to Kebivo, grouped with repeats, routed to a content owner, and resolved. Product frames come from a real Kebivo container with sample data.](docs/assets/demo.gif)
 
@@ -26,15 +26,14 @@ docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 -v k
 curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
 ```
 
-**Without Kebivo:** A missed question disappears into a chat log; repeated misses stay invisible to the content owner.
-
-**With Kebivo:** The owner sees one inbox group with a repeat count and can route it to the right team.
+**Without Kebivo:** the bot says it couldn't find the answer, the user gives up, and the question sits in a log nobody reads.\
+**With Kebivo:** the question shows up once in the inbox with a repeat count, and your routing rules can send it to Slack, email or a webhook for whoever owns those docs.
 
 Continue with the [Quickstart](#quickstart) to report a question. For framework tutorials, see the [Kebivo Guides](https://kebivo.com/guides/).
 
 ## Why
 
-When an assistant cannot answer, the documentation owner may never see the question. The same question can fail again, and corrections offered in chat may never reach the people who maintain the content. Kebivo collects those reports in one place, where owners can triage and route them to the tools they use.
+When an assistant cannot answer, the documentation owner may never see the question. The same question can fail again, and corrections offered in chat may never reach the people who maintain the content. Kebivo collects those knowledge gaps in one place, where owners can triage and route them to the tools they use.
 
 ## When to use Kebivo
 
