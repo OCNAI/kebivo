@@ -16,6 +16,8 @@ strict: true
 # and a plain repository link (docs/overrides) instead of the GitHub API widget.
 theme:
   name: material
+  logo: assets/images/logo.svg
+  favicon: assets/images/favicon.png
   custom_dir: docs/overrides
   font: false
   features:
