@@ -9,12 +9,14 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import inspect, text
+from sqlalchemy import func, inspect, select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
@@ -36,6 +38,7 @@ from kebivo.feedback_guard import FeedbackBodyGuard
 from kebivo.feedback_limits import FixedWindowLimiter
 from kebivo.llm.routes import install_llm_provider_routes
 from kebivo.mcp_server import install_mcp_route
+from kebivo.models import ProcessingJob
 from kebivo.projects import install_project_routes
 from kebivo.routing.routes import install_routing_routes
 from kebivo.security.secretbox import SecretBox
@@ -266,11 +269,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/health/ready", tags=["health"], response_model=None)
-    def ready() -> JSONResponse | dict[str, str]:
+    def ready() -> JSONResponse | dict[str, object]:
         """Report readiness only when SQLite can be opened and queried."""
         try:
             _probe_sqlite(app.state.database_path)
-        except (OSError, sqlite3.Error):
+            if inspect(app.state.engine).has_table("processing_jobs"):
+                with app.state.session_factory() as db:
+                    pending_count, oldest = db.execute(
+                        select(func.count(), func.min(ProcessingJob.created_at)).where(
+                            ProcessingJob.status == "pending"
+                        )
+                    ).one()
+            else:
+                pending_count, oldest = 0, None
+            oldest_age = (
+                max(0, int((datetime.now(UTC) - oldest.replace(tzinfo=UTC)).total_seconds()))
+                if oldest is not None
+                else None
+            )
+            backlog = {"pending_count": pending_count, "oldest_pending_age_seconds": oldest_age}
+        except (OSError, sqlite3.Error, DBAPIError):
             worker_state = "disabled" if app.state.worker is None else "stopped"
             return JSONResponse(
                 status_code=503,
@@ -295,9 +313,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if worker_state == "stopped":
             return JSONResponse(
                 status_code=503,
-                content={"status": "not_ready", "database": "ok", "worker": worker_state},
+                content={
+                    "status": "not_ready",
+                    "database": "ok",
+                    "worker": worker_state,
+                    "routing_backlog": backlog,
+                },
             )
-        return {"status": "ok", "database": "ok", "search": "ok", "worker": worker_state}
+        return {
+            "status": "ok",
+            "database": "ok",
+            "search": "ok",
+            "worker": worker_state,
+            "routing_backlog": backlog,
+        }
 
     # Register the implemented auth, project administration, and token APIs.
     install_auth_routes(app)

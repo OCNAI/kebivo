@@ -95,6 +95,7 @@ The `request_id` is also in the `X-Request-ID` response header; include it when 
 | 415 | `unsupported_media_type` | `Content-Type` is not `application/json`. | No. |
 | 422 | `validation_error` | A field is missing, unknown, too long or has the wrong type. `details.fields` lists each problem. | No. |
 | 429 | `rate_limited` | Too many requests. | Yes, after `Retry-After` seconds. |
+| 503 | `storage_busy` | SQLite could not acquire its writer lock after bounded retries. No acceptance is reported. | Yes, after `Retry-After` seconds with the same key. |
 | 5xx | `internal_error` or a proxy error | Server or proxy failure. | Yes, with backoff and the same key. |
 
 Network errors and timeouts are also safe to retry with the same idempotency key.

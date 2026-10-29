@@ -67,6 +67,8 @@ def install_error_handlers(app: FastAPI) -> None:
             "Project corrections are disabled": "corrections_disabled",
             "Invalid idempotency key": "invalid_idempotency_key",
             "Idempotency conflict": "idempotency_conflict",
+            "Feedback storage busy; retry with the same idempotency key": "storage_busy",
+            "Feedback storage busy; retry": "storage_busy",
         }.get(message, _code(exc.status_code))
         return error_response(
             exc.status_code,

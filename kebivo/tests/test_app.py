@@ -18,7 +18,10 @@ def test_liveness_and_readiness(tmp_path: Path) -> None:
     assert live.status_code == 200
     assert live.json() == {"status": "ok"}
     assert ready.status_code == 200
-    assert ready.json() == {"status": "ok", "database": "ok", "search": "ok", "worker": "disabled"}
+    assert ready.json() == {
+        "status": "ok", "database": "ok", "search": "ok", "worker": "disabled",
+        "routing_backlog": {"pending_count": 0, "oldest_pending_age_seconds": None},
+    }
     assert live.headers["x-request-id"]
 
 
