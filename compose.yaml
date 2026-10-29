@@ -43,7 +43,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 30s
     restart: unless-stopped
 
