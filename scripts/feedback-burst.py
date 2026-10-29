@@ -14,6 +14,12 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
+def burst_verdict(counts: Counter[int | str], persisted: int) -> tuple[bool, dict[str, int]]:
+    offending = {str(status): count for status, count in counts.items() if status not in {202, 429, 503}}
+    passed = counts[202] > 0 and persisted == counts[202] and not offending
+    return passed, offending
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://127.0.0.1:8000")
@@ -80,7 +86,9 @@ def main() -> None:
         "max_seconds": round(max(latencies), 3),
     }
     print(json.dumps(summary, sort_keys=True))
-    if persisted != counts[202] or counts[500] or counts["network_error"]:
+    passed, offending = burst_verdict(counts, persisted)
+    if not passed:
+        print(f"Offending response counts: {json.dumps(offending, sort_keys=True)}")
         raise SystemExit(1)
 
 
