@@ -36,3 +36,15 @@ Each line follows this JSON Schema:
 ```
 
 The export contains event text as submitted, including any personal data in it. Protect and delete downloaded files according to your data policy.
+
+## Load into SQLite
+
+The standard-library example loads an export file or stdin into `feedback.sqlite3`. It creates a `feedback` table with the export fields as columns, stores `metadata`, `tags`, `group` and `deliveries` as JSON text, and updates existing rows by `id` when you import again.
+
+```sh
+curl -fsS -b cookies.txt "http://127.0.0.1:8000/api/v1/admin/projects/$PROJECT_ID/export" \
+  | python examples/export_to_sqlite.py --database feedback.sqlite3
+# Or: python examples/export_to_sqlite.py export.jsonl --database feedback.sqlite3
+```
+
+Use an authenticated admin session in `cookies.txt`. A project token cannot export. Keep the database file private because it contains submitted event text.
