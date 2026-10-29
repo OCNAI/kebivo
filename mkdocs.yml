@@ -10,6 +10,8 @@ site_dir: site
 strict: true
 theme:
   name: material
+  logo: assets/images/logo.svg
+  favicon: assets/images/favicon.png
   features:
     - navigation.sections
     - content.code.copy
