@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 root = Path(__file__).resolve().parent.parent
-LINK = re.compile(r"(?<!\!)\[[^\]]*\]\(([^)\s]+)\)|!\[[^\]]*\]\(([^)\s]+)\)|<(\.?[\w./-]+)>")
+LINK = re.compile(r'(?<!\!)\[[^\]]*\]\(([^)\s]+)\)|!\[[^\]]*\]\(([^)\s]+)\)|<(\.?\w[\w./-]*)>|\b(?:src|srcset)="([^"\s]+)"')
 
 
 def slug(heading: str) -> str:
