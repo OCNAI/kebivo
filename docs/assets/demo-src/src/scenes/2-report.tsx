@@ -55,8 +55,8 @@ export default makeScene2D(function* (view) {
 
   yield* card().opacity(1, 0.3);
   yield* l1().text('tools/call  report_knowledge_gap', 0.9);
-  yield* l2().text('question: "How do I paginate the /orders endpoint?"', 1.0);
-  yield* l3().text('tags:     api, pagination', 0.5);
+  yield* l2().text('question: "Do you ship to Canada?"', 1.0);
+  yield* l3().text('tags:     shipping', 0.5);
   yield* waitFor(0.4);
   yield* all(ok().opacity(1, 0.25), l4().text(`event_id ${result.event_id.slice(0, 8)}…`, 0.5));
   yield* waitFor(1.6);
