@@ -4,7 +4,7 @@ import {C, H, SANS, W, caption, progress, shotCard} from '../lib';
 import routing from '../../shots/routing.png';
 import deliveries from '../../shots/deliveries.png';
 
-// Scene 3: a routing rule sends the group to the docs owner; the delivery log shows it delivered.
+// Scene 3: a routing rule sends the report to the store team; the delivery log shows it delivered.
 const RULE_Y = 85;
 const LOG_Y = 245;
 const ruleCrop = {x: 40, y: 160, w: 1470, h: 165};
@@ -21,7 +21,7 @@ export default makeScene2D(function* (view) {
   
   view.add(
     <>
-      {caption(cap, 'A configured rule routes the report to the API docs webhook.', C.dark)}
+      {caption(cap, 'A configured rule routes the report to the store team.', C.dark)}
       {shotCard(rule, routing, 1556, 982, ruleCrop, 1120)}
       {shotCard(log, deliveries, 2560, 1440, logCrop, 1120)}
       {/* First delivery row sits 56 to 144 px into the crop. */}

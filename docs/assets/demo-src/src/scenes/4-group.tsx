@@ -26,7 +26,7 @@ export default makeScene2D(function* (view) {
       <Rect layout ref={pill} x={330} y={CARD_Y - 190} fill={C.green} radius={40} padding={[10, 30]} opacity={0} scale={0.6}>
         <Txt ref={n} text="1 occurrence" fontFamily={SANS} fontWeight={800} fontSize={46} letterSpacing={-1} fill="#fff" />
       </Rect>
-      {/* Dim the other groups so the eye stays on the /orders row (first row is 73 to 158 px into the crop). */}
+      {/* Dim the other groups so the eye stays on the Canada question (first row is 73 to 158 px into the crop). */}
       <Rect y={CARD_Y + (crop.h * s) / 2 - (crop.h - 158) * s / 2} width={CARD_W} height={(crop.h - 158) * s} fill="rgba(246,248,246,0.72)" />
       {progress(4, false)}
     </>,

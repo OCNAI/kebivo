@@ -9,7 +9,7 @@
 
 Your AI app reports each question it couldn't answer; Kebivo groups the repeats and routes them to whoever can fix the docs.
 
-![Demo: an assistant cannot answer how to paginate the /orders endpoint. It reports the question to Kebivo over MCP; a configured webhook route delivers it. A second report of the same question joins one inbox group with 2 occurrences. Product frames use sample data from a real Kebivo container.](docs/assets/demo.gif)
+![Demo: a customer asks a shop's AI support chatbot, "Do you ship to Canada?" The bot cannot answer. The app reports the question to Kebivo over MCP; a configured webhook route delivers it. A second report joins one inbox group with 2 occurrences. Product frames use sample data from a real Kebivo container.](docs/assets/demo.gif)
 
 [![CI](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -29,7 +29,7 @@ curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/he
 **Without Kebivo:** the bot says it couldn't find the answer, the user gives up, and the question sits in a log nobody reads.\
 **With Kebivo:** the question shows up once in the inbox with a repeat count, and your routing rules can send it to Slack, email or a webhook for whoever owns those docs.
 
-![Kebivo group inbox with sample data: "How do I paginate the /orders endpoint?" has 7 occurrences, alongside other open knowledge gaps from an API docs assistant.](docs/assets/screenshots/inbox.png)
+![Kebivo group inbox with sample data from a shop assistant: "Do you ship to Canada?" has 7 occurrences, alongside other customer questions the chatbot could not answer.](docs/assets/screenshots/inbox.png)
 
 <sub>Group inbox from a real Kebivo 0.2.0 container with sample data.</sub>
 
@@ -52,8 +52,8 @@ When an assistant cannot answer, the documentation owner may never see the quest
 - Send reports from application code through REST, or give agents the Streamable HTTP MCP tools `report_knowledge_gap` and `submit_knowledge_correction`.
 - Create one project per assistant or team, with default tags, a corrections policy, and bearer tokens that are shown once, can expire and can be revoked.
 - Route reports with ordered rules, ANY/ALL tag matching, several destinations per rule, a fallback, and a dry-run simulator.
-- Deliver to signed webhooks with a versioned JSON payload, SMTP email, or the built-in inbox. Deliveries have durable retries with backoff, restart recovery, a delivery log and manual retry.
-- Identical questions are grouped automatically. You can also configure an LLM provider for semantic grouping.
+- Deliver to signed webhooks with a versioned JSON payload, Slack incoming webhooks, SMTP email, or the built-in inbox. Deliveries have durable retries with backoff, restart recovery, a delivery log and manual retry.
+- Questions that match exactly, ignoring case, extra whitespace, quote and dash styles, and trailing `?`, `!` or `.`, are grouped automatically. You can also configure an LLM provider for semantic grouping.
 - Triage reports in the inbox with search, filters, statuses, notes, tags, merge, split and deletion. Each group has a full history.
 - Enable OpenAI-compatible, Azure OpenAI or local (Ollama, LM Studio) providers for semantic grouping on a per-project basis. This is off by default.
 - Run one container with one SQLite file. Startup migrations, online backup and checked restore, retention (on by default), JSON Lines export, and health checks are included.
@@ -97,7 +97,7 @@ Curl may print a few `Connection reset` errors while migrations run. Readiness r
 read -rsp 'Admin password (12+ characters): ' KEBIVO_ADMIN_PASSWORD; printf '\n'
 printf '%s\n' "$KEBIVO_ADMIN_PASSWORD" | docker exec -i kebivo python -m kebivo.cli bootstrap --email admin@example.org --password-stdin
 unset KEBIVO_ADMIN_PASSWORD
-KEBIVO_PROJECT="$(docker exec kebivo python -m kebivo.cli project create --name 'API docs assistant' --json)"
+KEBIVO_PROJECT="$(docker exec kebivo python -m kebivo.cli project create --name 'Shop assistant' --json)"
 KEBIVO_TOKEN="$(printf '%s' "$KEBIVO_PROJECT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
 ```
 
@@ -107,16 +107,16 @@ KEBIVO_TOKEN="$(printf '%s' "$KEBIVO_PROJECT" | python3 -c 'import json,sys; pri
 curl -i http://127.0.0.1:8000/api/v1/feedback \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $KEBIVO_TOKEN" \
-  -H 'Idempotency-Key: orders-gap-001' \
-  --data '{"event_type":"knowledge_gap","question":"How do I paginate the /orders endpoint?","tags":["api-docs"]}'
+  -H 'Idempotency-Key: canada-gap-001' \
+  --data '{"event_type":"knowledge_gap","question":"Do you ship to Canada?","tags":["shipping"]}'
 curl -i http://127.0.0.1:8000/api/v1/feedback \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $KEBIVO_TOKEN" \
-  -H 'Idempotency-Key: orders-gap-002' \
-  --data '{"event_type":"knowledge_gap","question":"How do I paginate the /orders endpoint?","tags":["api-docs"]}'
+  -H 'Idempotency-Key: canada-gap-002' \
+  --data '{"event_type":"knowledge_gap","question":"Do you ship to Canada?","tags":["shipping"]}'
 ```
 
-Both responses are `202 Accepted` with distinct `event_id` values. Open <http://127.0.0.1:8000/>, sign in, and find **How do I paginate the /orders endpoint?** in the Inbox with **2 occurrences**. Use exactly `127.0.0.1`: `localhost` is a different origin, and sign-in names the allowed origin if you use the wrong one. You can also create projects and tokens in the UI.
+Both responses are `202 Accepted` with distinct `event_id` values. Open <http://127.0.0.1:8000/>, sign in, and find **Do you ship to Canada?** in the Inbox with **2 occurrences**. Use exactly `127.0.0.1`: `localhost` is a different origin, and sign-in names the allowed origin if you use the wrong one. You can also create projects and tokens in the UI.
 
 For a signed webhook delivery, follow step 4 of the [Docker guide](docs/quickstart.md).
 
@@ -184,8 +184,6 @@ Each project has ordered rules: a rule matches ANY or ALL of its tags and sends 
 ## Optional AI
 
 No model is called by default. To group questions that are worded differently, configure an LLM provider (**LLM settings** in the UI) and switch a project to semantic deduplication after acknowledging that question text will be sent to that provider. If the provider fails, the event keeps its own group and is still routed and delivered. See [deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md).
-
-Embeddings are an opt-in, precision-first option that needs an [embedding endpoint](docs/llm-providers.md#ollama-recipe); the default install groups exact repeats only. With `nomic-embed-text`, the default 0.93 threshold grouped only about 3% of paraphrases in a 150-pair synthetic test; use the LLM judge method for useful paraphrase grouping.
 
 ## Security
 
