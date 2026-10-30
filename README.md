@@ -9,7 +9,7 @@
 
 Your AI app reports each question it couldn't answer; Kebivo groups the repeats and routes them to whoever can fix the docs.
 
-![Demo: a question the assistant cannot answer is reported to Kebivo, grouped with repeats, routed to a content owner, and resolved. Product frames come from a real Kebivo container with sample data.](docs/assets/demo.gif)
+![Demo: an assistant cannot answer how to paginate the /orders endpoint. It reports the question to Kebivo over MCP; a configured webhook route delivers it. A second report of the same question joins one inbox group with 2 occurrences. Product frames use sample data from a real Kebivo container.](docs/assets/demo.gif)
 
 [![CI](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
