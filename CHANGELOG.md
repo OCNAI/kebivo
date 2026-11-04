@@ -1,8 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-11-04
 
-- Optional embeddings grouping compares question vectors from recent group representatives using an Ollama or OpenAI-compatible endpoint. It includes backfill, an audited preview with question excerpts, a `kind=embeddings` provider test and a `dedup-eval` threshold CLI; dimensions are inferred, input is lowercased, and the default similarity threshold is 0.93. Exact grouping remains the default, and failed embedding calls leave intake and routing available.
+Opt-in embeddings grouping, steadier intake under bursts, and a readiness healthcheck in the image. Exact grouping stays the default; nothing changes unless you turn embeddings on.
+
+- Optional embeddings grouping (`semantic.method: embeddings`) compares a new question's vector with recent group representatives, using an Ollama or OpenAI-compatible `/embeddings` endpoint you configure. Question text is sent to that endpoint. Dimensions are inferred, input is lowercased, and the default similarity threshold is 0.93. It is precision-first: in calibration with `nomic-embed-text` it grouped about 3 in 100 paraphrases, and a one-word near miss ("VPN" versus "VPS") can score higher than a real paraphrase. Use the LLM judge method when you need paraphrase grouping. See [deduplication](docs/deduplication.md).
+- Embeddings tooling: a backfill of recent group representatives when you enable it, an audited preview with question excerpts and scores, a `kind=embeddings` provider test in the API and UI, and `python -m kebivo.cli dedup-eval` to pick a threshold from your own history. Vectors are kept per provider configuration, so vectors from an earlier model, endpoint or key are not compared with new ones. A failed embedding call leaves the event in its own group; intake and routing continue.
+- Under SQLite writer or pool contention, feedback intake waits a bounded time and then returns `503 storage_busy` with `Retry-After: 1` instead of a 500. Retry with the same idempotency key. `/health/ready` stays responsive and reports `routing_backlog` (pending count and oldest pending age). `scripts/feedback-burst.py` reproduces a burst on a disposable instance.
+- The image has a `/health/ready` healthcheck, so plain `docker run` shows `(healthy)`. It probes every 2 seconds during start-up (Docker Engine 25+) and every 30 seconds after.
+- New examples: Microsoft Teams and GitHub Issues webhook relay recipes, LlamaIndex and Pydantic AI MCP examples, and a loader from the JSON Lines export into SQLite.
+- The new Kebivo logo in the app, docs and README. The docs site no longer calls Google Fonts or the GitHub API.
+
+### Upgrade
+
+Back up first (see [Backup and restore](docs/self-hosting.md#backup-and-restore)). On start, migrations `0014`–`0016` add the embeddings tables and columns; they leave existing feedback, groups and routing unchanged. The latest migration is `0016`, and a 0.2.0 image will not start on a database that has it, so keep the backup if you may need to roll back. There are no new required settings. Pull `ghcr.io/ocnai/kebivo:0.3.0` (or `git pull` and rebuild) and check `/health/ready`.
 
 ## 0.2.0 — 2026-10-27
 

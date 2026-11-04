@@ -16,13 +16,13 @@ Your AI app reports each question it couldn't answer; Kebivo groups the repeats 
 [![Release](https://img.shields.io/github/v/release/OCNAI/kebivo?sort=semver)](https://github.com/OCNAI/kebivo/releases)
 [![Container image](https://img.shields.io/badge/image-ghcr.io%2Focnai%2Fkebivo-2496ED?logo=docker&logoColor=white)](https://github.com/OCNAI/kebivo/pkgs/container/kebivo)
 
-> **Status: 0.2.0.** Run the published image `ghcr.io/ocnai/kebivo:0.2.0` (`linux/amd64`, `linux/arm64`) or build it from this repository. Licensed under [Apache-2.0](LICENSE).
+> **Status: 0.3.0.** Run the published image `ghcr.io/ocnai/kebivo:0.3.0` (`linux/amd64`, `linux/arm64`) or build it from this repository. Licensed under [Apache-2.0](LICENSE).
 
 Try it with Docker, OpenSSL and a free port 8000:
 
 ```sh
 (umask 077; printf 'SECRET_KEY=%s\nENCRYPTION_KEY=%s\nALLOWED_ORIGINS=http://127.0.0.1:8000\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > kebivo.env)
-docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.2.0
+docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.3.0
 curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
 ```
 
@@ -85,7 +85,7 @@ You need Docker, OpenSSL, Python 3 and a free port 8000. The published image is 
 (umask 077; printf 'SECRET_KEY=%s\nENCRYPTION_KEY=%s\nALLOWED_ORIGINS=http://127.0.0.1:8000\n' \
   "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > kebivo.env)
 docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 \
-  -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.2.0
+  -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.3.0
 curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
 ```
 

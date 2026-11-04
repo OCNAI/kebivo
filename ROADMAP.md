@@ -18,7 +18,7 @@ Today a [webhook destination](docs/destinations.md) plus a small relay reaches m
 
 | Candidate | Today |
 | --- | --- |
-| Native Slack destination | Available in the upcoming 0.2.0 release; webhook + Slack relay recipe works today |
+| Native Slack destination | Available since 0.2.0 |
 | Native Jira destination | Webhook + Jira relay recipe |
 | Native Linear destination | Webhook + Linear relay recipe |
 | GitHub Issues and GitLab Issues destinations | GitHub: webhook + [GitHub Issues relay recipe](examples/recipes/github-issues/); GitLab: webhook + your own relay |
@@ -35,9 +35,9 @@ Today: the REST API, the MCP server, the [Python `kebivo-client`](sdk/python/REA
 
 ### Grouping and triage
 
-Today: exact grouping, optional semantic grouping through an LLM provider you configure, and manual merge and split. See [deduplication](docs/deduplication.md).
+Today: exact grouping, optional semantic grouping through an LLM judge or opt-in embeddings from a provider you configure, and manual merge and split. See [deduplication](docs/deduplication.md).
 
-- Similarity grouping with embeddings, including a local embedding model
+- Embeddings that find candidates and an LLM judge that confirms them, so more paraphrases are grouped
 - Priority suggestions based on how often and how recently a question repeats
 - Summaries of a large group
 - Trends: which gaps grow or shrink week by week
