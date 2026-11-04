@@ -15,6 +15,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Check commit attribution
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if git log "$BASE_SHA..HEAD" --format='%an <%ae>%n%cn <%ce>' | grep -Eiq 'Claude|Paperclip|noreply@anthropic\.com|noreply@paperclip\.ing'; then
+            echo 'Commit author or committer has disallowed attribution.' >&2
+            exit 1
+          fi
+          if git log "$BASE_SHA..HEAD" --format=%B | grep -Eiq '^Co-Authored-By:'; then
+            echo 'Remove Co-Authored-By trailers before merging.' >&2
+            exit 1
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

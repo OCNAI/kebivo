@@ -1,17 +1,25 @@
 site_name: Kebivo
-site_description: Collect unanswered AI agent questions and proposed corrections with Kebivo. Self-hosted feedback routing over REST or MCP, with an inbox, email and webhooks.
+site_description: Open-source, self-hosted tool that collects the questions your AI assistant couldn't answer and routes them to the people who own the content.
 site_url: https://docs.kebivo.com/
 repo_url: https://github.com/OCNAI/kebivo
 # `website:` links in docs resolve against this value.
 extra:
   website_url: https://kebivo.com/
 docs_dir: docs
+copyright: >-
+  Docs and code are produced with AI assistance.
+  <a href="https://kebivo.com/privacy/">Privacy</a> ·
+  <a href="https://kebivo.com/terms/">Terms</a>
 site_dir: site
 strict: true
+# No third-party requests or browser storage: system fonts instead of Google Fonts,
+# and a plain repository link (docs/overrides) instead of the GitHub API widget.
 theme:
   name: material
   logo: assets/images/logo.svg
   favicon: assets/images/favicon.png
+  custom_dir: docs/overrides
+  font: false
   features:
     - navigation.sections
     - content.code.copy
@@ -22,6 +30,7 @@ hooks:
   - docs/hooks/repo_links.py
 exclude_docs: |
   hooks/
+  overrides/
   assets/social-preview.html
 markdown_extensions:
   - admonition

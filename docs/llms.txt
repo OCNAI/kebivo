@@ -1,0 +1,28 @@
+# Kebivo documentation
+
+> Kebivo is an open-source, self-hosted tool that collects the questions your AI assistant, chatbot or RAG app couldn't answer, groups repeats, and routes them to the people who own the content.
+
+Your agent or app reports a gap over REST or MCP, and routing rules deliver it to an admin inbox, Slack, email or signed webhooks. It runs as one container with no cloud account or AI provider required, under Apache-2.0.
+
+## Documentation
+
+- [Documentation home](https://docs.kebivo.com/): Entry point for setup, integration and operations.
+- [Quickstart](https://docs.kebivo.com/quickstart/): Run Kebivo with Docker and send a first report.
+- [Self-hosting](https://docs.kebivo.com/self-hosting/): Configure deployment, backups and upgrades.
+- [REST API](https://docs.kebivo.com/rest-api/): Submit gaps and corrections from application code.
+- [MCP integration](https://docs.kebivo.com/mcp/): Connect an MCP client and use its reporting tools.
+- [MCP Registry metadata](https://docs.kebivo.com/mcp-registry/): Find registry metadata and the published MCP endpoint.
+- [Feedback management](https://docs.kebivo.com/feedback-management/): Review, search and triage grouped reports.
+- [Deduplication](https://docs.kebivo.com/deduplication/): Understand exact grouping and optional semantic grouping.
+- [Routing](https://docs.kebivo.com/routing/): Configure ordered tag rules, fallback and simulation.
+- [Destinations](https://docs.kebivo.com/destinations/): Send reports to Slack, email or signed webhooks and inspect deliveries.
+- [LLM providers](https://docs.kebivo.com/llm-providers/): Configure optional AI-assisted grouping and review its data flow.
+- [Retention](https://docs.kebivo.com/retention/): Set retention rules for stored data.
+- [Export](https://docs.kebivo.com/export/): Export project data as JSON Lines.
+- [Releasing](https://docs.kebivo.com/releasing/): Follow the release process.
+- [Licenses](https://docs.kebivo.com/licenses/): Review third-party license notices.
+
+## More
+
+- [Framework guides](https://kebivo.com/guides/): Follow tutorials for connecting assistant frameworks and tools.
+- [Source repository](https://github.com/OCNAI/kebivo): Read the source code and runnable examples.
