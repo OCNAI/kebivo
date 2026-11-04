@@ -84,8 +84,8 @@ if [[ "$head" != "$expected_head" ]]; then
   exit 1
 fi
 docker exec "$new_container" python -m kebivo.cli check-groups
-docker run --rm -i -v "$volume:/data" --entrypoint python "$new_image" - \
-  < scripts/upgrade-snapshot.py > "$scratch/after.json"
+docker run --rm -i -v "$volume:/data" -e UPGRADE_COLUMNS="$(cat "$scratch/before.json")" \
+  --entrypoint python "$new_image" - < scripts/upgrade-snapshot.py > "$scratch/after.json"
 python3 - "$scratch/before.json" "$scratch/after.json" <<'PY'
 import json, sys
 before, after = [json.load(open(path)) for path in sys.argv[1:]]
