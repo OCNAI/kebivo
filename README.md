@@ -77,7 +77,7 @@ The demo's product frames come from a real container with sample data; its chat 
 
 ## Quickstart
 
-You need Docker, OpenSSL, Python 3 and a free port 8000. The published image is typically ready in about 12 seconds after download.
+You need Docker, OpenSSL, Python 3 and a free port 8000. No account, no cloud service, no API key. The published image is typically ready in about 12 seconds after download.
 
 **1. Start Kebivo from the published image.** Skip this step if you ran the three commands above. Keep `kebivo.env` private and back it up apart from the data volume.
 
@@ -117,6 +117,8 @@ curl -i http://127.0.0.1:8000/api/v1/feedback \
 ```
 
 Both responses are `202 Accepted` with distinct `event_id` values. Open <http://127.0.0.1:8000/>, sign in, and find **Do you ship to Canada?** in the Inbox with **2 occurrences**. Use exactly `127.0.0.1`: `localhost` is a different origin, and sign-in names the allowed origin if you use the wrong one. You can also create projects and tokens in the UI.
+
+If this was useful, a [GitHub star](https://github.com/OCNAI/kebivo) helps other people find Kebivo.
 
 For a signed webhook delivery, follow step 4 of the [Docker guide](docs/quickstart.md).
 
