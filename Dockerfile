@@ -24,7 +24,8 @@ LABEL io.modelcontextprotocol.server.name="io.github.OCNAI/kebivo"
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_ENV=production \
-    DATABASE_URL=sqlite:////data/app.sqlite3
+    DATABASE_URL=sqlite:////data/app.sqlite3 \
+    KEBIVO_SECRETS_FILE=/data/kebivo-secrets.env
 WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md ./

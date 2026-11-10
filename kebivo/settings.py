@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import secrets
+import stat
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -52,7 +53,22 @@ class Settings:
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "Settings":
         """Load and validate settings. Secrets are never included in errors."""
-        values = os.environ if environ is None else environ
+        values = dict(os.environ if environ is None else environ)
+        secrets_file = values.get("KEBIVO_SECRETS_FILE")
+        file_keys_used = False
+        if secrets_file and Path(secrets_file).exists():
+            path = Path(secrets_file)
+            if stat.S_IMODE(path.stat().st_mode) & 0o077:
+                logging.getLogger(__name__).warning("Secrets file permissions are wider than 0600")
+            try:
+                for line in path.read_text(encoding="utf-8").splitlines():
+                    name, separator, value = line.partition("=")
+                    if separator and name in {"SECRET_KEY", "ENCRYPTION_KEY"}:
+                        if name not in values:
+                            file_keys_used = True
+                        values.setdefault(name, value)
+            except OSError:
+                raise SettingsError("Could not read KEBIVO_SECRETS_FILE") from None
         try:
             with PROJECT_CONFIG.open(encoding="utf-8") as config_file:
                 config = json.load(config_file)
@@ -131,6 +147,10 @@ class Settings:
                     raise SettingsError("Production ALLOWED_ORIGINS must use HTTPS except loopback")
 
         public_url = values.get("PUBLIC_URL", "").rstrip("/") or None
+        if file_keys_used and (allowed_origins or public_url):
+            logging.getLogger(__name__).warning(
+                "File-backed keys are in use with public access; see self-hosting key custody docs"
+            )
         if public_url:
             try:
                 parsed = urlsplit(public_url)

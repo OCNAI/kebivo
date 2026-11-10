@@ -3,8 +3,10 @@
 import hashlib
 import hmac
 import secrets
+import time
 from datetime import UTC, timedelta
 from typing import Annotated, Any
+from urllib.parse import urlsplit
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, VerifyMismatchError
@@ -64,14 +66,35 @@ def csrf_token(settings: Any, session_token: str) -> str:
 
 def origin_allowed(request: Request) -> bool:
     origin = request.headers.get("origin")
-    return bool(origin and origin in request.app.state.settings.allowed_origins)
+    if not origin:
+        return False
+    configured = request.app.state.settings.allowed_origins
+    if configured:
+        return origin in configured
+    try:
+        parsed = urlsplit(origin)
+        return bool(
+            parsed.scheme == "http"
+            and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+            and parsed.netloc == request.headers.get("host")
+            and not (
+                parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password
+            )
+            and parsed.port != 0
+        )
+    except ValueError:
+        return False
 
 
 def wrong_origin_error(request: Request) -> HTTPException:
-    configured = ", ".join(request.app.state.settings.allowed_origins) or "none"
+    configured = request.app.state.settings.allowed_origins
     return HTTPException(
         status_code=403,
-        detail=f"Page origin is not in ALLOWED_ORIGINS. Configured origins: {configured}",
+        detail=(
+            f"Page origin is not in ALLOWED_ORIGINS. Configured origins: {', '.join(configured)}"
+            if configured
+            else "Page origin must match the loopback Host; set ALLOWED_ORIGINS for other origins"
+        ),
     )
 
 
@@ -165,6 +188,68 @@ def install_auth_routes(app: Any) -> None:
         email: str = Field(min_length=3, max_length=320)
         password: str = Field(min_length=1, max_length=1024)
 
+    class SetupBody(BaseModel):
+        token: str = Field(min_length=1, max_length=200)
+        email: str = Field(min_length=3, max_length=320)
+        password: str = Field(min_length=12, max_length=1024)
+
+    def issue_session(db: Session, admin: AdminUser, request: Request) -> JSONResponse:
+        now = now_utc()
+        token = secrets.token_urlsafe(32)
+        db.add(
+            AdminSession(
+                admin_user_id=admin.id,
+                token_hash=_digest(token),
+                created_at=now,
+                last_seen_at=now,
+                expires_at=now + timedelta(seconds=SESSION_SECONDS),
+            )
+        )
+        admin.updated_at = now
+        admin.last_login_at = now
+        _audit(db, "admin.login_succeeded", admin.id)
+        db.commit()
+        response = JSONResponse(
+            {
+                "admin": {"id": admin.id, "email": admin.email},
+                "csrf_token": csrf_token(request.app.state.settings, token),
+            }
+        )
+        _set_auth_cookie(response, token, secure=request.headers["origin"].startswith("https://"))
+        return response
+
+    @router.get("/setup")
+    def setup_required(request: Request) -> dict[str, bool]:
+        db: Session = request.state.db
+        return {"required": db.scalar(select(AdminUser.id).limit(1)) is None}
+
+    @router.post("/setup")
+    def setup(body: SetupBody, request: Request) -> JSONResponse:
+        if not origin_allowed(request):
+            raise wrong_origin_error(request)
+        token = getattr(request.app.state, "setup_token", None)
+        deadline = getattr(request.app.state, "setup_deadline", 0.0)
+        if not token or time.monotonic() >= deadline or not hmac.compare_digest(body.token, token):
+            raise HTTPException(status_code=403, detail="Invalid or expired setup link")
+        try:
+            password_hash = hash_password(body.password)
+        except ValueError:
+            raise HTTPException(
+                status_code=422, detail="Password must contain at least 12 characters"
+            ) from None
+        db: Session = request.state.db
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        if db.scalar(select(AdminUser.id).limit(1)) is not None:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Administrator already exists")
+        admin = AdminUser(email=normalize_email(body.email), password_hash=password_hash)
+        db.add(admin)
+        db.flush()
+        _audit(db, "admin.bootstrap", admin.id)
+        response = issue_session(db, admin, request)
+        request.app.state.setup_token = None
+        return response
+
     @router.post("/login")
     def login(body: LoginBody, request: Request) -> JSONResponse:
         if not origin_allowed(request):
@@ -221,28 +306,7 @@ def install_auth_routes(app: Any) -> None:
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         assert admin is not None
-        now = now_utc()
-        token = secrets.token_urlsafe(32)
-        session_row = AdminSession(
-            admin_user_id=admin.id,
-            token_hash=_digest(token),
-            created_at=now,
-            last_seen_at=now,
-            expires_at=now + timedelta(seconds=SESSION_SECONDS),
-        )
-        admin.updated_at = now
-        admin.last_login_at = now
-        _audit(db, "admin.login_succeeded", admin.id)
-        db.add(session_row)
-        db.commit()
-        response = JSONResponse(
-            {
-                "admin": {"id": admin.id, "email": admin.email},
-                "csrf_token": csrf_token(settings, token),
-            }
-        )
-        _set_auth_cookie(response, token, secure=request.headers["origin"].startswith("https://"))
-        return response
+        return issue_session(db, admin, request)
 
     @router.get("/session")
     def get_session(request: Request, auth: AdminAuth) -> JSONResponse:
