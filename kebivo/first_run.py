@@ -8,6 +8,8 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
+from sqlalchemy.engine import make_url
+
 from kebivo.settings import SettingsError
 
 
@@ -44,9 +46,10 @@ def generate(environ: dict[str, str] | None = None) -> None:
     if not missing:
         return
     database_url = values.get("DATABASE_URL", "sqlite:///./data/app.sqlite3")
-    if not database_url.startswith("sqlite:///"):
+    url = make_url(database_url)
+    if not url.drivername.startswith("sqlite") or not url.database:
         raise SettingsError("DATABASE_URL must use SQLite")
-    database_path = Path(values.get("DATABASE_PATH", database_url.removeprefix("sqlite:///")))
+    database_path = Path(url.database)
     if not database_is_fresh(database_path) or path.exists():
         raise SettingsError(f"{missing[0]} is required for an existing database or secrets file")
     try:

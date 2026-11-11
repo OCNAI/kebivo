@@ -49,6 +49,7 @@ class Settings:
     feedback_retention_days: int = 180
     delivery_log_retention_days: int = 30
     audit_retention_days: int = 90
+    file_backed_keys_with_public_access: bool = False
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "Settings":
@@ -64,9 +65,9 @@ class Settings:
                 for line in path.read_text(encoding="utf-8").splitlines():
                     name, separator, value = line.partition("=")
                     if separator and name in {"SECRET_KEY", "ENCRYPTION_KEY"}:
-                        if name not in values:
+                        if not values.get(name):
                             file_keys_used = True
-                        values.setdefault(name, value)
+                            values[name] = value
             except OSError:
                 raise SettingsError("Could not read KEBIVO_SECRETS_FILE") from None
         try:
@@ -147,10 +148,6 @@ class Settings:
                     raise SettingsError("Production ALLOWED_ORIGINS must use HTTPS except loopback")
 
         public_url = values.get("PUBLIC_URL", "").rstrip("/") or None
-        if file_keys_used and (allowed_origins or public_url):
-            logging.getLogger(__name__).warning(
-                "File-backed keys are in use with public access; see self-hosting key custody docs"
-            )
         if public_url:
             try:
                 parsed = urlsplit(public_url)
@@ -270,4 +267,7 @@ class Settings:
             feedback_retention_days=retention_days("FEEDBACK_RETENTION_DAYS", 180),
             delivery_log_retention_days=retention_days("DELIVERY_LOG_RETENTION_DAYS", 30),
             audit_retention_days=retention_days("AUDIT_RETENTION_DAYS", 90),
+            file_backed_keys_with_public_access=bool(
+                file_keys_used and (allowed_origins or public_url)
+            ),
         )

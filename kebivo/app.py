@@ -162,6 +162,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         _configure_logging()
+        if configured.file_backed_keys_with_public_access:
+            logging.getLogger(__name__).warning(
+                "File-backed keys are in use with public access; see self-hosting key custody docs"
+            )
         app.state.search_ready = _probe_fts5()
         tables = set(inspect(app.state.engine).get_table_names())
         if "admin_users" in tables:

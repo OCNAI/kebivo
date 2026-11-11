@@ -229,8 +229,15 @@ def install_auth_routes(app: Any) -> None:
             raise wrong_origin_error(request)
         token = getattr(request.app.state, "setup_token", None)
         deadline = getattr(request.app.state, "setup_deadline", 0.0)
-        if not token or time.monotonic() >= deadline or not hmac.compare_digest(body.token, token):
+        if (
+            not token
+            or time.monotonic() >= deadline
+            or not hmac.compare_digest(body.token.encode("utf-8"), token.encode("utf-8"))
+        ):
             raise HTTPException(status_code=403, detail="Invalid or expired setup link")
+        email = normalize_email(body.email)
+        if len(email) < 3:
+            raise HTTPException(status_code=422, detail="Email must contain at least 3 characters")
         try:
             password_hash = hash_password(body.password)
         except ValueError:
@@ -242,7 +249,7 @@ def install_auth_routes(app: Any) -> None:
         if db.scalar(select(AdminUser.id).limit(1)) is not None:
             db.rollback()
             raise HTTPException(status_code=409, detail="Administrator already exists")
-        admin = AdminUser(email=normalize_email(body.email), password_hash=password_hash)
+        admin = AdminUser(email=email, password_hash=password_hash)
         db.add(admin)
         db.flush()
         _audit(db, "admin.bootstrap", admin.id)

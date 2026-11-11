@@ -44,6 +44,9 @@ def test_generated_keys_are_atomic_and_visible_to_new_process(
     encryption_override = Settings.from_env({**env, "ENCRYPTION_KEY": "ab" * 32})
     assert encryption_override.secret_key == configured.secret_key
     assert encryption_override.encryption_key == "ab" * 32
+    blank_override = {**env, "SECRET_KEY": "", "ENCRYPTION_KEY": ""}
+    assert Settings.from_env(blank_override).secret_key == configured.secret_key
+    assert Settings.from_env(blank_override).encryption_key == configured.encryption_key
     result = subprocess.run(
         [
             sys.executable,
@@ -77,6 +80,49 @@ def test_existing_database_never_gets_new_keys(tmp_path: Path) -> None:
         generate(env)
     assert not path.exists()
     assert "=" not in str(error.value)
+    for override in (
+        {"DATABASE_PATH": str(tmp_path / "elsewhere")},
+        {"DATABASE_URL": f"sqlite:///{database}?timeout=5"},
+    ):
+        with pytest.raises(SettingsError, match="SECRET_KEY"):
+            generate({**env, **override})
+        assert not path.exists()
+
+
+def test_blank_environment_keys_use_generated_file(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.env"
+    env = {
+        "KEBIVO_SECRETS_FILE": str(path),
+        "DATABASE_URL": f"sqlite:///{tmp_path / 'db.sqlite3'}",
+        "APP_ENV": "production",
+        "SECRET_KEY": "",
+        "ENCRYPTION_KEY": "",
+    }
+    generate(env)
+    configured = Settings.from_env(env)
+    assert configured.secret_key and configured.encryption_key
+    assert path.exists()
+
+
+def test_public_file_key_warning_only_on_startup(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "secrets.env"
+    env = {
+        "KEBIVO_SECRETS_FILE": str(path),
+        "DATABASE_URL": f"sqlite:///{tmp_path / 'db.sqlite3'}",
+        "APP_ENV": "production",
+        "ALLOWED_ORIGINS": "https://console.example",
+    }
+    generate(env)
+    settings = Settings.from_env(env)
+    Settings.from_env(env)
+    assert "File-backed keys are in use" not in caplog.text
+    app = create_app(settings)
+    Base.metadata.create_all(app.state.engine)
+    with TestClient(app):
+        pass
+    assert caplog.text.count("File-backed keys are in use") == 1
 
 
 @pytest.mark.parametrize(
@@ -144,6 +190,18 @@ def test_setup_token_refusals_and_single_claim(tmp_path: Path) -> None:
             ).status_code
             == 403
         )
+        assert (
+            client.post(
+                "/api/v1/auth/setup", json={**body, "token": "é"}, headers=headers
+            ).status_code
+            == 403
+        )
+        assert (
+            client.post(
+                "/api/v1/auth/setup", json={**body, "email": "     "}, headers=headers
+            ).status_code
+            == 422
+        )
         wrong_origin = client.post(
             "/api/v1/auth/setup", json=body, headers={"Origin": "http://evil.example"}
         )
@@ -176,15 +234,16 @@ def test_setup_refused_after_cli_bootstrap(tmp_path: Path) -> None:
     settings = Settings("Kebivo", "test", "s" * 40, str(tmp_path / "app.db"), worker_enabled=False)
     app = create_app(settings)
     Base.metadata.create_all(app.state.engine)
-    with app.state.session_factory() as db:
-        create_admin(db, "cli@example.test", "long-test-password")
     with TestClient(app, base_url="http://localhost:8000") as client:
-        assert app.state.setup_token is None
+        token = app.state.setup_token
+        assert token
+        with app.state.session_factory() as db:
+            create_admin(db, "cli@example.test", "long-test-password")
         assert client.get("/api/v1/auth/setup").json() == {"required": False}
         response = client.post(
             "/api/v1/auth/setup",
-            json={"token": "x" * 43, "email": "web@example.test", "password": "long-test-password"},
+            json={"token": token, "email": "web@example.test", "password": "long-test-password"},
             headers={"Origin": "http://localhost:8000"},
         )
-        assert response.status_code == 403
+        assert response.status_code == 409
     app.state.engine.dispose()
