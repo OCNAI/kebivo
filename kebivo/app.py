@@ -46,6 +46,7 @@ from kebivo.routing.routes import install_routing_routes
 from kebivo.sample_data import install_sample_data_routes
 from kebivo.security.secretbox import SecretBox
 from kebivo.settings import Settings
+from kebivo.star_prompt import install_star_prompt_routes
 from kebivo.tokens import install_token_routes
 from kebivo.worker.runner import Worker
 
@@ -181,6 +182,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             "If you mapped another host port, change 8000 in the setup URL.",
                             flush=True,
                         )
+                if db.scalar(
+                    select(AdminUser.id)
+                    .where(AdminUser.star_prompt_dismissed_at.is_not(None))
+                    .limit(1)
+                ) is None:
+                    _configure_logging().info(
+                        "If Kebivo is useful, a GitHub star helps other people find it: "
+                        "https://github.com/OCNAI/kebivo"
+                    )
         if app.state.worker is not None and not {"processing_jobs", "deliveries"} <= tables:
             app.state.worker = None
         if "destinations" in tables:
@@ -271,6 +281,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 or request.url.path.startswith("/api/v1/admin/groups")
                 or request.url.path.startswith("/api/v1/admin/llm-providers")
                 or request.url.path == "/api/v1/admin/settings"
+                or request.url.path.startswith("/api/v1/admin/star-prompt")
                 or request.url.path.startswith("/api/v1/admin/projects/")
                 or request.url.path.startswith("/api/v1/destinations")
                 or request.url.path.startswith("/api/v1/deliveries")
@@ -394,6 +405,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_admin_group_mutation_routes(app)
     install_admin_group_membership_routes(app)
     install_admin_settings_routes(app)
+    install_star_prompt_routes(app)
     install_sample_data_routes(app)
     mcp_server = install_mcp_route(app)
 
