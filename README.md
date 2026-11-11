@@ -77,7 +77,7 @@ The demo's product frames come from a real container with sample data; its chat 
 
 ## Quickstart
 
-You need Docker, OpenSSL, Python 3 and a free port 8000. No account, no cloud service, no API key. The published image is typically ready in about 12 seconds after download.
+You need Docker, OpenSSL, Python 3 and a free port 8000. No account, no cloud service, no API key. Run the commands in bash; on macOS, type `bash` first. The published image is typically ready in about 12 seconds after download.
 
 **1. Start Kebivo from the published image.** Skip this step if you ran the three commands above. Keep `kebivo.env` private and back it up apart from the data volume.
 

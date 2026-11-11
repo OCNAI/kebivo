@@ -5,7 +5,7 @@ description: Run the published Kebivo image with Docker, create a project token,
 
 # Run Kebivo with Docker
 
-You need Docker, OpenSSL, Python 3 and a free port 8000. The published image is typically ready in about 12 seconds after download.
+You need Docker, OpenSSL, Python 3 and a free port 8000. Run the commands in bash; on macOS, type `bash` first, because zsh's `read` doesn't accept `-p` for a prompt. The published image is typically ready in about 12 seconds after download.
 
 **1. Start Kebivo from the published image.** Keep `kebivo.env` private and back it up apart from the data volume.
 
@@ -71,6 +71,7 @@ curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.3.0/examples/webhook
 curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.3.0/docs/webhook-payload.schema.json -o docs/webhook-payload.schema.json
 docker cp examples/webhook_receiver.py kebivo:/tmp/webhook_receiver.py
 docker cp docs/webhook-payload.schema.json kebivo:/tmp/webhook-payload.schema.json
+rm -f kebivo-webhook.log
 WEBHOOK_SECRET="$WEBHOOK_SECRET" docker exec -e WEBHOOK_SECRET kebivo python /tmp/webhook_receiver.py \
   --schema /tmp/webhook-payload.schema.json --exit-after 1 > kebivo-webhook.log 2>&1 &
 sh -c 'i=0; until grep -q listening kebivo-webhook.log || [ $i -ge 30 ]; do sleep 0.5; i=$((i+1)); done'; cat kebivo-webhook.log
@@ -95,7 +96,7 @@ curl -fsS -b "$KEBIVO_COOKIES" "http://127.0.0.1:8000/api/v1/deliveries?destinat
   python3 -c 'import json,sys; [print(d["status"], "attempts=" + str(d["attempt_count"]), d["last_error_category"] or "") for d in json.load(sys.stdin)["items"]]'
 ```
 
-The receiver log ends with a line containing `"question": "Do you ship to Canada?"`, `"signature": "valid"` and `"schema": "valid"`, and the Delivery log prints `delivered attempts=1 http_2xx`. A retry looks like `retry_scheduled attempts=1 connect`: the receiver wasn't reachable, and Kebivo tries again after about 30 seconds, then 2 and 10 minutes. Leave the receiver running and run the two check commands again after a minute. **Delivery log** in the UI shows each attempt.
+The receiver log ends with a line containing `"question": "Do you ship to Canada?"`, `"signature": "valid"` and `"schema": "valid"`, and the Delivery log prints `delivered attempts=1 http_2xx`. A retry looks like `retry_scheduled attempts=1 connect`: the receiver wasn't reachable, and Kebivo tries again after about 30 seconds, then 2 and 10 minutes. If you see it, run `cat kebivo-webhook.log`. If the `listening` line is missing, the receiver didn't start: run the receiver command again (from `rm -f kebivo-webhook.log` through the wait), then run the two check commands after a minute. **Delivery log** in the UI shows each attempt.
 
 **5. Resolve the group.** When the shipping docs answer the question, mark the group resolved. In the UI, open **Do you ship to Canada?** in the Inbox and set **Status** to **Resolved** under **Triage**. Or use the API:
 
@@ -105,7 +106,7 @@ KEBIVO_GROUP_ID="$(curl -fsS -b "$KEBIVO_COOKIES" "http://127.0.0.1:8000/api/v1/
 curl -fsS -X PATCH -b "$KEBIVO_COOKIES" -H 'Origin: http://127.0.0.1:8000' -H "X-CSRF-Token: $KEBIVO_CSRF" -H 'Content-Type: application/json' \
   --data '{"status":"resolved"}' "http://127.0.0.1:8000/api/v1/admin/groups/$KEBIVO_GROUP_ID" |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])'
-rm -f "$KEBIVO_COOKIES"
+rm -f "$KEBIVO_COOKIES" kebivo-webhook.log
 unset KEBIVO_LOGIN KEBIVO_DESTINATION KEBIVO_PROJECT WEBHOOK_SECRET KEBIVO_CSRF
 ```
 
