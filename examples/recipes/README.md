@@ -1,13 +1,19 @@
 # Webhook recipes: Slack, Linear, Jira, Teams and GitHub Issues
 
-Kebivo has no native Slack, Linear, Jira, Teams or GitHub Issues integration. A webhook destination
-can reach them through a small relay you run yourself. Each relay is one Python
+For Slack, use the native **Slack** destination first: paste an incoming-webhook
+URL under **Destinations**, and Kebivo posts a message with the question,
+project, tags and occurrence count, with no relay to run. See
+[destinations](../../docs/destinations.md). Keep the Slack relay below for
+custom formatting or handling.
+
+Kebivo has no native Linear, Jira, Teams or GitHub Issues integration. A webhook
+destination can reach them through a small relay you run yourself. Each relay is one Python
 file plus [`relay_common.py`](relay_common.py). They use only the standard
 library (Python 3.10+, no `pip install`).
 
 | Recipe | Creates | Needs |
 | --- | --- | --- |
-| [`slack/`](slack/) | A message in a channel | A Slack incoming webhook URL |
+| [`slack/`](slack/) | A message in a channel, formatted by your relay | A Slack incoming webhook URL |
 | [`linear/`](linear/) | A Linear issue per delivery | A Linear API key and team ID |
 | [`jira/`](jira/) | A Jira issue per delivery | A Jira site, credentials and project key |
 | [`teams/`](teams/) | An Adaptive Card in a Teams channel or chat | A Teams Workflows webhook URL |
