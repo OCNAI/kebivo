@@ -13,12 +13,14 @@ import { GroupDetail } from './GroupDetail';
 import { LlmSettings } from './LlmSettings';
 import { GeneralSettings, SettingsNav } from './Settings';
 import { ConnectPanel } from './ConnectPanel';
+import { CommandBlock, FirstRunEmpty, FirstRunProvider, SampleBadge, SetupPage, takeSetupTokenFromLocation, useFirstRun } from './FirstRun';
 
 document.title = projectConfig.display_name;
 
 type Admin = { id: string; email: string };
 type Project = {
   id: string; name: string; slug: string; description: string | null; is_active: boolean;
+  is_sample?: boolean;
   archived_at: string | null; settings: { corrections?: { enabled?: boolean }; deduplication?: Deduplication };
   tags: { id: string; name: string; slug: string; is_default: boolean }[]; created_at: string; updated_at: string;
 };
@@ -41,12 +43,18 @@ function LegacyEventLink({ eventId, navigate }: { eventId: string; navigate: (ur
 
 export function App() {
   const [route, setRoute] = React.useState(location.pathname + location.search);
+  const [setupToken] = React.useState(() => {
+    return takeSetupTokenFromLocation();
+  });
   const pathname = route.split('?')[0];
+  const createFromBanner = new URLSearchParams(route.split('?')[1] ?? '').get('create') === '1';
   const navigate = React.useCallback((url: string) => { history.pushState({}, '', url); setRoute(location.pathname + location.search); window.dispatchEvent(new PopStateEvent('popstate')); }, []);
   const [admin, setAdmin] = React.useState<Admin | null>(null);
   const [authReady, setAuthReady] = React.useState(false);
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [selected, setSelected] = React.useState<Project | null>(null);
+  const selectedRef = React.useRef<Project | null>(null);
+  const setSelectedProject = React.useCallback((project: Project | null) => { selectedRef.current = project; setSelected(project); }, []);
   const [tokens, setTokens] = React.useState<Token[]>([]);
   const [createdToken, setCreatedToken] = React.useState<CreatedToken | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -54,31 +62,37 @@ export function App() {
   const [notice, setNotice] = React.useState('');
   const [showArchived, setShowArchived] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
-  React.useEffect(() => { const pop = () => setRoute(location.pathname + location.search); const expired = () => { setAdmin(null); setSelected(null); setCsrfToken(null); }; addEventListener('popstate', pop); addEventListener('session-expired', expired); return () => { removeEventListener('popstate', pop); removeEventListener('session-expired', expired); }; }, []);
+  const [setupRequired, setSetupRequired] = React.useState(false);
+  const [setupCheckDone, setSetupCheckDone] = React.useState(false);
+  React.useEffect(() => { const pop = () => setRoute(location.pathname + location.search); const expired = () => { setAdmin(null); setSelectedProject(null); setCsrfToken(null); }; addEventListener('popstate', pop); addEventListener('session-expired', expired); return () => { removeEventListener('popstate', pop); removeEventListener('session-expired', expired); }; }, [setSelectedProject]);
+  const adminPresent = Boolean(admin);
   React.useEffect(() => {
   const page = route.startsWith('/inbox') ? 'Inbox' : route.startsWith('/settings') ? 'Settings' : route.startsWith('/deliveries') ? 'Deliveries' : route.startsWith('/destinations') ? 'Destinations' : selected?.name ?? 'Projects';
     document.title = `${page} · ${projectConfig.display_name}`;
   }, [route, selected?.name]);
   React.useLayoutEffect(() => {
     document.querySelector<HTMLElement>('main h1')?.focus({ preventScroll: true });
-  }, [pathname, Boolean(admin)]);
+  }, [pathname, adminPresent]);
 
-  const refreshProjects = React.useCallback(async (includeArchived = showArchived) => {
+  const refreshProjects = React.useCallback(async (includeArchived = false) => {
     const result = await apiRequest<{ items: Project[]; next_cursor: string | null }>(`projects?limit=100${includeArchived ? '&include_archived=true' : ''}`);
     setProjects(result.items);
-  }, [showArchived]);
+    const current = selectedRef.current;
+    if (current?.is_sample && (includeArchived || !current.archived_at) && !result.items.some((project) => project.id === current.id)) {
+      setSelectedProject(null); setTokens([]); setEditing(false);
+    }
+  }, [setSelectedProject]);
+  React.useEffect(() => { const refresh = () => { void refreshProjects(showArchived).catch((e: unknown) => setError(apiErrorMessage(e))); }; addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshProjects, showArchived]);
   const selectProject = React.useCallback(async (project: Project) => {
     setError(''); setNotice(''); setCreatedToken(null); setEditing(false);
-    setSelected(project);
+    setSelectedProject(project);
     try {
-      const [fresh, tokenResult] = await Promise.all([
-        apiRequest<Project>(`projects/${project.id}`),
-        apiRequest<{ items: Token[] }>(`projects/${project.id}/tokens`),
-      ]);
-      setSelected(fresh); setTokens(tokenResult.items);
+      const fresh = await apiRequest<Project>(`projects/${project.id}`);
+      const tokenResult = fresh.is_sample ? { items: [] as Token[] } : await apiRequest<{ items: Token[] }>(`projects/${project.id}/tokens`);
+      setSelectedProject(fresh); setTokens(tokenResult.items);
       if (location.hash === '#routing') requestAnimationFrame(() => document.getElementById('routing')?.scrollIntoView({ block: 'start' }));
     } catch (e) { setError(apiErrorMessage(e)); }
-  }, [setError, setNotice, setCreatedToken, setEditing, setSelected, setTokens]);
+  }, [setError, setNotice, setCreatedToken, setEditing, setSelectedProject, setTokens]);
 
   React.useEffect(() => {
     const projectId = new URLSearchParams(location.search).get('project');
@@ -93,7 +107,8 @@ export function App() {
       setCsrfToken(session.csrf_token); setAdmin(session.admin);
       return refreshProjects(false);
     }).catch((e: unknown) => {
-      if (e instanceof ApiError && e.status !== 401 && live) setError(apiErrorMessage(e));
+      if (e instanceof ApiError && e.status === 401 && live) apiRequest<{ required: boolean }>('auth/setup').then(result => { if (live) { setSetupRequired(result.required); setSetupCheckDone(true); } }).catch(() => {});
+      else if (live) setError(apiErrorMessage(e));
     }).finally(() => { if (live) setAuthReady(true); });
     return () => { live = false; };
   }, [refreshProjects]);
@@ -103,7 +118,7 @@ export function App() {
     try { const result = await action(); success?.(result); }
     catch (e) {
       setError(apiErrorMessage(e));
-      if (e instanceof ApiError && e.status === 401) { setAdmin(null); setSelected(null); setCsrfToken(null); }
+      if (e instanceof ApiError && e.status === 401) { setAdmin(null); setSelectedProject(null); setCsrfToken(null); }
     } finally { setBusy(false); }
   }
 
@@ -117,7 +132,7 @@ export function App() {
 
   async function logout() {
     await run(() => apiRequest<{ status: string }>('auth/logout', { method: 'POST', body: '{}' }), () => {
-      setCsrfToken(null); setAdmin(null); setSelected(null); setProjects([]); setTokens([]); setCreatedToken(null);
+      setCsrfToken(null); setAdmin(null); setSelectedProject(null); setProjects([]); setTokens([]); setCreatedToken(null);
     });
   }
 
@@ -132,15 +147,17 @@ export function App() {
     await run(async () => selected
       ? apiRequest<Project>(`projects/${selected.id}`, { method: 'PATCH', body: JSON.stringify({ ...payload, settings: projectSettings }) })
       : apiRequest<Project>('projects', { method: 'POST', body: JSON.stringify(payload) }), async (project) => {
-      setSelected(project); setEditing(false); setNotice(selected ? 'Project settings saved.' : 'Project created.');
-      await refreshProjects();
+      setSelectedProject(project); setEditing(false); setNotice(selected ? 'Project settings saved.' : 'Project created.');
+      window.dispatchEvent(new Event('sample-data-refresh'));
+      if (createFromBanner) navigate('/');
+      await refreshProjects(showArchived);
       const tokenResult = await apiRequest<{ items: Token[] }>(`projects/${project.id}/tokens`); setTokens(tokenResult.items);
     });
   }
 
   async function changeProjectState(project: Project, action: 'archive' | 'restore') {
     await run(() => apiRequest<Project>(`projects/${project.id}/${action}`, { method: 'POST', body: '{}' }), async (updated) => {
-      setSelected(updated); setNotice(action === 'archive' ? 'Project archived.' : 'Project restored.'); await refreshProjects();
+      setSelectedProject(updated); setNotice(action === 'archive' ? 'Project archived.' : 'Project restored.'); await refreshProjects(showArchived);
     });
   }
 
@@ -164,17 +181,18 @@ export function App() {
   }
 
   if (!authReady) return <Shell><main className="center"><p role="status">Checking your session…</p></main></Shell>;
-  if (!admin) return <Shell><main className="center"><section className="welcome-card" aria-labelledby="welcome-title">
+  if (pathname === '/setup') return <Shell><SetupPage token={setupToken} onSuccess={async (createdAdmin, csrf, sampleLoaded, sampleAttempted) => { setCsrfToken(csrf); setAdmin(createdAdmin); await refreshProjects(false).catch((e: unknown) => setError(apiErrorMessage(e))); setTimeout(() => window.dispatchEvent(new CustomEvent('first-run-notice', { detail: sampleAttempted && !sampleLoaded ? "Account created. Sample data couldn't be loaded. You can try again below." : sampleLoaded ? 'Account created. Sample data loaded.' : 'Account created.' })), 0); navigate('/inbox'); }} /></Shell>;
+  if (!admin) return <Shell><main className="center">{setupRequired ? <section className="welcome-card" aria-labelledby="setup-needed-title"><div className="eyebrow">SETUP NEEDED</div><h1 id="setup-needed-title" tabIndex={-1}>Finish setup from the container logs</h1><p>This server has no administrator yet. Kebivo printed a one-time setup link when it started. Copy it from the logs and open it in this browser.</p><CommandBlock command="docker logs kebivo"/><p>Use the last line that starts with <code>Kebivo setup:</code>; the link follows it. If you mapped a port other than 8000, change 8000 in the link to yours. If the container has a different name, use that name. The link expires after 60 minutes; restarting the container prints a new one.</p><p className="fine-print">Using the command line instead? See the <a className="app-link" href="https://docs.kebivo.com/">server documentation</a>.</p></section> : <section className="welcome-card" aria-labelledby="welcome-title">
     <div className="eyebrow">ADMINISTRATOR ACCESS</div><h1 id="welcome-title" tabIndex={-1}>Sign in to your workspace</h1>
-    <p className="intro">Use the administrator account created from the server command line.</p>
+    <p className="intro">{setupCheckDone ? 'Sign in with the administrator account for this server.' : 'Use the administrator account created from the server command line.'}</p>
     <ErrorMessage message={error} />
     <form onSubmit={login}>
       <label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="username" required />
       <label htmlFor="password">Password</label><input id="password" name="password" type="password" autoComplete="current-password" required />
       <button disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
     </form>
-    <p className="fine-print">No signup. Administrators are created from the server command line. See the <a className="app-link" href="/docs">server documentation</a>.</p>
-  </section></main></Shell>;
+    <p className="fine-print">{setupCheckDone ? <>No signup. The administrator is created on first run. See the <a className="app-link" href="https://docs.kebivo.com/">server documentation</a>.</> : <>No signup. Administrators are created from the server command line. See the <a className="app-link" href="https://docs.kebivo.com/">server documentation</a>.</>}</p>
+  </section>}</main></Shell>;
 
   if (route.startsWith('/inbox/groups/')) return <Shell navigate={navigate} route={route} accountEmail={admin.email} onSignOut={logout}><GroupDetail groupId={location.pathname.split('/')[3] ?? ''} navigate={navigate} /></Shell>;
   if (route.startsWith('/settings/llm')) return <Shell navigate={navigate} route={route} accountEmail={admin.email} onSignOut={logout}><main className="dashboard-main"><section className="dashboard"><div className="dashboard-heading"><div><div className="eyebrow">CONFIGURATION</div><h1 tabIndex={-1}>Settings</h1><p className="subtle">Configure optional language model providers.</p></div></div><SettingsNav active="llm" navigate={navigate}/><LlmSettings /></section></main></Shell>;
@@ -187,33 +205,34 @@ export function App() {
     <section className="dashboard" aria-labelledby="dashboard-title">
       <div className="dashboard-heading"><div><div className="eyebrow">KEBIVO</div><h1 id="dashboard-title" tabIndex={-1}>Dashboard</h1><p className="subtle">Feedback activity and project settings.</p></div></div>
       <ErrorMessage message={error} /><div role="status" className="notice">{notice}</div>
-      {!selected && !editing && <FirstRunChecklist projects={projects.filter(project=>!project.archived_at)} navigate={navigate} />}
-      {!selected && !editing && <DashboardSummary navigate={navigate} projectId={projects.find(project=>!project.archived_at)?.id} />}
+      {!selected && !editing && !createFromBanner && <FirstRunEmpty dashboard navigate={navigate} projectId={projects.find(project=>!project.archived_at&&!project.is_sample)?.id} />}
+      {!selected && !editing && !createFromBanner && <FirstRunChecklist projects={projects.filter(project=>!project.archived_at)} navigate={navigate} />}
+      {!selected && !editing && !createFromBanner && <DashboardSummary navigate={navigate} projectId={projects.find(project=>!project.archived_at)?.id} />}
       <div className="dashboard-grid">
         <section className="panel project-panel" aria-labelledby="projects-title">
-          <div className="panel-heading"><div><h2 id="projects-title">Projects</h2><p className="subtle">{projects.length} {projects.length === 1 ? 'project' : 'projects'}</p></div><button onClick={() => { setSelected(null); setEditing(true); setError(''); setNotice(''); }}>New project</button></div>
-          {projects.filter((project) => showArchived || !project.archived_at).length === 0 ? <div className="empty-state"><h3>{showArchived ? 'No projects yet' : 'No active projects'}</h3><p>Create a project to organize feedback and issue credentials.</p><button onClick={() => { setSelected(null); setEditing(true); }}>Create a project</button></div> : <ul className="project-list">{projects.filter((project) => showArchived || !project.archived_at).map((project) => <li key={project.id}>
+          <div className="panel-heading"><div><h2 id="projects-title">Projects</h2><p className="subtle">{projects.length} {projects.length === 1 ? 'project' : 'projects'}</p></div><button onClick={() => { setSelectedProject(null); setEditing(true); setError(''); setNotice(''); }}>New project</button></div>
+          {projects.filter((project) => showArchived || !project.archived_at).length === 0 ? <div className="empty-state"><h3>{showArchived ? 'No projects yet' : 'No active projects'}</h3><p>Create a project to organize feedback and issue credentials.</p><button onClick={() => { setSelectedProject(null); setEditing(true); }}>Create a project</button></div> : <ul className="project-list">{projects.filter((project) => showArchived || !project.archived_at).map((project) => <li key={project.id}>
             <button className={`project-choice ${selected?.id === project.id ? 'selected' : ''}`} onClick={() => void selectProject(project)} aria-current={selected?.id === project.id ? 'true' : undefined}>
-              <span className="project-avatar" aria-hidden="true">{project.name.slice(0, 1).toUpperCase()}</span><span className="project-info"><strong>{project.name}</strong><small>{project.slug}</small></span><span className={`badge ${project.is_active ? 'active' : ''}`}>{project.is_active ? 'Active' : 'Disabled'}</span>
+              <span className="project-avatar" aria-hidden="true">{project.name.slice(0, 1).toUpperCase()}</span><span className="project-info"><strong>{project.name} {project.is_sample && <SampleBadge />}</strong><small>{project.slug}</small></span><span className={`badge ${project.is_active ? 'active' : ''}`}>{project.is_active ? 'Active' : 'Disabled'}</span>
             </button></li>)}</ul>}
-          <label className="checkbox-row archived-toggle"><input type="checkbox" checked={showArchived} onChange={(e) => { setShowArchived(e.target.checked); void refreshProjects(e.target.checked).catch((err: unknown) => setError(apiErrorMessage(err))); }} /> Show archived projects</label>
+          <label className="checkbox-row archived-toggle"><input type="checkbox" checked={showArchived} onChange={(e) => { const includeArchived = e.target.checked; setShowArchived(includeArchived); if (!includeArchived && selected?.is_sample && selected.archived_at) { setSelectedProject(null); setTokens([]); setEditing(false); } void refreshProjects(includeArchived).catch((err: unknown) => setError(apiErrorMessage(err))); }} /> Show archived projects</label>
           {showArchived && <ArchivedProjects projects={projects} onRestore={(p) => void changeProjectState(p, 'restore')} />}
         </section>
         <section className="detail-column" aria-live="polite">
-          {editing ? <ProjectForm project={selected} busy={busy} onCancel={() => setEditing(false)} onSubmit={saveProject} /> : selected ? <>
+          {editing || createFromBanner ? <ProjectForm project={selected} busy={busy} onCancel={() => { setEditing(false); if (createFromBanner) navigate('/'); }} onSubmit={saveProject} /> : selected ? <>
             <section className="panel detail-panel" aria-labelledby="project-detail-title">
-              <div className="panel-heading"><div><div className="eyebrow">PROJECT SETTINGS</div><h2 id="project-detail-title">{selected.name}</h2><p className="subtle">{selected.description || 'No description'}</p></div><div className="button-row"><a className="text-button" href={`/settings?project=${encodeURIComponent(selected.id)}#export`} onClick={event=>{event.preventDefault();navigate(`/settings?project=${encodeURIComponent(selected.id)}#export`)}}>Export feedback</a><button className="quiet-button" onClick={() => setEditing(true)}>Edit</button>{selected.archived_at ? <button className="quiet-button" onClick={() => void changeProjectState(selected, 'restore')}>Restore</button> : <button className="danger-button" onClick={() => window.confirm(`Archive “${selected.name}”? This disables its tokens but keeps settings and history.`) && void changeProjectState(selected, 'archive')}>Archive</button>}</div></div>
+              <div className="panel-heading"><div><div className="eyebrow">PROJECT SETTINGS</div><h2 id="project-detail-title">{selected.name} {selected.is_sample && <SampleBadge />}</h2><p className="subtle">{selected.description || 'No description'}</p></div><div className="button-row"><a className="text-button" href={`/settings?project=${encodeURIComponent(selected.id)}#export`} onClick={event=>{event.preventDefault();navigate(`/settings?project=${encodeURIComponent(selected.id)}#export`)}}>Export feedback</a><button className="quiet-button" onClick={() => setEditing(true)}>Edit</button>{selected.archived_at ? <button className="quiet-button" onClick={() => void changeProjectState(selected, 'restore')}>Restore</button> : <button className="danger-button" onClick={() => window.confirm(`Archive “${selected.name}”? This disables its tokens but keeps settings and history.`) && void changeProjectState(selected, 'archive')}>Archive</button>}</div></div>
               <dl className="settings-summary"><div><dt>Slug</dt><dd>{selected.slug}</dd></div><div><dt>Status</dt><dd>{selected.archived_at ? 'Archived' : selected.is_active ? 'Active' : 'Disabled'}</dd></div><div><dt>Corrections policy</dt><dd>{selected.settings.corrections?.enabled ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Deduplication</dt><dd>{selected.settings.deduplication?.mode ?? (selected.settings.deduplication?.enabled === false ? 'Disabled' : 'Exact')}</dd></div></dl>
             </section>
-            <section className="panel" aria-labelledby="tokens-title"><div className="panel-heading"><div><div className="eyebrow">CREDENTIALS</div><h2 id="tokens-title">Project tokens</h2></div></div>
+            {selected.is_sample ? <section className="panel"><p>Sample projects can't have tokens or receive events. Create your own project to connect an app.</p><button onClick={() => { setSelectedProject(null); setEditing(true); }}>Create a project</button></section> : <><section className="panel" aria-labelledby="tokens-title"><div className="panel-heading"><div><div className="eyebrow">CREDENTIALS</div><h2 id="tokens-title">Project tokens</h2></div></div>
               {createdToken && <div className="secret-reveal" role="alert"><strong>Copy this token now</strong><p>This secret is shown once. Store it securely; it cannot be retrieved later.</p><label htmlFor="new-token">New token</label><div className="copy-row"><input id="new-token" readOnly value={createdToken.token} onFocus={(e) => e.currentTarget.select()} /><button type="button" className="quiet-button" onClick={() => void navigator.clipboard?.writeText(createdToken.token).then(() => setNotice('Token copied to clipboard.')).catch(() => setNotice('Select and copy the token manually.'))}>Copy token</button></div><button className="quiet-button dismiss-button" onClick={() => setCreatedToken(null)}>I have saved it</button></div>}
               {!selected.archived_at && <form className="token-form" onSubmit={createToken}><div className="form-row"><div><label htmlFor="token-name">Token name</label><input id="token-name" name="token-name" maxLength={120} placeholder="Production integration" required /></div><button disabled={busy}>Create token</button></div><p className="subtle">All tokens receive <code>feedback:gap</code>.</p><label className="checkbox-row"><input name="correction-scope" type="checkbox" disabled={!selected.settings.corrections?.enabled} /> Also grant <code>feedback:correction</code>{!selected.settings.corrections?.enabled && <span className="subtle"> (enable project correction policy first)</span>}</label></form>}
               {tokens.length === 0 ? <div className="empty-inline">No tokens have been issued for this project.</div> : <div className="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Scopes</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{tokens.map((token) => <tr key={token.id} className={token.revoked_at ? 'revoked-row' : ''}><th scope="row">{token.name}<small>{token.prefix}… {token.revoked_at ? ' · Revoked' : ''}</small></th><td>{token.scopes.map((scope) => <code className="scope-chip" key={scope}>{scope}</code>)}</td><td>{date(token.created_at)}</td><td>{date(token.last_used_at)}</td><td>{!token.revoked_at && <button className="text-button" disabled={busy || Boolean(selected.archived_at)} onClick={() => void revokeToken(token)}>Revoke</button>}</td></tr>)}</tbody></table></div>}
             </section>
-              <ConnectPanel correctionsEnabled={Boolean(selected.settings.corrections?.enabled)} archived={Boolean(selected.archived_at)} projectId={selected.id} />
+              <ConnectPanel correctionsEnabled={Boolean(selected.settings.corrections?.enabled)} archived={Boolean(selected.archived_at)} projectId={selected.id} /></>}
             <section className="panel project-configuration" aria-label="Project configuration">
-      <DefaultTagsEditor key={selected.id} project={selected} busy={busy} onSaved={(updated) => { setSelected(updated); setNotice('Default tags saved.'); }} onError={setError} />
-              <SemanticSettings key={`semantic-${selected.id}`} project={selected} onSaved={updated => { const backfill = updated.settings.deduplication?.semantic?.method === 'embeddings' && selected.settings.deduplication?.semantic?.method !== 'embeddings'; setSelected(updated); setNotice(`Deduplication settings saved.${backfill ? ' Existing questions are being sent for indexing.' : ''}`); }} onError={setError} />
+      <DefaultTagsEditor key={selected.id} project={selected} busy={busy} onSaved={(updated) => { setSelectedProject(updated); setNotice('Default tags saved.'); }} onError={setError} />
+              <SemanticSettings key={`semantic-${selected.id}`} project={selected} onSaved={updated => { const backfill = updated.settings.deduplication?.semantic?.method === 'embeddings' && selected.settings.deduplication?.semantic?.method !== 'embeddings'; setSelectedProject(updated); setNotice(`Deduplication settings saved.${backfill ? ' Existing questions are being sent for indexing.' : ''}`); }} onError={setError} />
               <div id="routing"><Routing project={selected} /></div>
               <p className="scope-note"><strong>Correction access uses two gates.</strong> The project policy above controls whether corrections are accepted. Each token must also include the <code>feedback:correction</code> scope.</p>
               {selected.archived_at && <p className="inline-note">Archived {date(selected.archived_at)}. Restore this project before issuing credentials.</p>}
@@ -225,7 +244,7 @@ export function App() {
   </main></Shell>;
 }
 
-function Shell({ children, navigate, route, accountEmail, onSignOut }: { children: React.ReactNode; navigate?: (url: string) => void; route?: string; accountEmail?: string; onSignOut?: () => void }) { const link = (url: string) => (event: React.MouseEvent) => { event.preventDefault(); navigate?.(url); }; return <div className="app-shell"><header className="topbar"><a className="brand" href="/" onClick={link('/')} aria-label={`${projectConfig.display_name} home`}><BrandMark/><span>{projectConfig.display_name}</span></a>{navigate && <nav aria-label="Main navigation" className="top-nav"><a href="/" onClick={link('/')} aria-current={route === '/' ? 'page' : undefined}>Dashboard</a><a href="/inbox" onClick={link('/inbox')} aria-current={route?.startsWith('/inbox') ? 'page' : undefined}>Inbox</a><a href="/destinations" onClick={link('/destinations')} aria-current={route?.startsWith('/destinations') ? 'page' : undefined}>Destinations</a><a href="/deliveries" onClick={link('/deliveries')} aria-current={route?.startsWith('/deliveries') ? 'page' : undefined}>Deliveries</a><a href="/settings" onClick={link('/settings')} aria-current={route?.startsWith('/settings') ? 'page' : undefined}>Settings</a></nav>}{accountEmail&&<AccountMenu email={accountEmail} onSignOut={onSignOut??(()=>{})}/>}</header>{children}<footer>{projectConfig.display_name} · self-hosted</footer></div>; }
+function Shell({ children, navigate, route, accountEmail, onSignOut }: { children: React.ReactNode; navigate?: (url: string) => void; route?: string; accountEmail?: string; onSignOut?: () => void }) { const link = (url: string) => (event: React.MouseEvent) => { event.preventDefault(); navigate?.(url); }; const content = <><header className="topbar"><a className="brand" href="/" onClick={link('/')} aria-label={`${projectConfig.display_name} home`}><BrandMark/><span>{projectConfig.display_name}</span></a>{navigate && <nav aria-label="Main navigation" className="top-nav"><a href="/" onClick={link('/')} aria-current={route === '/' ? 'page' : undefined}>Dashboard</a><a href="/inbox" onClick={link('/inbox')} aria-current={route?.startsWith('/inbox') ? 'page' : undefined}>Inbox</a><a href="/destinations" onClick={link('/destinations')} aria-current={route?.startsWith('/destinations') ? 'page' : undefined}>Destinations</a><a href="/deliveries" onClick={link('/deliveries')} aria-current={route?.startsWith('/deliveries') ? 'page' : undefined}>Deliveries</a><a href="/settings" onClick={link('/settings')} aria-current={route?.startsWith('/settings') ? 'page' : undefined}>Settings</a></nav>}{accountEmail&&<AccountMenu email={accountEmail} onSignOut={onSignOut??(()=>{})}/>}</header>{children}<footer>{projectConfig.display_name} · self-hosted</footer></>; return <div className="app-shell">{accountEmail ? <FirstRunProvider navigate={navigate ?? (()=>{})}>{content}</FirstRunProvider> : content}</div>; }
 function AccountMenu({email,onSignOut}:{email:string;onSignOut:()=>void}){const [open,setOpen]=React.useState(false);const root=React.useRef<HTMLDivElement>(null);const trigger=React.useRef<HTMLButtonElement>(null);return <div className="account-menu" ref={root} onBlur={event=>{if(!root.current?.contains(event.relatedTarget as Node|null))setOpen(false)}} onKeyDown={event=>{if(event.key==='Escape'&&open){setOpen(false);trigger.current?.focus()}}}><button ref={trigger} type="button" className="account-trigger" aria-expanded={open} onClick={()=>setOpen(value=>!value)}><span className="account-email">{email}</span><span className="account-mobile-label">Account</span><span aria-hidden="true">▾</span></button>{open&&<div className="account-menu-panel"><button type="button" className="quiet-button" onClick={onSignOut}>Sign out</button></div>}</div>;}
 function BrandMark(){return <svg className="brand-mark" aria-hidden="true" viewBox="0 0 64 64"><defs><clipPath id="brand-mark-clip"><rect x="26" y="26" width="34" height="34" rx="6"/></clipPath></defs><circle cx="25" cy="25" r="21" fill="#1f4d3d"/><rect x="26" y="26" width="34" height="34" rx="6" fill="#285f4c"/><circle cx="25" cy="25" r="21" fill="#e3f0ea" clipPath="url(#brand-mark-clip)"/></svg>;}
 function ErrorMessage({ message }: { message: string }) { return message ? <p className="error-message" role="alert">{message}</p> : null; }
@@ -362,8 +381,10 @@ function ArchivedProjects({ projects, onRestore }: { projects: Project[]; onRest
   return <div className="archived-list"><h3>Archived</h3>{archived.length === 0 ? <p className="subtle">No archived projects.</p> : archived.map((project) => <div className="archived-item" key={project.id}><span>{project.name}</span><button className="text-button" onClick={() => onRestore(project)}>Restore</button></div>)}</div>;
 }
 function ProjectForm({ project, busy, onCancel, onSubmit }: { project: Project | null; busy: boolean; onCancel: () => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  const firstRun = useFirstRun();
   return <section className="panel" aria-labelledby="project-form-title"><div className="panel-heading"><div><div className="eyebrow">{project ? 'EDIT PROJECT' : 'NEW PROJECT'}</div><h2 id="project-form-title">{project ? 'Project settings' : 'Create a project'}</h2></div></div>
-    <form className="project-form" onSubmit={onSubmit}><label htmlFor="project-name">Name</label><input id="project-name" name="name" defaultValue={project?.name ?? ''} maxLength={200} required />
+    {firstRun?.sample?.present && !firstRun.sample.has_real_projects && !project && <p className="scope-note">Create a project for your app. It gets its own token; the sample projects can't have one.</p>}
+    <form className="project-form" onSubmit={onSubmit}><label htmlFor="project-name">Name</label><input id="project-name" name="name" autoFocus={!project} defaultValue={project?.name ?? ''} maxLength={200} required />
       <label htmlFor="project-slug">Slug</label><input id="project-slug" name="slug" defaultValue={project?.slug ?? ''} pattern="[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,98}[a-zA-Z0-9])?" aria-describedby="slug-help" required /><small id="slug-help" className="subtle">Lowercase letters, numbers, and internal hyphens.</small>
       <label htmlFor="project-description">Description <span className="subtle">(optional)</span></label><textarea id="project-description" name="description" defaultValue={project?.description ?? ''} maxLength={5000} rows={3} />
       <fieldset><legend>Project policies</legend><label className="checkbox-row"><input type="checkbox" name="corrections" defaultChecked={project?.settings.corrections?.enabled ?? false} /> Enable correction feedback</label><p className="help-text">Tokens also need the correction scope before an integration can submit corrections.</p><label htmlFor="deduplication-mode">Deduplication mode</label><select id="deduplication-mode" name="deduplication_mode" defaultValue={project?.settings.deduplication?.mode ?? (project?.settings.deduplication?.enabled === false ? 'disabled' : 'exact')}><option value="disabled">Disabled</option><option value="exact">Exact</option><option value="semantic" disabled>Semantic (Configure an LLM provider first)</option></select><p className="help-text">{exactHelp}</p><p className="help-text">Add an LLM provider under LLM providers first to enable Semantic.</p></fieldset>

@@ -24,7 +24,7 @@ describe('group inbox rows', () => {
     expect(container.textContent).toContain('Where is the guide?'); expect(container.textContent).toContain('Support'); expect(container.textContent).toContain('IT'); expect(container.textContent).toContain('Open'); expect(container.textContent).toContain('4'); expect(container.textContent).toContain('1 failed'); expect(container.textContent).not.toContain('2 delivered · 1 active · 1 failed');
     expect(container.querySelector('time[title]')).not.toBeNull();
   });
-  it('explains the empty inbox and opens a project Connect panel', async () => {
+  it('explains the empty inbox and connects to the existing project', async () => {
     globalThis.fetch = vi.fn(async input => {
       const url = String(input);
       if (url.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [{ id: 'p1', name: 'Support' }] }));
@@ -33,8 +33,8 @@ describe('group inbox rows', () => {
     }) as typeof fetch;
     const navigate = vi.fn();
     await act(async () => { root.render(<Inbox path="/inbox" navigate={navigate} />); await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(container.textContent).toContain('Send a test event from a project Connect panel');
-    await act(async () => { container.querySelector<HTMLButtonElement>('.empty-state button')!.click(); });
+    expect(container.textContent).toContain('Look around with sample data first');
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Connect your own app')!.click(); });
     expect(navigate).toHaveBeenCalledWith('/?project=p1');
   });
   it('renders question excerpts and tag names as literal text', async () => {

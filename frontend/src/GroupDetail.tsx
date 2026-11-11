@@ -1,5 +1,6 @@
 import React from "react";
 import { apiRequest, ApiError } from "./api";
+import { SampleBadge } from "./FirstRun";
 
 type Event = {
   id: string;
@@ -22,7 +23,7 @@ type Group = {
   status: string;
   occurrence_count: number;
   representative: { event_id: string; question: string };
-  project: { id: string; name: string };
+  project: { id: string; name: string; is_sample?: boolean };
   event_type: string;
   notes: { id: string; body: string; created_at: string }[];
   tags: { slug: string; name: string }[];
@@ -244,7 +245,7 @@ export function GroupDetail({
               {group.representative.question || "Untitled feedback group"}
             </h1>
             <button className="text-button" aria-expanded={questionExpanded} onClick={() => setQuestionExpanded(value => !value)}>{questionExpanded ? "Show less" : "Show full question"}</button>
-            <div className="group-chips"><span className="scope-chip">{group.project.name}</span><span className="scope-chip">{group.event_type.replaceAll("_", " ")}</span><span className={`status status-${group.status}`}>{statusLabels[group.status] ?? group.status}</span></div>
+            <div className="group-chips"><span className="scope-chip">{group.project.name} {group.project.is_sample && <SampleBadge />}</span><span className="scope-chip">{group.event_type.replaceAll("_", " ")}</span><span className={`status status-${group.status}`}>{statusLabels[group.status] ?? group.status}</span></div>
             <p className="subtle">{group.occurrence_count} {group.occurrence_count === 1 ? "occurrence" : "occurrences"}</p>
           </div>
         </div>

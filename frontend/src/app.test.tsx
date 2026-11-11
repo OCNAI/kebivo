@@ -78,6 +78,156 @@ describe('authenticated dashboard', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Configured origins: https://admin.example.org');
   });
 
+  it('loads seeded projects into the Dashboard after first-run setup', async () => {
+    const sampleProject = { id: 'sample-p', name: 'Sample support', slug: 'sample-support', description: null, is_active: true, archived_at: null, is_sample: true, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' } }, tags: [], created_at: '', updated_at: '' };
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ detail: 'Authentication required' }), { status: 401 });
+      if (path.endsWith('/auth/setup') && init?.method !== 'POST') return new Response(JSON.stringify({ required: true }));
+      if (path.endsWith('/auth/setup')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/admin/sample-data') && init?.method === 'POST') return new Response(JSON.stringify({ present: true }));
+      if (path.endsWith('/admin/sample-data')) return new Response(JSON.stringify({ present: true, has_real_events: false, has_real_projects: false }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [sampleProject], next_cursor: null }));
+      if (path.includes('/admin/groups/summary')) return new Response(JSON.stringify({ total_events: 1, total_groups: 1 }));
+      if (path.includes('/admin/groups?')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/setup#token=setup-secret');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => {
+      const email = container.querySelector<HTMLInputElement>('#setup-email')!, password = container.querySelector<HTMLInputElement>('#setup-password')!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(email, 'admin@example.org'); email.dispatchEvent(new Event('input', { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(password, 'correct horse battery'); password.dispatchEvent(new Event('input', { bubbles: true }));
+      container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(container.textContent).toContain('Sample support');
+    await act(async () => { container.querySelector<HTMLAnchorElement>('.top-nav a[href="/"]')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).toContain('Sample support');
+    expect(container.querySelector('.sample')).not.toBeNull();
+  });
+
+  it('refreshes Dashboard projects after sample load and removal events', async () => {
+    let samplePresent = false;
+    const sampleProject = { id: 'sample-p', name: 'Sample support', slug: 'sample-support', description: null, is_active: true, archived_at: null, is_sample: true, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' } }, tags: [], created_at: '', updated_at: '' };
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: samplePresent ? [sampleProject] : [], next_cursor: null }));
+      if (path.endsWith('/admin/groups/summary')) return new Response(JSON.stringify({ total_events: samplePresent ? 1 : 0, total_groups: samplePresent ? 1 : 0 }));
+      if (path.endsWith('/admin/sample-data') && init?.method === 'POST') { samplePresent = true; return new Response(JSON.stringify({ present: true })); }
+      if (path.endsWith('/admin/sample-data')) return new Response(JSON.stringify({ present: samplePresent, has_real_events: false, has_real_projects: false }));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect([...container.querySelectorAll<HTMLButtonElement>('button')].some(button => button.textContent === 'Load sample data')).toBe(true);
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Load sample data')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).toContain('Sample support');
+    samplePresent = false;
+    await act(async () => { window.dispatchEvent(new Event('sample-data-refresh')); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).not.toContain('Sample support');
+  });
+
+  it('clears a selected sample project and shows the empty state after banner removal', async () => {
+    const originalShowModal = HTMLDialogElement.prototype.showModal, originalClose = HTMLDialogElement.prototype.close;
+    HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+    HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); this.dispatchEvent(new Event('close')); };
+    let samplePresent = true;
+    const sampleProject = { id: 'sample-p', name: 'Sample support', slug: 'sample-support', description: null, is_active: true, archived_at: '2026-11-11T00:00:00Z', is_sample: true, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' } }, tags: [], created_at: '', updated_at: '' };
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/projects?limit=100&include_archived=true')) return new Response(JSON.stringify({ items: samplePresent ? [sampleProject] : [], next_cursor: null }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
+      if (path.endsWith('/projects/sample-p')) return new Response(JSON.stringify(sampleProject));
+      if (path.endsWith('/admin/sample-data') && init?.method === 'DELETE') { samplePresent = false; return new Response(JSON.stringify({ present: false })); }
+      if (path.endsWith('/admin/sample-data')) return new Response(JSON.stringify({ present: samplePresent, has_real_events: false, has_real_projects: false }));
+      if (path.includes('/admin/groups/summary')) return new Response(JSON.stringify({ total_events: samplePresent ? 1 : 0, total_groups: samplePresent ? 1 : 0 }));
+      if (path.includes('/admin/groups?')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLInputElement>('.archived-toggle input')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.project-choice')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).toContain('Sample support');
+    await act(async () => { container.querySelector<HTMLAnchorElement>('.top-nav a[href="/inbox"]')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Remove sample data')!.click(); });
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('dialog button')].find(button => button.textContent === 'Remove sample data')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLAnchorElement>('.top-nav a[href="/"]')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).not.toContain('Sample support');
+    expect(container.textContent).toContain('Load sample data');
+    expect(container.textContent).toContain('Connect your own app');
+    HTMLDialogElement.prototype.showModal = originalShowModal;
+    HTMLDialogElement.prototype.close = originalClose;
+  });
+
+  it.each([false, true])('keeps archived project details selected (sample: %s) without repeating the session check', async (is_sample) => {
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => true);
+    const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null as string | null, is_sample, settings: { corrections: { enabled: false }, deduplication: { mode: 'exact' } }, tags: [], created_at: '', updated_at: '' };
+    let archivedAt: string | null = null;
+    let sessionRequests = 0;
+    globalThis.fetch = vi.fn(async input => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) { sessionRequests++; return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' })); }
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: archivedAt ? [] : [project], next_cursor: null }));
+      if (path.endsWith('/projects/p1/archive')) { archivedAt = '2026-11-11T00:00:00Z'; return new Response(JSON.stringify({ ...project, archived_at: archivedAt })); }
+      if (path.endsWith('/projects/p1')) return new Response(JSON.stringify({ ...project, archived_at: archivedAt }));
+      if (path.endsWith('/projects/p1/tokens')) return new Response(JSON.stringify({ items: [] }));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.project-choice')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Archive')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.querySelector('#project-detail-title')?.textContent).toContain('Support');
+    expect([...container.querySelectorAll<HTMLButtonElement>('button')].some(button => button.textContent === 'Restore')).toBe(true);
+    expect(sessionRequests).toBe(1);
+    window.confirm = originalConfirm;
+  });
+
+  it('keeps archived projects in the list after sample refresh when Show archived is on', async () => {
+    const archivedProject = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: '2026-11-11T00:00:00Z', settings: {}, tags: [], created_at: '', updated_at: '' };
+    const projectUrls: string[] = [];
+    globalThis.fetch = vi.fn(async input => {
+      const path = String(input); projectUrls.push(path);
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/projects?limit=100&include_archived=true')) return new Response(JSON.stringify({ items: [archivedProject], next_cursor: null }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    const archivedToggle = container.querySelector<HTMLInputElement>('.archived-toggle input')!;
+    await act(async () => { archivedToggle.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { window.dispatchEvent(new Event('sample-data-refresh')); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).toContain('Support');
+    expect(projectUrls.filter(path => path.includes('/projects?limit=100')).slice(-2)).toEqual([
+      '/api/v1/projects?limit=100&include_archived=true',
+      '/api/v1/projects?limit=100&include_archived=true',
+    ]);
+  });
+
+  it('clears an archived sample selection when Show archived is turned off', async () => {
+    const archivedSample = { id: 'sample-p', name: 'Sample support', slug: 'sample-support', description: null, is_active: true, archived_at: '2026-11-11T00:00:00Z', is_sample: true, settings: {}, tags: [], created_at: '', updated_at: '' };
+    globalThis.fetch = vi.fn(async input => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/projects?limit=100&include_archived=true')) return new Response(JSON.stringify({ items: [archivedSample], next_cursor: null }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
+      if (path.endsWith('/projects/sample-p')) return new Response(JSON.stringify(archivedSample));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLInputElement>('.archived-toggle input')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.project-choice')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.querySelector('#project-detail-title')?.textContent).toContain('Sample support');
+    await act(async () => { container.querySelector<HTMLInputElement>('.archived-toggle input')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.querySelector('#project-detail-title')).toBeNull();
+  });
+
   it('identifies project correction policy separately from token scope', async () => {
     const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' as const } }, tags: [], created_at: '', updated_at: '' };
     const writes: Record<string, unknown>[] = [];
@@ -153,6 +303,24 @@ describe('feedback inbox', () => {
   let container: HTMLDivElement; let root: Root; let originalFetch: typeof fetch;
   beforeEach(() => { originalFetch=globalThis.fetch; container=document.createElement('div'); document.body.append(container); root=createRoot(container); });
   afterEach(() => { act(()=>root.unmount()); container.remove(); globalThis.fetch=originalFetch; });
+  it('refreshes project filters and groups after sample removal', async () => {
+    let samplePresent = true;
+    let projectRequests = 0, groupRequests = 0;
+    globalThis.fetch = vi.fn(async input => {
+      const url = String(input);
+      if (url.endsWith('/projects?limit=100')) { projectRequests++; return new Response(JSON.stringify({ items: samplePresent ? [{ id: 'sample-p', name: 'Sample project', is_sample: true }] : [] })); }
+      if (url.includes('/admin/groups?')) { groupRequests++; return new Response(JSON.stringify({ items: [], next_cursor: null })); }
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/inbox');
+    await act(async () => { root.render(<Inbox navigate={() => {}} />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.querySelector('select[aria-label="Filter by project"]')?.textContent).toContain('Sample project');
+    samplePresent = false;
+    await act(async () => { window.dispatchEvent(new Event('sample-data-refresh')); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.querySelector('select[aria-label="Filter by project"]')?.textContent).not.toContain('Sample project');
+    expect(projectRequests).toBeGreaterThan(1);
+    expect(groupRequests).toBeGreaterThan(1);
+  });
   it('maps filters and sort to query parameters and renders open IT groups', async () => {
     const urls:string[]=[];
     const row={id:'g1',project:{id:'p1',name:'Support',slug:'support'},event_type:'knowledge_gap',representative:{event_id:'e1',question_excerpt:'VPN access issue'},tags:[{slug:'it',name:'IT'}],status:'open',occurrence_count:3,first_seen_at:'2026-01-01T00:00:00Z',last_seen_at:'2026-01-02T00:00:00Z',delivery_summary:{delivered:2,in_progress:0,failed:1}};
