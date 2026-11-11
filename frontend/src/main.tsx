@@ -215,7 +215,7 @@ export function App() {
             <button className={`project-choice ${selected?.id === project.id ? 'selected' : ''}`} onClick={() => void selectProject(project)} aria-current={selected?.id === project.id ? 'true' : undefined}>
               <span className="project-avatar" aria-hidden="true">{project.name.slice(0, 1).toUpperCase()}</span><span className="project-info"><strong>{project.name} {project.is_sample && <SampleBadge />}</strong><small>{project.slug}</small></span><span className={`badge ${project.is_active ? 'active' : ''}`}>{project.is_active ? 'Active' : 'Disabled'}</span>
             </button></li>)}</ul>}
-          <label className="checkbox-row archived-toggle"><input type="checkbox" checked={showArchived} onChange={(e) => { setShowArchived(e.target.checked); void refreshProjects(e.target.checked).catch((err: unknown) => setError(apiErrorMessage(err))); }} /> Show archived projects</label>
+          <label className="checkbox-row archived-toggle"><input type="checkbox" checked={showArchived} onChange={(e) => { const includeArchived = e.target.checked; setShowArchived(includeArchived); if (!includeArchived && selected?.is_sample && selected.archived_at) { setSelectedProject(null); setTokens([]); setEditing(false); } void refreshProjects(includeArchived).catch((err: unknown) => setError(apiErrorMessage(err))); }} /> Show archived projects</label>
           {showArchived && <ArchivedProjects projects={projects} onRestore={(p) => void changeProjectState(p, 'restore')} />}
         </section>
         <section className="detail-column" aria-live="polite">

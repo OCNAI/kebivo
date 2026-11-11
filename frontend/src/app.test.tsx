@@ -209,6 +209,25 @@ describe('authenticated dashboard', () => {
     ]);
   });
 
+  it('clears an archived sample selection when Show archived is turned off', async () => {
+    const archivedSample = { id: 'sample-p', name: 'Sample support', slug: 'sample-support', description: null, is_active: true, archived_at: '2026-11-11T00:00:00Z', is_sample: true, settings: {}, tags: [], created_at: '', updated_at: '' };
+    globalThis.fetch = vi.fn(async input => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/projects?limit=100&include_archived=true')) return new Response(JSON.stringify({ items: [archivedSample], next_cursor: null }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
+      if (path.endsWith('/projects/sample-p')) return new Response(JSON.stringify(archivedSample));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLInputElement>('.archived-toggle input')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.project-choice')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.querySelector('#project-detail-title')?.textContent).toContain('Sample support');
+    await act(async () => { container.querySelector<HTMLInputElement>('.archived-toggle input')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.querySelector('#project-detail-title')).toBeNull();
+  });
+
   it('identifies project correction policy separately from token scope', async () => {
     const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' as const } }, tags: [], created_at: '', updated_at: '' };
     const writes: Record<string, unknown>[] = [];
