@@ -231,13 +231,6 @@ button:disabled, button[aria-disabled="true"] { opacity:1; color:#3d4942; backgr
   .group-cards { display:block; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
-@media (prefers-color-scheme: dark) {
-  .star-prompt { border-left-color:#718f7d; background:#26372e; color:#c2cec6; }
-  .star-prompt a { color:#9ed0b0; }
-  .star-prompt-dismiss { color:#c2cec6; }
-  .star-prompt-dismiss:hover:not(:disabled) { background:#34493c; color:#eef5ef; }
-  .star-prompt :focus-visible { outline-color:#a8d7b7; }
-}
 .destination-form { gap:8px; max-width:760px; }
 .destination-list { overflow:hidden; }
 .system-mark { display:block; color:#317051; font-size:10px; margin-top:4px; }
