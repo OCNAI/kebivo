@@ -53,7 +53,7 @@ export function Inbox({ navigate }: { path?: string; navigate: (url: string) => 
   }, [searchDraft, q]);
 
   React.useEffect(() => { let active = true; apiRequest<{ items: { id: string; name: string; is_sample?: boolean }[] }>('projects?limit=100').then(r => { if (active) setProjects(r.items); }).catch(() => {}); return () => { active = false; }; }, []);
-  React.useEffect(() => { const refresh = () => { setLoading(true); setRetry(value => value + 1); }; addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, []);
+  React.useEffect(() => { const refresh = () => { setLoading(true); setRetry(value => value + 1); void apiRequest<{ items: { id: string; name: string; is_sample?: boolean }[] }>('projects?limit=100').then(r => setProjects(r.items)).catch(() => {}); }; addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, []);
   React.useEffect(() => { let active = true; const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''; apiRequest<GroupSummary>(`admin/groups/summary${query}`).then(result => { if (active) setSummary(result); }).catch(() => {}); return () => { active = false; }; }, [projectId]);
   const filterKey = [projectId, eventType, status.join(','), tags.join(','), q, firstFrom, firstTo, lastFrom, lastTo, minOccurrences, sort].join('|');
   const filterKeyRef = React.useRef(filterKey);

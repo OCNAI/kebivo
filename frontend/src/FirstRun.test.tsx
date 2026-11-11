@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FirstRunProvider, SetupPage, takeSetupTokenFromLocation } from './FirstRun';
+import { FirstRunEmpty, FirstRunProvider, SetupPage, takeSetupTokenFromLocation } from './FirstRun';
 import { setCsrfToken } from './api';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -118,5 +118,16 @@ describe('sample banner removal', () => {
     expect(navigate).toHaveBeenCalledWith('/inbox');
     expect(host.textContent).not.toContain("You're looking at sample data.");
     expect(host.textContent).toContain('Sample data removed.');
+  });
+
+  it('keeps the sample action available when sample status cannot be fetched', async () => {
+    globalThis.fetch = vi.fn(async input => {
+      const path = String(input);
+      if (path.endsWith('/admin/sample-data')) throw new Error('offline');
+      if (path.endsWith('/admin/groups/summary')) return new Response(JSON.stringify({ total_events: 0 }));
+      return new Response('{}');
+    }) as typeof fetch;
+    await act(async () => { root.render(<FirstRunProvider navigate={() => {}}><main><h1>Dashboard</h1><FirstRunEmpty dashboard navigate={() => {}} /></main></FirstRunProvider>); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect([...host.querySelectorAll<HTMLButtonElement>('button')].some(button => button.textContent === 'Load sample data')).toBe(true);
   });
 });

@@ -26,7 +26,7 @@ function SampleBanner({ sample, refresh, navigate, announce }: { sample: SampleS
   function open(event: React.MouseEvent<HTMLButtonElement>) { opener.current = event.currentTarget; setError(''); dialog.current?.showModal(); requestAnimationFrame(() => keep.current?.focus()); }
   async function remove() {
     setBusy(true); setError('');
-    try { await apiRequest('admin/sample-data', { method: 'DELETE' }); dialog.current?.close(); await refresh(); announce('Sample data removed.'); navigate('/inbox'); requestAnimationFrame(() => document.querySelector<HTMLElement>('main h1')?.focus()); }
+    try { await apiRequest('admin/sample-data', { method: 'DELETE' }); window.dispatchEvent(new Event('sample-data-refresh')); dialog.current?.close(); await refresh(); announce('Sample data removed.'); navigate('/inbox'); requestAnimationFrame(() => document.querySelector<HTMLElement>('main h1')?.focus()); }
     catch { setError("Couldn't remove sample data. Nothing was changed. Try again."); }
     finally { setBusy(false); }
   }
@@ -51,7 +51,7 @@ export function FirstRunEmpty({ navigate, dashboard = false, onLoaded, projectId
   const filtered = dashboard ? false : Boolean(new URLSearchParams(location.search).size);
   if (filtered || context?.sample?.present || (dashboard && totalEvents !== 0 && totalEvents !== null)) return null;
   const loading = (dashboard && totalEvents === null) || (context?.sample === null && !context?.sampleError);
-  const variantB = context?.sampleError || context?.sample?.has_real_events;
+  const variantB = context?.sample?.has_real_events;
   async function load() {
     setBusy(true); setError(''); setNotice('');
     try { await apiRequest('admin/sample-data', { method: 'POST', body: '{}' }); await context?.refreshSample(); window.dispatchEvent(new Event('sample-data-refresh')); setNotice('Sample data loaded.'); onLoaded?.(); requestAnimationFrame(() => document.querySelector<HTMLElement>('main h1')?.focus()); }
@@ -80,7 +80,7 @@ export function CommandBlock({ command }: { command: string }) {
   return <><pre className="setup-command" tabIndex={0}><code>{command}</code></pre><button type="button" className="quiet-button command-copy" onClick={() => void copy()}>Copy command</button>{status && <p role="status">{status}</p>}</>;
 }
 
-export function SetupPage({ token, onSuccess }: { token: string | null; onSuccess: (admin: { id: string; email: string }, csrf: string, sampleLoaded: boolean, sampleAttempted: boolean) => void }) {
+export function SetupPage({ token, onSuccess }: { token: string | null; onSuccess: (admin: { id: string; email: string }, csrf: string, sampleLoaded: boolean, sampleAttempted: boolean) => void | Promise<void> }) {
   const [required, setRequired] = React.useState<boolean | null>(null), [networkError, setNetworkError] = React.useState(false);
   const [busy, setBusy] = React.useState(false), [error, setError] = React.useState(''), [fieldError, setFieldError] = React.useState(''), [emailError, setEmailError] = React.useState(''), [clientPasswordError, setClientPasswordError] = React.useState(''), [showPassword, setShowPassword] = React.useState(false);
   const [email, setEmail] = React.useState(''), [password, setPassword] = React.useState(''), [withSample, setWithSample] = React.useState(true), [invalid, setInvalid] = React.useState(false), [created, setCreated] = React.useState(false);
@@ -102,7 +102,7 @@ export function SetupPage({ token, onSuccess }: { token: string | null; onSucces
       setCsrfToken(session.csrf_token); setCreated(true);
       let sampleLoaded = false;
       if (withSample) { try { await apiRequest('admin/sample-data', { method: 'POST', body: '{}' }); sampleLoaded = true; } catch { /* Setup succeeded; the empty-state action retries sample loading. */ } }
-      onSuccess(session.admin, session.csrf_token, sampleLoaded, withSample);
+      await onSuccess(session.admin, session.csrf_token, sampleLoaded, withSample);
     } catch (e) {
       if (e instanceof ApiError && e.status === 403 && e.message === 'Invalid or expired setup link') { setInvalid(true); return; }
       if (e instanceof ApiError && e.status === 409) { setRequired(false); return; }
