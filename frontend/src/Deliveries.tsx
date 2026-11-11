@@ -1,5 +1,6 @@
 import React from "react";
 import { apiRequest } from "./api";
+import { SampleBadge } from "./FirstRun";
 type Delivery = {
   id: string;
   event_id: string;
@@ -24,7 +25,7 @@ type Detail = Delivery & {
     sanitized_error: string | null;
   }[];
 };
-type Option = { id: string; name: string; enabled?: boolean };
+type Option = { id: string; name: string; enabled?: boolean; is_sample?: boolean };
 const date = (v: string | null) => (v ? new Date(v).toLocaleString() : "—");
 const deliveryStatus = (status: string) => status === "suppressed_duplicate" ? "Duplicate suppressed · already sent for this group" : status.replaceAll("_", " ");
 export function Deliveries({ navigate }: { navigate: (url: string) => void }) {
@@ -164,6 +165,7 @@ export function Deliveries({ navigate }: { navigate: (url: string) => void }) {
               Status: <span className="badge">{deliveryStatus(detail.status)}</span> · Attempts:{" "}
               {detail.attempt_count}
             </p>
+            <p>Destination: {destinations.find((d) => d.id === detail.destination_id)?.name ?? detail.destination_id} {destinations.find((d) => d.id === detail.destination_id)?.is_sample && <SampleBadge />}</p>
             {detail.status === "failed" &&
               destinations.find((d) => d.id === detail.destination_id)
                 ?.enabled === true && (
@@ -226,7 +228,7 @@ export function Deliveries({ navigate }: { navigate: (url: string) => void }) {
                 <option value="">All destinations</option>
                 {destinations.map((x) => (
                   <option key={x.id} value={x.id}>
-                    {x.name}
+                    {x.name}{x.is_sample ? " · Sample" : ""}
                   </option>
                 ))}
               </select>
@@ -241,7 +243,7 @@ export function Deliveries({ navigate }: { navigate: (url: string) => void }) {
                 <option value="">All projects</option>
                 {projects.map((x) => (
                   <option key={x.id} value={x.id}>
-                    {x.name}
+                    {x.name}{x.is_sample ? " · Sample" : ""}
                   </option>
                 ))}
               </select>
@@ -277,8 +279,7 @@ export function Deliveries({ navigate }: { navigate: (url: string) => void }) {
                       <tr key={x.id}>
                         <td>{date(x.created_at)}</td>
                         <td>
-                          {projects.find((p) => p.id === x.project_id)?.name ??
-                            x.project_id}
+                          {projects.find((p) => p.id === x.project_id)?.name ?? x.project_id}{projects.find((p) => p.id === x.project_id)?.is_sample && <SampleBadge />}
                         </td>
                         <td>
                           <a
@@ -292,8 +293,7 @@ export function Deliveries({ navigate }: { navigate: (url: string) => void }) {
                           </a>
                         </td>
                         <td>
-                          {destinations.find((d) => d.id === x.destination_id)
-                            ?.name ?? x.destination_id}
+                          {destinations.find((d) => d.id === x.destination_id)?.name ?? x.destination_id}{destinations.find((d) => d.id === x.destination_id)?.is_sample && <SampleBadge />}
                         </td>
                         <td>
                           <span className="badge">{deliveryStatus(x.status)}</span>

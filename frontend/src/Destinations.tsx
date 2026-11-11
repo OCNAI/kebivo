@@ -1,5 +1,6 @@
 import React from "react";
 import { ApiError, apiRequest } from "./api";
+import { SampleBadge } from "./FirstRun";
 type SecretStatus = { set: boolean };
 type DestinationConfig = {
   url_origin?: string;
@@ -46,6 +47,7 @@ type DestinationBase = {
   delivery_mode: string;
   allow_private_network: boolean;
   is_system: boolean;
+  is_sample?: boolean;
   signing_secret?: string;
 };
 type Destination =
@@ -425,6 +427,7 @@ export function Destinations() {
           {notice}
         </p>
         <section className="panel destination-list" aria-label="Destinations">
+          <span id="sample-destination-row-help" className="sr-only">Sample destinations never send requests, even if you change the URL.</span>
           <div className="table-wrap">
             <table>
               <thead>
@@ -441,7 +444,7 @@ export function Destinations() {
                 {items.map((item) => (
                   <tr key={item.id}>
                     <th scope="row">
-                      {item.name}
+                      {item.name} {item.is_sample && <SampleBadge />}
                       {item.is_system && (
                         <small className="system-mark">System inbox</small>
                       )}
@@ -482,7 +485,8 @@ export function Destinations() {
                             </button>
                             <button
                               className="text-button"
-                              disabled={busy}
+                              disabled={busy || item.is_sample}
+                              aria-describedby={item.is_sample ? "sample-destination-row-help" : undefined}
                               onClick={() => void test(item)}
                             >
                               Test
@@ -515,7 +519,7 @@ export function Destinations() {
         {selected && !creating && (
           <section className="panel" aria-labelledby="detail-title">
             <div className="panel-heading">
-              <h2 id="detail-title">{selected.name}</h2>
+              <h2 id="detail-title">{selected.name} {selected.is_sample && <SampleBadge />}</h2>
               <div className="button-row">
                 <button
                   className="quiet-button"
@@ -533,15 +537,16 @@ export function Destinations() {
                 )}
               </div>
             </div>
-            <p>
+            <p id="destination-sample-note">
               {selected.type === "webhook" || selected.type === "slack"
                 ? `${selected.config.url_origin ?? ""} · path hidden`
                 : selected.type.toUpperCase()}{" "}
               · {modeLabel(selected.delivery_mode)}
             </p>
+            {selected.is_sample && <p id="sample-destination-help" className="subtle">Sample destinations never send requests, even if you change the URL.</p>}
             {!selected.is_system && (
               <div className="button-row">
-                <button onClick={() => void test(selected)}>Test send</button>
+                <button disabled={selected.is_sample} aria-describedby={selected.is_sample ? "sample-destination-help" : undefined} onClick={() => void test(selected)}>Test send</button>
                 <button
                   className="danger-button"
                   onClick={() => void remove(selected)}

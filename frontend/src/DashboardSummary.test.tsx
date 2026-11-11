@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { DashboardSummary } from './DashboardSummary';
+import { FirstRunEmpty, FirstRunProvider } from './FirstRun';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -67,21 +68,22 @@ describe('Dashboard delivery failure link', () => {
     expect(container.textContent).not.toContain('One-off question');
   });
 
-  it('shows a first-run empty state when there are no events', async () => {
+  it('does not render the old dashboard empty state inside the feedback summary', async () => {
     await act(async () => {
       root.render(<DashboardSummary navigate={() => {}} />);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(container.textContent).toContain('No feedback groups yet');
+    expect(container.textContent).not.toContain('No feedback groups yet');
   });
-  it('points a new workspace to the real test event action', async () => {
+  it('shows the approved first-run empty state and connects to the selected project', async () => {
     const navigate = vi.fn();
     await act(async () => {
-      root.render(<DashboardSummary navigate={navigate} projectId="p1" />);
+      root.render(<FirstRunProvider navigate={navigate}><FirstRunEmpty dashboard navigate={navigate} projectId="p1" /></FirstRunProvider>);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(container.textContent).toContain('Send a test event from a project Connect panel');
-    await act(async () => { container.querySelector<HTMLButtonElement>('.empty-state button')!.click(); });
+    expect(container.textContent).toContain('No feedback yet');
+    expect(container.textContent).toContain('Load sample data');
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Connect your own app')!.click(); });
     expect(navigate).toHaveBeenCalledWith('/?project=p1');
   });
 });

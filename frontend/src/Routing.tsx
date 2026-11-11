@@ -1,7 +1,8 @@
 import React from "react";
 import { apiRequest } from "./api";
+import { SampleBadge } from "./FirstRun";
 
-type Destination = { id: string; name: string; enabled: boolean };
+type Destination = { id: string; name: string; enabled: boolean; is_sample?: boolean };
 type Rule = {
   id: string;
   name: string;
@@ -52,6 +53,7 @@ export function Routing({ project }: { project: Project }) {
     [eventType, setEventType] = React.useState("knowledge_gap"),
     [simTags, setSimTags] = React.useState(""),
     [includeDefaults, setIncludeDefaults] = React.useState(true);
+  const selectableDestinations = destinations.filter((destination) => !destination.is_sample);
   const load = React.useCallback(async () => {
     const [r, d, p] = await Promise.all([
       apiRequest<{ items: Rule[] }>(`projects/${project.id}/routing-rules`),
@@ -216,13 +218,10 @@ export function Routing({ project }: { project: Project }) {
                     ))}
                   </td>
                   <td>
-                    {r.destination_ids
-                      .map(
-                        (id) =>
-                          destinations.find((d) => d.id === id)?.name ??
-                          "Unknown",
-                      )
-                      .join(", ")}
+                    {r.destination_ids.map((id) => {
+                      const destination = destinations.find((d) => d.id === id);
+                      return <span key={id}>{destination?.name ?? "Unknown"}{destination?.is_sample && <SampleBadge />}{" "}</span>;
+                    })}
                   </td>
                   <td>{r.match_behavior}</td>
                   <td>
@@ -265,7 +264,7 @@ export function Routing({ project }: { project: Project }) {
             onChange={(e) => void setFallbackValue(e.target.value)}
           >
             <option value="">None</option>
-            {destinations.map((d) => (
+            {selectableDestinations.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
                 {d.enabled ? "" : " (disabled)"}
@@ -370,9 +369,9 @@ export function Routing({ project }: { project: Project }) {
               defaultValue={
                 editing && editing !== true ? editing.destination_ids : []
               }
-              size={Math.min(5, Math.max(2, destinations.length))}
+              size={Math.min(5, Math.max(2, selectableDestinations.length))}
             >
-              {destinations.map((d) => (
+              {selectableDestinations.map((d) => (
                 <option key={d.id} value={d.id} disabled={!d.enabled}>
                   {d.name}
                   {d.enabled ? "" : " (disabled)"}
