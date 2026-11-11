@@ -78,11 +78,11 @@ export function App() {
     const result = await apiRequest<{ items: Project[]; next_cursor: string | null }>(`projects?limit=100${includeArchived ? '&include_archived=true' : ''}`);
     setProjects(result.items);
     const current = selectedRef.current;
-    if (current?.is_sample && !result.items.some((project) => project.id === current.id)) {
+    if (current?.is_sample && !current.archived_at && !result.items.some((project) => project.id === current.id)) {
       setSelectedProject(null); setTokens([]); setEditing(false);
     }
   }, [setSelectedProject]);
-  React.useEffect(() => { const refresh = () => { void refreshProjects().catch((e: unknown) => setError(apiErrorMessage(e))); }; addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshProjects]);
+  React.useEffect(() => { const refresh = () => { void refreshProjects(showArchived).catch((e: unknown) => setError(apiErrorMessage(e))); }; addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshProjects, showArchived]);
   const selectProject = React.useCallback(async (project: Project) => {
     setError(''); setNotice(''); setCreatedToken(null); setEditing(false);
     setSelectedProject(project);

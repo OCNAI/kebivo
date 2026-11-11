@@ -160,10 +160,10 @@ describe('authenticated dashboard', () => {
     HTMLDialogElement.prototype.close = originalClose;
   });
 
-  it('keeps archived project details selected without repeating the session check', async () => {
+  it.each([false, true])('keeps archived project details selected (sample: %s) without repeating the session check', async (is_sample) => {
     const originalConfirm = window.confirm;
     window.confirm = vi.fn(() => true);
-    const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null as string | null, settings: { corrections: { enabled: false }, deduplication: { mode: 'exact' } }, tags: [], created_at: '', updated_at: '' };
+    const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null as string | null, is_sample, settings: { corrections: { enabled: false }, deduplication: { mode: 'exact' } }, tags: [], created_at: '', updated_at: '' };
     let archivedAt: string | null = null;
     let sessionRequests = 0;
     globalThis.fetch = vi.fn(async input => {
@@ -183,6 +183,28 @@ describe('authenticated dashboard', () => {
     expect([...container.querySelectorAll<HTMLButtonElement>('button')].some(button => button.textContent === 'Restore')).toBe(true);
     expect(sessionRequests).toBe(1);
     window.confirm = originalConfirm;
+  });
+
+  it('keeps archived projects in the list after sample refresh when Show archived is on', async () => {
+    const archivedProject = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: '2026-11-11T00:00:00Z', settings: {}, tags: [], created_at: '', updated_at: '' };
+    const projectUrls: string[] = [];
+    globalThis.fetch = vi.fn(async input => {
+      const path = String(input); projectUrls.push(path);
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/projects?limit=100&include_archived=true')) return new Response(JSON.stringify({ items: [archivedProject], next_cursor: null }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    const archivedToggle = container.querySelector<HTMLInputElement>('.archived-toggle input')!;
+    await act(async () => { archivedToggle.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { window.dispatchEvent(new Event('sample-data-refresh')); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).toContain('Support');
+    expect(projectUrls.filter(path => path.includes('/projects?limit=100')).slice(-2)).toEqual([
+      '/api/v1/projects?limit=100&include_archived=true',
+      '/api/v1/projects?limit=100&include_archived=true',
+    ]);
   });
 
   it('identifies project correction policy separately from token scope', async () => {
