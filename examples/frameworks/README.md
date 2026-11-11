@@ -26,5 +26,6 @@ A model may not call the tool when it should. Pair the tool with the
 where every report matters.
 
 Each README has a **Tested** section that says what was run and what was not.
-To forward reports into Slack, Linear or Jira, see the
-[webhook recipes](../recipes/).
+To send reports to Slack, add a native Slack
+[destination](../../docs/destinations.md). To forward them into Linear, Jira,
+Teams or GitHub Issues, see the [webhook recipes](../recipes/).

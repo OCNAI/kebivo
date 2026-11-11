@@ -1,5 +1,9 @@
 # Kebivo → Slack
 
+Kebivo has a native Slack destination that needs no relay; see
+[destinations](../../../docs/destinations.md). Use this relay when you want to
+change the message or add your own handling.
+
 [`relay.py`](relay.py) posts each delivered report to a Slack channel through an
 [incoming webhook](https://api.slack.com/messaging/webhooks). It escapes `&`,
 `<` and `>` so user text cannot create Slack links or mentions.
