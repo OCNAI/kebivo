@@ -9,7 +9,7 @@ Kebivo runs in one container with one SQLite file. The container serves the API,
 
 ## Requirements
 
-- Docker Engine with the Compose plugin (`docker compose`). The image is built locally from this repository; no image is published yet.
+- Docker Engine with the Compose plugin (`docker compose`) for the configuration path below. The [one-command Quickstart](quickstart.md) uses the published image.
 - Free disk for the image build and the data volume. The SQLite file grows with your feedback.
 - OpenSSL (or another source of random hex) to generate keys.
 - A free local port, 8000 by default.
@@ -42,18 +42,18 @@ Compose runs only the `app` service. It builds the image `kebivo:local`, stores 
 
 ## Configuration
 
-Settings come from environment variables. Compose reads them from `.env`, which you copy from [`.env.example`](../.env.example). Every value is validated at startup: an invalid or missing required value stops the container with a message that names the variable (never its value). The application never generates a replacement production key.
+Settings come from environment variables. Compose reads them from `.env`, which you copy from [`.env.example`](../.env.example). Every value is validated at startup: an invalid or missing required value stops the container with a message that names the variable (never its value). The one-command image creates `/data/kebivo-secrets.env` only on a fresh volume; it never replaces missing keys for an existing database. Environment values override file values per key.
 
 ### Required
 
 | Variable | Purpose |
 | --- | --- |
 | `SECRET_KEY` | At least 32 characters, not a known placeholder. Keys project-token digests and login-throttle identifiers. Keep it stable: changing it invalidates **every project token**. It does not encrypt data. |
-| `ENCRYPTION_KEY` | 64 hex characters (`openssl rand -hex 32`). Encrypts destination secrets and LLM provider keys with AES-256-GCM. Store it separately from database backups. Losing it means re-entering those secrets. |
-| `ALLOWED_ORIGINS` | Exact, comma-separated browser origins that may sign in, such as `https://feedback.example.org` (scheme, host and port, no path). In production only loopback origins may use HTTP. Empty means no browser can sign in. `localhost` and `127.0.0.1` are different origins. |
+| `ENCRYPTION_KEY` | 64 hex characters (`openssl rand -hex 32`). Encrypts destination secrets and LLM provider keys with AES-256-GCM. On the one-command path it is in `/data/kebivo-secrets.env`; with Compose, store it separately from database backups. Losing it means re-entering those secrets. |
+| `ALLOWED_ORIGINS` | Exact, comma-separated browser origins that may sign in, such as `https://feedback.example.org` (scheme, host and port, no path). In production only loopback origins may use HTTP. When empty, browser login works only for an HTTP loopback origin whose host and port match the request `Host`; a sibling port or public origin is rejected. Set it for a reverse proxy. |
 | `PUBLIC_URL` | Optional HTTPS origin of this Kebivo instance. Slack destinations include a link to the feedback group when set. |
 
-A wrong-origin 403 lists the configured `ALLOWED_ORIGINS` by design.
+A wrong-origin 403 lists configured `ALLOWED_ORIGINS` when set. With an empty list, the error tells you to set it for other origins.
 
 ### Network and access
 
@@ -160,10 +160,23 @@ Caddy, Traefik or a cloud load balancer work the same way: TLS at the edge, the 
 | Where | What it holds | Protect it |
 | --- | --- | --- |
 | `.env` | `SECRET_KEY`, `ENCRYPTION_KEY`, `ENCRYPTION_KEY_PREVIOUS`, any `LLM_API_KEY_*` | Readable only by the operator (`chmod 600 .env`). Never commit it. |
-| Volume `app-data`: `/data/app.sqlite3` and its `-wal` and `-shm` files | **Feedback content in plain text**, admin password hash (Argon2), project-token and session digests, destination and LLM secrets encrypted with `ENCRYPTION_KEY`, audit history | Local disk with restricted access. |
-| Backups of the database | Everything in the database | Store off the host with restricted access and your own retention period. |
+| One-command volume `kebivo-data`: `/data/kebivo-secrets.env` | Generated `SECRET_KEY` and `ENCRYPTION_KEY` (mode 0600). A whole-volume copy includes both keys. | Restrict volume access and whole-volume copies. |
+| Data volume: `/data/app.sqlite3` and its `-wal` and `-shm` files | **Feedback content in plain text**, admin password hash (Argon2), project-token and session digests, destination and LLM secrets encrypted with `ENCRYPTION_KEY`, audit history | Local disk with restricted access. |
+| Database-only `backup` output | Everything in the database, **without** `/data/kebivo-secrets.env` | Store off the host with restricted access and your own retention period; save matching keys separately. |
 
-Feedback is not encrypted at rest. Use disk or volume encryption if your policy needs it. Back up `.env` (or at least `SECRET_KEY` and `ENCRYPTION_KEY`) separately from the database backups. Without the matching keys, a database backup loses every project token and every stored destination and provider secret.
+Feedback is not encrypted at rest. Use disk or volume encryption if your policy needs it. On the zero-config path, `ENCRYPTION_KEY` sits beside the ciphertext it protects: anyone with a whole-volume copy can read stored destination and LLM secrets. That is the tradeoff for a local trial without an env file. For ongoing use, keep the matching keys separately from database-only backups. An existing database restored without its keys refuses to start; replacing `SECRET_KEY` invalidates every project token, and replacing `ENCRYPTION_KEY` makes stored secrets unreadable.
+
+To move a one-command install to managed keys, copy its existing key file before stopping the container, keep the copy private, then restart the **same volume** with the env file. Do not generate new values:
+
+```sh
+(umask 077; docker cp kebivo:/data/kebivo-secrets.env ./kebivo.env && chmod 600 ./kebivo.env)
+docker stop kebivo
+docker rm kebivo
+docker run --name kebivo -p 127.0.0.1:8000:8000 -v kebivo-data:/data \
+  --env-file ./kebivo.env ghcr.io/ocnai/kebivo:0.3.0
+```
+
+After verifying the restart and a database-only backup, keep `kebivo.env` in your managed secret storage. To make a whole-volume copy independent of the keys, remove `/data/kebivo-secrets.env` from the volume only after confirming the env file supplies **both** keys on restart. If an environment key is omitted, the remaining file key is still used.
 
 ## Backup and restore
 
@@ -181,7 +194,7 @@ else
 fi
 ```
 
-Run it on a schedule (for example from cron) and copy the files off the host.
+Run it on a schedule (for example from cron) and copy the files off the host. This command outputs only SQLite. For a one-command install, also save the matching key file separately with `docker cp kebivo:/data/kebivo-secrets.env ./kebivo.env` and restrict it to the operator (`chmod 600 ./kebivo.env`).
 
 To restore, first take a fresh backup of the current database, then stop the app. The restore validates the input before it replaces anything, checkpoints the old WAL and removes stale WAL and SHM files. It runs in a one-off container on the same volume; the app must not run meanwhile.
 
@@ -193,7 +206,7 @@ docker compose up -d app
 curl -fsS http://127.0.0.1:8000/health/ready
 ```
 
-Restore the matching `.env` before `docker compose up -d app`. At startup, pending migrations upgrade an older backup; a backup from a newer, unknown version stops startup. Keep the pre-restore backup until you have checked the UI and the health endpoint.
+Restore the matching `.env` before `docker compose up -d app`. For a one-command install, restore the saved `/data/kebivo-secrets.env` to the same volume or pass the matching keys with `--env-file` before starting the restored database. Startup refuses to generate replacements for an existing database. At startup, pending migrations upgrade an older backup; a backup from a newer, unknown version stops startup. Keep the pre-restore backup until you have checked the UI and the health endpoint.
 
 **Retention and backups.** Retention and manual deletion remove data from the live database (SQLite secure delete, then a WAL checkpoint), but **not from backups taken earlier**. Restoring an old backup brings deleted feedback back until the next retention run removes it again. Expire old backups according to your own policy.
 
@@ -202,7 +215,7 @@ Restore the matching `.env` before `docker compose up -d app`. At startup, pendi
 Migrations are versioned and run automatically before the server starts. A failed migration stops startup and leaves the previous data untouched.
 
 1. Read [`CHANGELOG.md`](../CHANGELOG.md) for configuration changes.
-2. Take a backup (above) and keep `.env`.
+2. Take a backup (above) and keep `.env` or the one-command volume's key file separately.
 3. Update the source and rebuild:
 
    ```sh
@@ -214,6 +227,8 @@ Migrations are versioned and run automatically before the server starts. A faile
 4. Check the version in **Settings** or with `docker compose exec app python -m kebivo.cli version`.
 
 The data volume survives the rebuild. To go back, restore the backup you took and check out the matching source; migration downgrades can drop data and are not an upgrade path. Release maintainers verify each version with an image-to-image upgrade check on a populated volume (see [releasing](releasing.md)).
+
+**Browser login change from 0.3.0:** An install with `ALLOWED_ORIGINS` empty previously refused every browser login. It now permits a valid administrator login from an HTTP loopback origin only when the browser origin exactly matches the request host and port. Set `ALLOWED_ORIGINS` explicitly if you need access through a proxy; an empty value still rejects public origins and a different local port.
 
 ## Rotate credentials
 
@@ -232,9 +247,11 @@ If the host or a backup may be compromised, rotate all of the above: tokens, adm
 
 | Symptom | Check |
 | --- | --- |
-| Container exits at startup | `docker compose logs app`. The message names the invalid variable (for example a short `SECRET_KEY` or missing `ENCRYPTION_KEY`) or the failed migration. |
+| Container exits at startup | `docker compose logs app` or `docker logs kebivo`. The message names the invalid variable (for example a short `SECRET_KEY` or missing `ENCRYPTION_KEY`) or the failed migration. For an existing database, restore its original key file or pass the matching keys; startup will not mint replacements. |
 | `docker compose up` says `Set SECRET_KEY ...` | The variable is missing from `.env`. |
-| Sign-in fails with a forbidden error | The URL in the browser must match an entry in `ALLOWED_ORIGINS` exactly, including scheme and port. |
+| One-command container cannot write `/data` | Make the named volume writable by container UID 10001, or supply both keys through `--env-file`. |
+| Sign-in fails with a forbidden error | With `ALLOWED_ORIGINS` set, the URL must match an entry exactly, including scheme and port. When empty, use HTTP loopback with the same host and port as the request; set `ALLOWED_ORIGINS` for a proxy or other origin. |
+| Setup link expired or missing | Check `docker logs kebivo`. A link prints only while no administrator exists; restart for a new 60-minute link. Change `8000` in it if you remapped the host port. |
 | `/health/ready` returns `503` | `"database":"unavailable"`: the volume or file is not readable. `"search":"unavailable"`: the search index failed to start. `"worker":"stopped"`: the worker crashed; check the logs and restart. `"worker":"disabled"` with status `ok` only means `WORKER_ENABLED=false`. |
 | `/health/ready` shows a rising `routing_backlog.pending_count` | Routing jobs are waiting. `oldest_pending_age_seconds` shows how long the oldest has waited. A growing queue with `worker: ok` means the worker is running but intake exceeds its processing rate; a stopped worker returns 503. Queued work alone does not fail readiness. Both backlog fields may be `null` if the short read-only metrics query fails; the separate database probe still determines database readiness. |
 | Port 8000 is in use | Set `APP_PORT` in `.env` and use that port in your URLs and `ALLOWED_ORIGINS`. |

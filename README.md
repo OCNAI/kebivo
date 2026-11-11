@@ -18,13 +18,13 @@ Your AI app reports each question it couldn't answer; Kebivo groups the repeats 
 
 > **Status: 0.3.0.** Run the published image `ghcr.io/ocnai/kebivo:0.3.0` (`linux/amd64`, `linux/arm64`) or build it from this repository. Licensed under [Apache-2.0](LICENSE).
 
-Try it with Docker, OpenSSL and a free port 8000:
+Try it with Docker and a free port 8000:
 
 ```sh
-(umask 077; printf 'SECRET_KEY=%s\nENCRYPTION_KEY=%s\nALLOWED_ORIGINS=http://127.0.0.1:8000\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > kebivo.env)
-docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.3.0
-curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
+docker run --name kebivo -p 127.0.0.1:8000:8000 -v kebivo-data:/data ghcr.io/ocnai/kebivo:0.3.0
 ```
+
+Open the `Kebivo setup:` link printed in the terminal, create your administrator, and keep **Start with sample data** selected to see a filled inbox. The link expires after 60 minutes; restart for a new one. The named volume holds the generated keys as well as the database; see [key custody](docs/self-hosting.md#secrets-and-what-to-protect) before using real credentials.
 
 **Without Kebivo:** the bot says it couldn't find the answer, the user gives up, and the question sits in a log nobody reads.\
 **With Kebivo:** the question shows up once in the inbox with a repeat count, and your routing rules can send it to Slack, email or a webhook for whoever owns those docs.
@@ -76,51 +76,35 @@ The demo's product frames come from a real container with sample data; its chat 
 
 ## Quickstart
 
-You need Docker, OpenSSL, Python 3 and a free port 8000. No account, no cloud service, no API key. Run the commands in bash; on macOS, type `bash` first. The published image is typically ready in about 12 seconds after download.
+You need Docker, Python 3 and a free port 8000. No account, cloud service or API key. The published image is typically ready in about 12 seconds after download.
 
-**1. Start Kebivo from the published image.** Skip this step if you ran the three commands above. Keep `kebivo.env` private and back it up apart from the data volume.
+**1. Start Kebivo.** Skip this step if you ran the command above. Keep the terminal open for the one-time setup link.
 
 ```sh
-(umask 077; printf 'SECRET_KEY=%s\nENCRYPTION_KEY=%s\nALLOWED_ORIGINS=http://127.0.0.1:8000\n' \
-  "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > kebivo.env)
-docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 \
-  -v kebivo-data:/data --env-file kebivo.env ghcr.io/ocnai/kebivo:0.3.0
-curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
+docker run --name kebivo -p 127.0.0.1:8000:8000 -v kebivo-data:/data ghcr.io/ocnai/kebivo:0.3.0
 ```
 
-Curl may print a few `Connection reset` errors while migrations run. Readiness returns `{"status":"ok",...}`.
+Open the printed `Kebivo setup:` link, create an administrator with a password of at least 12 characters, and keep **Start with sample data** selected to see a filled inbox. If you mapped another host port, change `8000` in the link. The sample-data banner lets you remove the examples later.
 
-**2. Create an administrator and project token.** The password must have at least 12 characters. The token is issued once into `KEBIVO_TOKEN`; keep it private.
-
-```sh
-read -rsp 'Admin password (12+ characters): ' KEBIVO_ADMIN_PASSWORD; printf '\n'
-printf '%s\n' "$KEBIVO_ADMIN_PASSWORD" | docker exec -i kebivo python -m kebivo.cli bootstrap --email admin@example.org --password-stdin
-unset KEBIVO_ADMIN_PASSWORD
-KEBIVO_PROJECT="$(docker exec kebivo python -m kebivo.cli project create --name 'Shop assistant' --json)"
-KEBIVO_PROJECT_ID="$(printf '%s' "$KEBIVO_PROJECT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-KEBIVO_TOKEN="$(printf '%s' "$KEBIVO_PROJECT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
-```
-
-**3. Report the same unanswered question twice.** Use a different idempotency key for each occurrence. Reuse a key only when retrying the *same* request.
+**2. Report the same unanswered question twice.** In **Projects**, create a real project named **Shop assistant** and a token. Copy the token when shown; it is issued once. In a second terminal, run these commands in bash (on macOS, type `bash` first). Each occurrence needs a different idempotency key.
 
 ```sh
+read -rsp 'Project token: ' KEBIVO_TOKEN; printf '\n'
 curl -i http://127.0.0.1:8000/api/v1/feedback \
-  -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $KEBIVO_TOKEN" \
+  -H 'Content-Type: application/json' -H "Authorization: Bearer $KEBIVO_TOKEN" \
   -H 'Idempotency-Key: canada-gap-001' \
   --data '{"event_type":"knowledge_gap","question":"Do you ship to Canada?","tags":["shipping"]}'
 curl -i http://127.0.0.1:8000/api/v1/feedback \
-  -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $KEBIVO_TOKEN" \
+  -H 'Content-Type: application/json' -H "Authorization: Bearer $KEBIVO_TOKEN" \
   -H 'Idempotency-Key: canada-gap-002' \
   --data '{"event_type":"knowledge_gap","question":"Do you ship to Canada?","tags":["shipping"]}'
 ```
 
-Both responses are `202 Accepted` with distinct `event_id` values. Open <http://127.0.0.1:8000/>, sign in, and find **Do you ship to Canada?** in the Inbox with **2 occurrences**. Use exactly `127.0.0.1`: `localhost` is a different origin, and sign-in names the allowed origin if you use the wrong one. You can also create projects and tokens in the UI.
+Both responses are `202 Accepted` with distinct `event_id` values. Find **Do you ship to Canada?** in the Inbox with **2 occurrences**. The sample rows are labelled separately.
 
 If this was useful, a [GitHub star](https://github.com/OCNAI/kebivo) helps other people find Kebivo.
 
-To route the question to its owner over a signed webhook and then resolve it, continue in the same terminal with [steps 4 and 5 of the Docker guide](docs/quickstart.md).
+To route the question to its owner over a signed webhook and then resolve it, continue in the same terminal with [steps 3 and 4 of the Docker guide](docs/quickstart.md).
 
 > **REST or MCP?** Call REST from your application's fallback when every miss must be captured. With MCP, the model decides whether to call `report_knowledge_gap`, so some misses may go unreported.
 >
@@ -132,7 +116,7 @@ Kebivo works alongside Langfuse and Phoenix, which help engineers inspect runs. 
 
 ## Build from source
 
-Use this path if you want to change the code. After it starts, replace both `docker exec -i kebivo` and `docker exec kebivo` with `docker compose exec -T app` in step 2.
+Use this path if you want to change the code. Compose requires keys in `.env` and still supports the CLI bootstrap.
 
 ```sh
 git clone https://github.com/OCNAI/kebivo.git
@@ -145,7 +129,7 @@ docker compose up --build -d
 curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
 ```
 
-To stop the published image: `docker stop kebivo` (data stays in the volume). To stop a Compose build: `docker compose down` (data is kept). `docker compose down --volumes` **deletes all data**. For production (TLS, backups, upgrades, every setting), read the [self-hosting guide](docs/self-hosting.md).
+To stop the published image from another terminal: `docker stop kebivo` (data stays in the volume). To stop a Compose build: `docker compose down` (data is kept). `docker compose down --volumes` **deletes all data**. For production (TLS, backups, upgrades, every setting), read the [self-hosting guide](docs/self-hosting.md).
 
 ## Collect AI agent feedback with REST
 
@@ -192,7 +176,7 @@ No model is called by default. To group questions that are worded differently, c
 ## Security
 
 - Run behind a TLS reverse proxy and keep the app port on loopback ([guide](docs/self-hosting.md#reverse-proxy-and-tls)).
-- Keep `.env` private. Back up `SECRET_KEY` and `ENCRYPTION_KEY` separately from database backups.
+- On the one-command path, protect the named volume: it contains the generated keys and database. The database-only `backup` output excludes the keys, so save them separately for restore. With Compose, keep `.env` private and back it up separately.
 - Feedback is stored **unencrypted** in SQLite. Protect the volume and backups, and do not ask assistants to send secrets or unnecessary personal data.
 - Give each client its own token, give customer-facing agents only `feedback:gap`, and revoke tokens you no longer use.
 - Webhooks and LLM providers cannot reach private or loopback addresses unless you opt in per destination or provider; cloud metadata addresses are always blocked, also for SMTP. Admin writes need the configured Origin and a CSRF token.
