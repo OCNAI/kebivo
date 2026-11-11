@@ -121,7 +121,7 @@ def test_feedback_inbox_order_filters_cursor_and_detail(tmp_path: Path) -> None:
         }
     ]
     assert body["system"] == {
-        "project": {"id": active.id, "name": "Active", "slug": "active"},
+        "project": {"id": active.id, "name": "Active", "slug": "active", "is_sample": False},
         "submitted_via": "rest",
         "api_token": {"id": token.id, "name": token.name, "prefix": "kebivo_pt_abc"},
         "idempotency_key": "key-1",

@@ -20,6 +20,7 @@ from kebivo.security.outbound import BlockedDestination, post_pinned
 
 Outcome = Literal["success", "retryable", "permanent"]
 ERRORS = {
+    "sample_destination": "Sample destinations do not send requests",
     "timeout": "Destination timed out",
     "dns": "Destination DNS lookup failed",
     "connect": "Destination connection failed",

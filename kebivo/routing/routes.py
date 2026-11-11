@@ -111,7 +111,7 @@ def _serialize(db: Session, row: RoutingRule) -> dict[str, Any]:
     }
 
 
-def _check(payload: dict[str, Any], db: Session) -> tuple[list[str], list[str]]:
+def _check(payload: dict[str, Any], db: Session, project: Project) -> tuple[list[str], list[str]]:
     if not isinstance(payload.get("name"), str) or not 1 <= len(payload["name"].strip()) <= 120:
         raise ValueError("name")
     events = payload.get("event_types")
@@ -144,7 +144,12 @@ def _check(payload: dict[str, Any], db: Session) -> tuple[list[str], list[str]]:
     ids = payload.get("destination_ids")
     if not isinstance(ids, list) or not 1 <= len(ids) <= 10 or len(set(ids)) != len(ids):
         raise ValueError("destination_ids")
-    if any(_uuid(item) != item or db.get(Destination, item) is None for item in ids):
+    if any(
+        _uuid(item) != item
+        or (destination := db.get(Destination, item)) is None
+        or (destination.is_sample and not project.is_sample)
+        for item in ids
+    ):
         raise ValueError("destination_ids")
     return tags, ids
 
@@ -223,7 +228,7 @@ def install_routing_routes(app: Any) -> None:
             return _fail(request, 409, "rule_limit", "Project has 100 routing rules")
         payload = body.model_dump()
         try:
-            tags, ids = _check(payload, db)
+            tags, ids = _check(payload, db, project)
         except ValueError as exc:
             return _fail(request, 422, "validation_error", "Invalid routing rule", str(exc))
         row = RoutingRule(
@@ -265,7 +270,7 @@ def install_routing_routes(app: Any) -> None:
             return _fail(request, 422, "validation_error", "Invalid routing rule", field)
         payload.update(changes)
         try:
-            tags, ids = _check(payload, db)
+            tags, ids = _check(payload, db, project)
         except ValueError as exc:
             return _fail(request, 422, "validation_error", "Invalid routing rule", str(exc))
         row.name = payload["name"].strip()

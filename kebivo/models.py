@@ -109,6 +109,9 @@ class Destination(Base):
     is_system: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("0"), nullable=False
     )
+    is_sample: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("0"), nullable=False
+    )
     created_by_admin_id: Mapped[str | None] = mapped_column(
         ForeignKey("admin_users.id", ondelete="SET NULL")
     )
@@ -534,6 +537,9 @@ class Project(Base):
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("1"), nullable=False
+    )
+    is_sample: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("0"), nullable=False
     )
     created_by_admin_id: Mapped[str | None] = mapped_column(
         ForeignKey("admin_users.id", ondelete="SET NULL")

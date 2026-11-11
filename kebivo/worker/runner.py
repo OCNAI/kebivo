@@ -1230,6 +1230,7 @@ class Worker:
                     "config": destination.config_json,
                     "ciphertext": destination.secrets_ciphertext,
                     "allow_private_network": destination.allow_private_network,
+                    "is_sample": destination.is_sample,
                 },
                 message,
                 delivery.attempt_count,
@@ -1314,6 +1315,8 @@ class Worker:
 async def send_destination(
     destination: dict[str, Any], message: dict[str, Any], settings: Settings
 ) -> DeliveryResult:
+    if destination.get("is_sample"):
+        return failure("permanent", "sample_destination")
     try:
         config = json.loads(destination["config"])
         if not isinstance(config, dict):

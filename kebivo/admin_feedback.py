@@ -55,8 +55,13 @@ def _iso_utc(value: datetime) -> str:
     )
 
 
-def _project(project: Project) -> dict[str, str]:
-    return {"id": project.id, "name": project.name, "slug": project.slug}
+def _project(project: Project) -> dict[str, str | bool]:
+    return {
+        "id": project.id,
+        "name": project.name,
+        "slug": project.slug,
+        "is_sample": project.is_sample,
+    }
 
 
 def _tags(db: Session, event_id: str, *, provenance: bool) -> list[dict[str, Any]]:

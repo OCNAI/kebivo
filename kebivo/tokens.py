@@ -209,6 +209,8 @@ def mint_project_token(
     scopes: list[str],
     expires_at: datetime | None = None,
 ) -> tuple[ApiToken, str]:
+    if project.is_sample:
+        raise HTTPException(status_code=409, detail="Sample projects cannot have tokens")
     prefix = "kebivo_pt_" + secrets.token_urlsafe(12).rstrip("=")
     token = prefix + "." + secrets.token_urlsafe(32)
     row = ApiToken(
