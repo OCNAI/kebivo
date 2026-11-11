@@ -31,9 +31,9 @@ curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/he
 
 ![Kebivo group inbox with sample data from a shop assistant: "Do you ship to Canada?" has 7 occurrences, alongside other customer questions the chatbot could not answer.](docs/assets/screenshots/inbox.png)
 
-<sub>Group inbox from a real Kebivo 0.2.0 container with sample data.</sub>
+<sub>Group inbox from a real Kebivo container with sample data.</sub>
 
-Continue with the [Quickstart](#quickstart) to report a question. For framework tutorials, see the [Kebivo Guides](https://kebivo.com/guides/).
+Continue with the [Quickstart](#quickstart) to report a question. The full documentation is at [docs.kebivo.com](https://docs.kebivo.com/), and framework tutorials are in the [Kebivo Guides](https://kebivo.com/guides/).
 
 ## Why
 
@@ -53,9 +53,8 @@ When an assistant cannot answer, the documentation owner may never see the quest
 - Create one project per assistant or team, with default tags, a corrections policy, and bearer tokens that are shown once, can expire and can be revoked.
 - Route reports with ordered rules, ANY/ALL tag matching, several destinations per rule, a fallback, and a dry-run simulator.
 - Deliver to signed webhooks with a versioned JSON payload, Slack incoming webhooks, SMTP email, or the built-in inbox. Deliveries have durable retries with backoff, restart recovery, a delivery log and manual retry.
-- Questions that match exactly, ignoring case, extra whitespace, quote and dash styles, and trailing `?`, `!` or `.`, are grouped automatically. You can also configure an LLM provider for semantic grouping.
+- Questions that match exactly, ignoring case, extra whitespace, quote and dash styles, and trailing `?`, `!` or `.`, are grouped automatically. Per project, you can opt in to an LLM judge that groups paraphrases (OpenAI-compatible, Azure OpenAI or local providers such as Ollama and LM Studio) or to embeddings that group near-identical rewordings (Ollama or an OpenAI-compatible `/embeddings` endpoint). Both are off by default.
 - Triage reports in the inbox with search, filters, statuses, notes, tags, merge, split and deletion. Each group has a full history.
-- Enable OpenAI-compatible, Azure OpenAI or local (Ollama, LM Studio) providers for semantic grouping on a per-project basis. This is off by default.
 - Run one container with one SQLite file. Startup migrations, online backup and checked restore, retention (on by default), JSON Lines export, and health checks are included.
 
 ## Screenshots
@@ -123,6 +122,8 @@ If this was useful, a [GitHub star](https://github.com/OCNAI/kebivo) helps other
 For a signed webhook delivery, follow step 4 of the [Docker guide](docs/quickstart.md).
 
 > **REST or MCP?** Call REST from your application's fallback when every miss must be captured. With MCP, the model decides whether to call `report_knowledge_gap`, so some misses may go unreported.
+>
+> Every miss matters? [Use REST](docs/rest-api.md). Agent decides when to report? [Use MCP](docs/mcp.md).
 
 ## Where Kebivo fits
 
@@ -185,7 +186,7 @@ Each project has ordered rules: a rule matches ANY or ALL of its tags and sends 
 
 ## Optional AI
 
-No model is called by default. To group questions that are worded differently, configure an LLM provider (**LLM settings** in the UI) and switch a project to semantic deduplication after acknowledging that question text will be sent to that provider. If the provider fails, the event keeps its own group and is still routed and delivered. See [deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md).
+No model is called by default. To group questions that are worded differently, configure an LLM provider (**LLM settings** in the UI) and switch a project to semantic deduplication after acknowledging that question text will be sent to that provider. The embeddings method is precision-first: at its default threshold it grouped about 3 in 100 paraphrases in calibration, so use the LLM judge when you need paraphrase grouping and [tune embeddings](docs/deduplication.md#embeddings-method) on your own data. If the provider fails, the event keeps its own group and is still routed and delivered. See [deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md).
 
 ## Security
 
@@ -221,7 +222,7 @@ Framework tutorials are in the [website Guides](https://kebivo.com/guides/). Run
 | [REST API](docs/rest-api.md) | Authentication, fields, idempotency, errors, retries, examples |
 | [MCP](docs/mcp.md) | Connecting clients, tools and permissions, testing, limitations |
 | [Routing](docs/routing.md) and [destinations](docs/destinations.md) | Rules, fallback, webhooks, signatures, SMTP |
-| [Deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md) | Exact and semantic grouping, providers, privacy |
+| [Deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md) | Exact grouping, LLM judge and embeddings, providers, privacy |
 | [Feedback management](docs/feedback-management.md) | Groups, search syntax, statuses, merge, split, deletion |
 | [Retention](docs/retention.md) and [export](docs/export.md) | Automatic deletion, JSON Lines export |
 | [Releasing](docs/releasing.md) | Versioning, image labels, release and upgrade checks |

@@ -13,7 +13,7 @@ Use these pages for setup, integration and operations. Tutorials and framework g
 
 ## Get started
 
-- [Quickstart](quickstart.md): build and run Kebivo with Docker Compose, create a project token and send a first report.
+- [Quickstart](quickstart.md): run the published Kebivo image with Docker, create a project token and send a first report.
 - [Self-hosting](self-hosting.md): production deployment, configuration, backups and upgrades.
 
 ## Connect an assistant
@@ -24,9 +24,9 @@ Use these pages for setup, integration and operations. Tutorials and framework g
 ## Review and route feedback
 
 - [Feedback management](feedback-management.md): the inbox, statuses, notes, merge and split.
-- [Deduplication](deduplication.md): exact grouping by default and optional semantic grouping.
+- [Deduplication](deduplication.md): exact grouping by default, with an optional LLM judge or embeddings.
 - [Routing](routing.md): ordered tag rules, fallback and the routing simulator.
-- [Destinations](destinations.md): email and signed webhooks, and delivery history.
+- [Destinations](destinations.md): Slack, email and signed webhooks, and delivery history.
 - [LLM providers](llm-providers.md): configure the optional semantic grouping provider and its data flow.
 
 ## Data and releases
