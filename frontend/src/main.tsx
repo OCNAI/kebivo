@@ -78,7 +78,7 @@ export function App() {
     const result = await apiRequest<{ items: Project[]; next_cursor: string | null }>(`projects?limit=100${includeArchived ? '&include_archived=true' : ''}`);
     setProjects(result.items);
     const current = selectedRef.current;
-    if (current?.is_sample && !current.archived_at && !result.items.some((project) => project.id === current.id)) {
+    if (current?.is_sample && (includeArchived || !current.archived_at) && !result.items.some((project) => project.id === current.id)) {
       setSelectedProject(null); setTokens([]); setEditing(false);
     }
   }, [setSelectedProject]);

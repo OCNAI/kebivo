@@ -133,11 +133,12 @@ describe('authenticated dashboard', () => {
     HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
     HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); this.dispatchEvent(new Event('close')); };
     let samplePresent = true;
-    const sampleProject = { id: 'sample-p', name: 'Sample support', slug: 'sample-support', description: null, is_active: true, archived_at: null, is_sample: true, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' } }, tags: [], created_at: '', updated_at: '' };
+    const sampleProject = { id: 'sample-p', name: 'Sample support', slug: 'sample-support', description: null, is_active: true, archived_at: '2026-11-11T00:00:00Z', is_sample: true, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' } }, tags: [], created_at: '', updated_at: '' };
     globalThis.fetch = vi.fn(async (input, init) => {
       const path = String(input);
       if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
-      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: samplePresent ? [sampleProject] : [], next_cursor: null }));
+      if (path.endsWith('/projects?limit=100&include_archived=true')) return new Response(JSON.stringify({ items: samplePresent ? [sampleProject] : [], next_cursor: null }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
       if (path.endsWith('/projects/sample-p')) return new Response(JSON.stringify(sampleProject));
       if (path.endsWith('/admin/sample-data') && init?.method === 'DELETE') { samplePresent = false; return new Response(JSON.stringify({ present: false })); }
       if (path.endsWith('/admin/sample-data')) return new Response(JSON.stringify({ present: samplePresent, has_real_events: false, has_real_projects: false }));
@@ -147,6 +148,7 @@ describe('authenticated dashboard', () => {
     }) as typeof fetch;
     history.replaceState({}, '', '/');
     await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLInputElement>('.archived-toggle input')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     await act(async () => { container.querySelector<HTMLButtonElement>('.project-choice')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(container.textContent).toContain('Sample support');
     await act(async () => { container.querySelector<HTMLAnchorElement>('.top-nav a[href="/inbox"]')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
