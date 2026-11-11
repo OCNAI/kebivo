@@ -234,6 +234,13 @@ def install_test_route(app: Any) -> None:
             return error_response(
                 404, "not_found", "Destination not found", request.state.request_id
             )
+        if row.is_sample:
+            return error_response(
+                409,
+                "sample_destination",
+                "Sample destinations cannot send test events",
+                request.state.request_id,
+            )
         now = time.monotonic()
         windows: dict[str, list[float]] = request.app.state.test_send_windows
         recent = [value for value in windows.get(session.id, []) if now - value < 60]

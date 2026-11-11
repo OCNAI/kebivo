@@ -43,6 +43,7 @@ from kebivo.mcp_server import install_mcp_route
 from kebivo.models import AdminUser, ProcessingJob
 from kebivo.projects import install_project_routes
 from kebivo.routing.routes import install_routing_routes
+from kebivo.sample_data import install_sample_data_routes
 from kebivo.security.secretbox import SecretBox
 from kebivo.settings import Settings
 from kebivo.tokens import install_token_routes
@@ -393,6 +394,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_admin_group_mutation_routes(app)
     install_admin_group_membership_routes(app)
     install_admin_settings_routes(app)
+    install_sample_data_routes(app)
     mcp_server = install_mcp_route(app)
 
     # Serve the built Vite bundle when present (development keeps using Vite's server).

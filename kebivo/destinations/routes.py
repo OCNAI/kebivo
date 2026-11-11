@@ -101,6 +101,7 @@ def _serialize(row: Destination, request: Request) -> dict[str, Any]:
         "delivery_mode": row.delivery_mode,
         "allow_private_network": row.allow_private_network,
         "is_system": row.is_system,
+        "is_sample": row.is_sample,
         "secrets_unavailable": secrets_unavailable,
         "config": public,
         "created_at": row.created_at.isoformat(),

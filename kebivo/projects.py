@@ -264,6 +264,7 @@ def _serialize(project: Project, db: Session) -> dict[str, Any]:
         "slug": project.slug,
         "description": project.description,
         "is_active": project.is_active,
+        "is_sample": project.is_sample,
         "archived_at": project.archived_at.isoformat() if project.archived_at else None,
         "settings": json.loads(project.settings_json),
         "fallback_destination_id": project.fallback_destination_id,
@@ -339,6 +340,8 @@ def install_project_routes(app: Any) -> None:
         admin, _, _ = auth
         db: Session = request.state.db
         project = _get_project(db, project_id)
+        if project.is_sample:
+            raise ProjectAPIError(409, "sample_project", "Sample projects cannot send test events")
         if project.archived_at is not None or not project.is_active:
             raise ProjectAPIError(
                 409, "project_inactive", "Project must be active to send a test event"
@@ -508,7 +511,8 @@ def install_project_routes(app: Any) -> None:
                 raise ProjectAPIError(
                     422, "invalid_destination", "Fallback destination is invalid"
                 ) from None
-            if db.get(Destination, changes["fallback_destination_id"]) is None:
+            destination = db.get(Destination, changes["fallback_destination_id"])
+            if destination is None or (destination.is_sample and not project.is_sample):
                 raise ProjectAPIError(
                     422, "invalid_destination", "Fallback destination does not exist"
                 )
