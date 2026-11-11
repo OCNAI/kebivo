@@ -75,7 +75,10 @@ export function App() {
   const refreshProjects = React.useCallback(async (includeArchived = showArchived) => {
     const result = await apiRequest<{ items: Project[]; next_cursor: string | null }>(`projects?limit=100${includeArchived ? '&include_archived=true' : ''}`);
     setProjects(result.items);
-  }, [showArchived]);
+    if (selected && !result.items.some((project) => project.id === selected.id)) {
+      setSelected(null); setTokens([]); setEditing(false);
+    }
+  }, [selected, showArchived]);
   React.useEffect(() => { const refresh = () => { void refreshProjects().catch((e: unknown) => setError(apiErrorMessage(e))); }; addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshProjects]);
   const selectProject = React.useCallback(async (project: Project) => {
     setError(''); setNotice(''); setCreatedToken(null); setEditing(false);

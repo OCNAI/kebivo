@@ -128,6 +128,38 @@ describe('authenticated dashboard', () => {
     expect(container.textContent).not.toContain('Sample support');
   });
 
+  it('clears a selected sample project and shows the empty state after banner removal', async () => {
+    const originalShowModal = HTMLDialogElement.prototype.showModal, originalClose = HTMLDialogElement.prototype.close;
+    HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+    HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); this.dispatchEvent(new Event('close')); };
+    let samplePresent = true;
+    const sampleProject = { id: 'sample-p', name: 'Sample support', slug: 'sample-support', description: null, is_active: true, archived_at: null, is_sample: true, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' } }, tags: [], created_at: '', updated_at: '' };
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: samplePresent ? [sampleProject] : [], next_cursor: null }));
+      if (path.endsWith('/projects/sample-p')) return new Response(JSON.stringify(sampleProject));
+      if (path.endsWith('/admin/sample-data') && init?.method === 'DELETE') { samplePresent = false; return new Response(JSON.stringify({ present: false })); }
+      if (path.endsWith('/admin/sample-data')) return new Response(JSON.stringify({ present: samplePresent, has_real_events: false, has_real_projects: false }));
+      if (path.includes('/admin/groups/summary')) return new Response(JSON.stringify({ total_events: samplePresent ? 1 : 0, total_groups: samplePresent ? 1 : 0 }));
+      if (path.includes('/admin/groups?')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.project-choice')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).toContain('Sample support');
+    await act(async () => { container.querySelector<HTMLAnchorElement>('.top-nav a[href="/inbox"]')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Remove sample data')!.click(); });
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('dialog button')].find(button => button.textContent === 'Remove sample data')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLAnchorElement>('.top-nav a[href="/"]')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).not.toContain('Sample support');
+    expect(container.textContent).toContain('Load sample data');
+    expect(container.textContent).toContain('Connect your own app');
+    HTMLDialogElement.prototype.showModal = originalShowModal;
+    HTMLDialogElement.prototype.close = originalClose;
+  });
+
   it('identifies project correction policy separately from token scope', async () => {
     const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' as const } }, tags: [], created_at: '', updated_at: '' };
     const writes: Record<string, unknown>[] = [];
