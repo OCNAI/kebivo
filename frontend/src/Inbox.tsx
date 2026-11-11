@@ -93,6 +93,7 @@ export function Inbox({ navigate }: { path?: string; navigate: (url: string) => 
   const statusCountLabel = statuses.map(value => `${statusLabels[value]} ${statusCounts[value] ?? 0}`).join(', ');
   return <main className="dashboard-main"><section className="dashboard" aria-labelledby="inbox-title">
     <div className="dashboard-heading"><div><div className="eyebrow">FEEDBACK</div><h1 id="inbox-title" tabIndex={-1}>Group inbox</h1><p className="subtle">Recurring questions, grouped by project and type.</p></div></div>
+    <StarPrompt />
     {error && <div role="alert" className="error-message"><span>{error}</span> <button className="quiet-button" onClick={() => { setLoading(true); setRetry(v => v + 1); }}>Retry</button></div>}
     <section className="panel inbox-filter-panel" aria-label="Group inbox filters">
       <button type="button" className="quiet-button mobile-filter-toggle" aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen(value => !value)}>Filters{filtered ? ` (${Number(Boolean(projectId))+Number(Boolean(eventType))+status.length+tags.length+Number(Boolean(q))+Number(Boolean(firstFrom||firstTo))+Number(Boolean(lastFrom||lastTo))+Number(Boolean(minOccurrences))})` : ''}</button>
@@ -115,6 +116,27 @@ export function Inbox({ navigate }: { path?: string; navigate: (url: string) => 
       {loading ? <p role="status">Loading groups…</p> : !error && items.length === 0 ? filtered ? <div className="empty-state"><h2>No matching groups</h2><p>Your filters hide all results. Try changing or clearing them.</p></div> : <FirstRunEmpty navigate={navigate} projectId={projects.find(project => !project.is_sample)?.id} /> : items.length > 0 && <><GroupTable items={items} />{cursor && <button className="quiet-button" onClick={() => void loadMore()} disabled={moreLoading}>{moreLoading ? 'Loading…' : 'Load more'}</button>}</>}
     </section>
   </section></main>;
+}
+
+export function StarPrompt() {
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => {
+    let active = true;
+    apiRequest<{ show: boolean }>('admin/star-prompt').then(result => {
+      if (active) setVisible(result.show);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+  function dismiss() {
+    setVisible(false);
+    void apiRequest('admin/star-prompt/dismiss', { method: 'POST' }).catch(() => {});
+  }
+  if (!visible) return null;
+  return <aside className="star-prompt" aria-label="Support Kebivo">
+    <p>Kebivo is free and open source. If it's useful, a GitHub star helps other people find it.</p>
+    <a href="https://github.com/OCNAI/kebivo" target="_blank" rel="noopener noreferrer" onClick={dismiss}>Star on GitHub</a>
+    <button className="star-prompt-dismiss" type="button" onClick={dismiss}>Dismiss</button>
+  </aside>;
 }
 
 export function GroupTable({ items }: { items: Group[] }) {
