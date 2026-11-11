@@ -98,6 +98,7 @@ read -rsp 'Admin password (12+ characters): ' KEBIVO_ADMIN_PASSWORD; printf '\n'
 printf '%s\n' "$KEBIVO_ADMIN_PASSWORD" | docker exec -i kebivo python -m kebivo.cli bootstrap --email admin@example.org --password-stdin
 unset KEBIVO_ADMIN_PASSWORD
 KEBIVO_PROJECT="$(docker exec kebivo python -m kebivo.cli project create --name 'Shop assistant' --json)"
+KEBIVO_PROJECT_ID="$(printf '%s' "$KEBIVO_PROJECT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 KEBIVO_TOKEN="$(printf '%s' "$KEBIVO_PROJECT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
 ```
 
@@ -120,7 +121,7 @@ Both responses are `202 Accepted` with distinct `event_id` values. Open <http://
 
 If this was useful, a [GitHub star](https://github.com/OCNAI/kebivo) helps other people find Kebivo.
 
-For a signed webhook delivery, follow step 4 of the [Docker guide](docs/quickstart.md).
+To route the question to its owner over a signed webhook and then resolve it, continue in the same terminal with [steps 4 and 5 of the Docker guide](docs/quickstart.md).
 
 > **REST or MCP?** Call REST from your application's fallback when every miss must be captured. With MCP, the model decides whether to call `report_knowledge_gap`, so some misses may go unreported.
 

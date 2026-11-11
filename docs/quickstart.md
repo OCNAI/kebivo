@@ -1,6 +1,6 @@
 ---
 title: Run Kebivo with Docker
-description: Build and run Kebivo locally with Docker Compose, create a project token, and send your first AI knowledge gap report to the inbox.
+description: Run the published Kebivo image with Docker, create a project token, and send your first report to the inbox.
 ---
 
 # Run Kebivo with Docker
@@ -25,24 +25,29 @@ Curl may print a few `Connection reset` errors while migrations run. Readiness r
 read -rsp 'Admin password (12+ characters): ' KEBIVO_ADMIN_PASSWORD; printf '\n'
 printf '%s\n' "$KEBIVO_ADMIN_PASSWORD" | docker exec -i kebivo python -m kebivo.cli bootstrap --email admin@example.org --password-stdin
 unset KEBIVO_ADMIN_PASSWORD
-KEBIVO_PROJECT="$(docker exec kebivo python -m kebivo.cli project create --name 'Helpdesk bot' --json)"
+KEBIVO_PROJECT="$(docker exec kebivo python -m kebivo.cli project create --name 'Shop assistant' --json)"
 KEBIVO_PROJECT_ID="$(printf '%s' "$KEBIVO_PROJECT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 KEBIVO_TOKEN="$(printf '%s' "$KEBIVO_PROJECT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
 ```
 
-**3. Send your first event.**
+**3. Report the same unanswered question twice.** Use a different idempotency key for each occurrence. Reuse a key only when retrying the *same* request.
 
 ```sh
 curl -i http://127.0.0.1:8000/api/v1/feedback \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $KEBIVO_TOKEN" \
-  -H 'Idempotency-Key: first-event-001' \
-  --data '{"event_type":"knowledge_gap","question":"How do I reset my corporate VPN?","tags":["it"]}'
+  -H 'Idempotency-Key: canada-gap-001' \
+  --data '{"event_type":"knowledge_gap","question":"Do you ship to Canada?","tags":["shipping"]}'
+curl -i http://127.0.0.1:8000/api/v1/feedback \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $KEBIVO_TOKEN" \
+  -H 'Idempotency-Key: canada-gap-002' \
+  --data '{"event_type":"knowledge_gap","question":"Do you ship to Canada?","tags":["shipping"]}'
 ```
 
-The response is `202 Accepted` with an `event_id`. Open <http://127.0.0.1:8000/> to sign in and see the report in the Inbox. Use exactly `127.0.0.1`: `localhost` is a different origin, and sign-in names the allowed origin if you use the wrong one. You can also create projects and tokens in the UI.
+Both responses are `202 Accepted` with distinct `event_id` values. Open <http://127.0.0.1:8000/>, sign in, and find **Do you ship to Canada?** in the Inbox with **2 occurrences**. Use exactly `127.0.0.1`: `localhost` is a different origin, and sign-in names the allowed origin if you use the wrong one. You can also create projects and tokens in the UI.
 
-**4. Route it to a signed local webhook.** These commands use the same administrator password and project from step 2. The destination returns its signing secret once; keep it private. `allow_private_network: true` lets this destination reach private addresses, so use it only for a trusted receiver.
+**4. Route shipping questions to a signed local webhook.** This stands in for the person who owns the shipping docs. Run steps 4 and 5 in the same terminal as step 2: they ask for the administrator password again and reuse `KEBIVO_PROJECT_ID` and `KEBIVO_TOKEN`. The destination returns its signing secret once; keep it private. `allow_private_network: true` lets this destination reach private addresses, so use it only for a trusted receiver.
 
 ```sh
 read -rsp 'Admin password: ' KEBIVO_ADMIN_PASSWORD; printf '\n'
@@ -52,13 +57,13 @@ KEBIVO_LOGIN="$(KEBIVO_ADMIN_PASSWORD="$KEBIVO_ADMIN_PASSWORD" python3 -c 'impor
 unset KEBIVO_ADMIN_PASSWORD
 KEBIVO_CSRF="$(printf '%s' "$KEBIVO_LOGIN" | python3 -c 'import json,sys; print(json.load(sys.stdin)["csrf_token"])')"
 KEBIVO_DESTINATION="$(curl -fsS -b "$KEBIVO_COOKIES" -H 'Origin: http://127.0.0.1:8000' -H "X-CSRF-Token: $KEBIVO_CSRF" -H 'Content-Type: application/json' \
-  --data '{"name":"Local IT webhook","type":"webhook","allow_private_network":true,"config":{"url":"http://127.0.0.1:9000/hook","signing":true,"auth":{"type":"none"}}}' \
+  --data '{"name":"Shipping docs webhook","type":"webhook","allow_private_network":true,"config":{"url":"http://127.0.0.1:9000/hook","signing":true,"auth":{"type":"none"}}}' \
   http://127.0.0.1:8000/api/v1/destinations)"
 KEBIVO_DESTINATION_ID="$(printf '%s' "$KEBIVO_DESTINATION" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
 WEBHOOK_SECRET="$(printf '%s' "$KEBIVO_DESTINATION" | python3 -c 'import json,sys; print(json.load(sys.stdin)["signing_secret"])')"
 ```
 
-Get the [stdlib receiver](../examples/webhook_receiver.py) and its [payload schema](webhook-payload.schema.json), then run it in Kebivo's container. This keeps the receiver on container loopback and works with the published image or a Compose build (replace `kebivo` with the Compose app container ID).
+Get the [stdlib receiver](../examples/webhook_receiver.py) and its [payload schema](webhook-payload.schema.json), then run it in Kebivo's container. This keeps the receiver on container loopback and works with the published image or a Compose build (replace `kebivo` with the Compose app container ID). The last command waits up to 15 seconds for the receiver to start listening, so the delivery doesn't arrive before it.
 
 ```sh
 mkdir -p examples docs
@@ -68,23 +73,45 @@ docker cp examples/webhook_receiver.py kebivo:/tmp/webhook_receiver.py
 docker cp docs/webhook-payload.schema.json kebivo:/tmp/webhook-payload.schema.json
 WEBHOOK_SECRET="$WEBHOOK_SECRET" docker exec -e WEBHOOK_SECRET kebivo python /tmp/webhook_receiver.py \
   --schema /tmp/webhook-payload.schema.json --exit-after 1 > kebivo-webhook.log 2>&1 &
+sh -c 'i=0; until grep -q listening kebivo-webhook.log || [ $i -ge 30 ]; do sleep 0.5; i=$((i+1)); done'; cat kebivo-webhook.log
 ```
 
-Add a rule for `it`, then send a new question. The receiver writes a JSON line with `"signature":"valid"` and `"schema":"valid"` to `kebivo-webhook.log`.
+The log shows `{"listening": "127.0.0.1:9000"}`. Now add a rule that sends `shipping` reports to the webhook, and report the question a third time.
 
 ```sh
-curl -fsS -b "$KEBIVO_COOKIES" -H 'Origin: http://127.0.0.1:8000' -H "X-CSRF-Token: $KEBIVO_CSRF" -H 'Content-Type: application/json' \
-  --data "{\"name\":\"Route IT locally\",\"event_types\":[\"knowledge_gap\"],\"tags\":[\"it\"],\"match_mode\":\"any\",\"priority\":1,\"destination_ids\":[\"$KEBIVO_DESTINATION_ID\"],\"match_behavior\":\"stop\"}" \
+curl -fsS -o /dev/null -b "$KEBIVO_COOKIES" -H 'Origin: http://127.0.0.1:8000' -H "X-CSRF-Token: $KEBIVO_CSRF" -H 'Content-Type: application/json' \
+  --data "{\"name\":\"Shipping questions to the docs owner\",\"event_types\":[\"knowledge_gap\"],\"tags\":[\"shipping\"],\"match_mode\":\"any\",\"priority\":1,\"destination_ids\":[\"$KEBIVO_DESTINATION_ID\"],\"match_behavior\":\"stop\"}" \
   "http://127.0.0.1:8000/api/v1/projects/$KEBIVO_PROJECT_ID/routing-rules"
 curl -i http://127.0.0.1:8000/api/v1/feedback -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $KEBIVO_TOKEN" -H 'Idempotency-Key: routed-event-001' \
-  --data '{"event_type":"knowledge_gap","question":"Where is the IT VPN reset guide?","tags":["it"]}'
-rm -f "$KEBIVO_COOKIES"
-unset KEBIVO_LOGIN KEBIVO_DESTINATION KEBIVO_PROJECT WEBHOOK_SECRET KEBIVO_CSRF
-tail -f kebivo-webhook.log
+  -H "Authorization: Bearer $KEBIVO_TOKEN" -H 'Idempotency-Key: canada-gap-003' \
+  --data '{"event_type":"knowledge_gap","question":"Do you ship to Canada?","tags":["shipping"]}'
 ```
 
-You can also do the setup in the UI: sign in, create a signed webhook at **Destinations** with URL `http://127.0.0.1:9000/hook` and **Allow private network**, copy its one-time signing secret, then add an `it` rule for it under the project's **Routing** section. Start the receiver with that secret before sending the second event. Check **Delivery log** if the receiver does not print a delivery.
+The report joins the same group, now with 3 occurrences, and the new route delivers it once. By default a destination gets a group's first routed report; later repeats only raise the count. Check the receiver log and the Delivery log:
+
+```sh
+sh -c 'i=0; until grep -q "\"signature\": \"valid\"" kebivo-webhook.log || [ $i -ge 20 ]; do sleep 1; i=$((i+1)); done'; sleep 1; cat kebivo-webhook.log
+curl -fsS -b "$KEBIVO_COOKIES" "http://127.0.0.1:8000/api/v1/deliveries?destination_id=$KEBIVO_DESTINATION_ID" |
+  python3 -c 'import json,sys; [print(d["status"], "attempts=" + str(d["attempt_count"]), d["last_error_category"] or "") for d in json.load(sys.stdin)["items"]]'
+```
+
+The receiver log ends with a line containing `"question": "Do you ship to Canada?"`, `"signature": "valid"` and `"schema": "valid"`, and the Delivery log prints `delivered attempts=1 http_2xx`. A retry looks like `retry_scheduled attempts=1 connect`: the receiver wasn't reachable, and Kebivo tries again after about 30 seconds, then 2 and 10 minutes. Leave the receiver running and run the two check commands again after a minute. **Delivery log** in the UI shows each attempt.
+
+**5. Resolve the group.** When the shipping docs answer the question, mark the group resolved. In the UI, open **Do you ship to Canada?** in the Inbox and set **Status** to **Resolved** under **Triage**. Or use the API:
+
+```sh
+KEBIVO_GROUP_ID="$(curl -fsS -b "$KEBIVO_COOKIES" "http://127.0.0.1:8000/api/v1/admin/groups?project_id=$KEBIVO_PROJECT_ID&tag=shipping" |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["items"][0]["id"])')"
+curl -fsS -X PATCH -b "$KEBIVO_COOKIES" -H 'Origin: http://127.0.0.1:8000' -H "X-CSRF-Token: $KEBIVO_CSRF" -H 'Content-Type: application/json' \
+  --data '{"status":"resolved"}' "http://127.0.0.1:8000/api/v1/admin/groups/$KEBIVO_GROUP_ID" |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])'
+rm -f "$KEBIVO_COOKIES"
+unset KEBIVO_LOGIN KEBIVO_DESTINATION KEBIVO_PROJECT WEBHOOK_SECRET KEBIVO_CSRF
+```
+
+It prints `resolved`, and the Inbox shows the group as **Resolved** with 3 occurrences. If the question is reported again later, the group reopens and the route sends it to the webhook again.
+
+You can also do the step 4 setup in the UI: sign in, create a signed webhook at **Destinations** with URL `http://127.0.0.1:9000/hook` and **Allow private network**, copy its one-time signing secret, then add a `shipping` rule for it under the project's **Routing** section. Start the receiver with that secret and wait for its `listening` line before sending the third report.
 
 **Build from source instead.** Use this path if you want to change the code. After it starts, replace both `docker exec -i kebivo` and `docker exec kebivo` with `docker compose exec -T app` in step 2.
 

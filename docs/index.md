@@ -13,7 +13,7 @@ Use these pages for setup, integration and operations. Tutorials and framework g
 
 ## Get started
 
-- [Quickstart](quickstart.md): build and run Kebivo with Docker Compose, create a project token and send a first report.
+- [Quickstart](quickstart.md): run the published Kebivo image with Docker, create a project token and send your first report to the inbox.
 - [Self-hosting](self-hosting.md): production deployment, configuration, backups and upgrades.
 
 ## Connect an assistant
