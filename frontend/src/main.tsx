@@ -53,6 +53,8 @@ export function App() {
   const [authReady, setAuthReady] = React.useState(false);
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [selected, setSelected] = React.useState<Project | null>(null);
+  const selectedRef = React.useRef<Project | null>(null);
+  const setSelectedProject = React.useCallback((project: Project | null) => { selectedRef.current = project; setSelected(project); }, []);
   const [tokens, setTokens] = React.useState<Token[]>([]);
   const [createdToken, setCreatedToken] = React.useState<CreatedToken | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -62,7 +64,7 @@ export function App() {
   const [editing, setEditing] = React.useState(false);
   const [setupRequired, setSetupRequired] = React.useState(false);
   const [setupCheckDone, setSetupCheckDone] = React.useState(false);
-  React.useEffect(() => { const pop = () => setRoute(location.pathname + location.search); const expired = () => { setAdmin(null); setSelected(null); setCsrfToken(null); }; addEventListener('popstate', pop); addEventListener('session-expired', expired); return () => { removeEventListener('popstate', pop); removeEventListener('session-expired', expired); }; }, []);
+  React.useEffect(() => { const pop = () => setRoute(location.pathname + location.search); const expired = () => { setAdmin(null); setSelectedProject(null); setCsrfToken(null); }; addEventListener('popstate', pop); addEventListener('session-expired', expired); return () => { removeEventListener('popstate', pop); removeEventListener('session-expired', expired); }; }, [setSelectedProject]);
   const adminPresent = Boolean(admin);
   React.useEffect(() => {
   const page = route.startsWith('/inbox') ? 'Inbox' : route.startsWith('/settings') ? 'Settings' : route.startsWith('/deliveries') ? 'Deliveries' : route.startsWith('/destinations') ? 'Destinations' : selected?.name ?? 'Projects';
@@ -72,24 +74,25 @@ export function App() {
     document.querySelector<HTMLElement>('main h1')?.focus({ preventScroll: true });
   }, [pathname, adminPresent]);
 
-  const refreshProjects = React.useCallback(async (includeArchived = showArchived) => {
+  const refreshProjects = React.useCallback(async (includeArchived = false) => {
     const result = await apiRequest<{ items: Project[]; next_cursor: string | null }>(`projects?limit=100${includeArchived ? '&include_archived=true' : ''}`);
     setProjects(result.items);
-    if (selected && !result.items.some((project) => project.id === selected.id)) {
-      setSelected(null); setTokens([]); setEditing(false);
+    const current = selectedRef.current;
+    if (current?.is_sample && !result.items.some((project) => project.id === current.id)) {
+      setSelectedProject(null); setTokens([]); setEditing(false);
     }
-  }, [selected, showArchived]);
+  }, [setSelectedProject]);
   React.useEffect(() => { const refresh = () => { void refreshProjects().catch((e: unknown) => setError(apiErrorMessage(e))); }; addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshProjects]);
   const selectProject = React.useCallback(async (project: Project) => {
     setError(''); setNotice(''); setCreatedToken(null); setEditing(false);
-    setSelected(project);
+    setSelectedProject(project);
     try {
       const fresh = await apiRequest<Project>(`projects/${project.id}`);
       const tokenResult = fresh.is_sample ? { items: [] as Token[] } : await apiRequest<{ items: Token[] }>(`projects/${project.id}/tokens`);
-      setSelected(fresh); setTokens(tokenResult.items);
+      setSelectedProject(fresh); setTokens(tokenResult.items);
       if (location.hash === '#routing') requestAnimationFrame(() => document.getElementById('routing')?.scrollIntoView({ block: 'start' }));
     } catch (e) { setError(apiErrorMessage(e)); }
-  }, [setError, setNotice, setCreatedToken, setEditing, setSelected, setTokens]);
+  }, [setError, setNotice, setCreatedToken, setEditing, setSelectedProject, setTokens]);
 
   React.useEffect(() => {
     const projectId = new URLSearchParams(location.search).get('project');
@@ -115,7 +118,7 @@ export function App() {
     try { const result = await action(); success?.(result); }
     catch (e) {
       setError(apiErrorMessage(e));
-      if (e instanceof ApiError && e.status === 401) { setAdmin(null); setSelected(null); setCsrfToken(null); }
+      if (e instanceof ApiError && e.status === 401) { setAdmin(null); setSelectedProject(null); setCsrfToken(null); }
     } finally { setBusy(false); }
   }
 
@@ -129,7 +132,7 @@ export function App() {
 
   async function logout() {
     await run(() => apiRequest<{ status: string }>('auth/logout', { method: 'POST', body: '{}' }), () => {
-      setCsrfToken(null); setAdmin(null); setSelected(null); setProjects([]); setTokens([]); setCreatedToken(null);
+      setCsrfToken(null); setAdmin(null); setSelectedProject(null); setProjects([]); setTokens([]); setCreatedToken(null);
     });
   }
 
@@ -144,17 +147,17 @@ export function App() {
     await run(async () => selected
       ? apiRequest<Project>(`projects/${selected.id}`, { method: 'PATCH', body: JSON.stringify({ ...payload, settings: projectSettings }) })
       : apiRequest<Project>('projects', { method: 'POST', body: JSON.stringify(payload) }), async (project) => {
-      setSelected(project); setEditing(false); setNotice(selected ? 'Project settings saved.' : 'Project created.');
+      setSelectedProject(project); setEditing(false); setNotice(selected ? 'Project settings saved.' : 'Project created.');
       window.dispatchEvent(new Event('sample-data-refresh'));
       if (createFromBanner) navigate('/');
-      await refreshProjects();
+      await refreshProjects(showArchived);
       const tokenResult = await apiRequest<{ items: Token[] }>(`projects/${project.id}/tokens`); setTokens(tokenResult.items);
     });
   }
 
   async function changeProjectState(project: Project, action: 'archive' | 'restore') {
     await run(() => apiRequest<Project>(`projects/${project.id}/${action}`, { method: 'POST', body: '{}' }), async (updated) => {
-      setSelected(updated); setNotice(action === 'archive' ? 'Project archived.' : 'Project restored.'); await refreshProjects();
+      setSelectedProject(updated); setNotice(action === 'archive' ? 'Project archived.' : 'Project restored.'); await refreshProjects(showArchived);
     });
   }
 
@@ -207,8 +210,8 @@ export function App() {
       {!selected && !editing && !createFromBanner && <DashboardSummary navigate={navigate} projectId={projects.find(project=>!project.archived_at)?.id} />}
       <div className="dashboard-grid">
         <section className="panel project-panel" aria-labelledby="projects-title">
-          <div className="panel-heading"><div><h2 id="projects-title">Projects</h2><p className="subtle">{projects.length} {projects.length === 1 ? 'project' : 'projects'}</p></div><button onClick={() => { setSelected(null); setEditing(true); setError(''); setNotice(''); }}>New project</button></div>
-          {projects.filter((project) => showArchived || !project.archived_at).length === 0 ? <div className="empty-state"><h3>{showArchived ? 'No projects yet' : 'No active projects'}</h3><p>Create a project to organize feedback and issue credentials.</p><button onClick={() => { setSelected(null); setEditing(true); }}>Create a project</button></div> : <ul className="project-list">{projects.filter((project) => showArchived || !project.archived_at).map((project) => <li key={project.id}>
+          <div className="panel-heading"><div><h2 id="projects-title">Projects</h2><p className="subtle">{projects.length} {projects.length === 1 ? 'project' : 'projects'}</p></div><button onClick={() => { setSelectedProject(null); setEditing(true); setError(''); setNotice(''); }}>New project</button></div>
+          {projects.filter((project) => showArchived || !project.archived_at).length === 0 ? <div className="empty-state"><h3>{showArchived ? 'No projects yet' : 'No active projects'}</h3><p>Create a project to organize feedback and issue credentials.</p><button onClick={() => { setSelectedProject(null); setEditing(true); }}>Create a project</button></div> : <ul className="project-list">{projects.filter((project) => showArchived || !project.archived_at).map((project) => <li key={project.id}>
             <button className={`project-choice ${selected?.id === project.id ? 'selected' : ''}`} onClick={() => void selectProject(project)} aria-current={selected?.id === project.id ? 'true' : undefined}>
               <span className="project-avatar" aria-hidden="true">{project.name.slice(0, 1).toUpperCase()}</span><span className="project-info"><strong>{project.name} {project.is_sample && <SampleBadge />}</strong><small>{project.slug}</small></span><span className={`badge ${project.is_active ? 'active' : ''}`}>{project.is_active ? 'Active' : 'Disabled'}</span>
             </button></li>)}</ul>}
@@ -221,15 +224,15 @@ export function App() {
               <div className="panel-heading"><div><div className="eyebrow">PROJECT SETTINGS</div><h2 id="project-detail-title">{selected.name} {selected.is_sample && <SampleBadge />}</h2><p className="subtle">{selected.description || 'No description'}</p></div><div className="button-row"><a className="text-button" href={`/settings?project=${encodeURIComponent(selected.id)}#export`} onClick={event=>{event.preventDefault();navigate(`/settings?project=${encodeURIComponent(selected.id)}#export`)}}>Export feedback</a><button className="quiet-button" onClick={() => setEditing(true)}>Edit</button>{selected.archived_at ? <button className="quiet-button" onClick={() => void changeProjectState(selected, 'restore')}>Restore</button> : <button className="danger-button" onClick={() => window.confirm(`Archive “${selected.name}”? This disables its tokens but keeps settings and history.`) && void changeProjectState(selected, 'archive')}>Archive</button>}</div></div>
               <dl className="settings-summary"><div><dt>Slug</dt><dd>{selected.slug}</dd></div><div><dt>Status</dt><dd>{selected.archived_at ? 'Archived' : selected.is_active ? 'Active' : 'Disabled'}</dd></div><div><dt>Corrections policy</dt><dd>{selected.settings.corrections?.enabled ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Deduplication</dt><dd>{selected.settings.deduplication?.mode ?? (selected.settings.deduplication?.enabled === false ? 'Disabled' : 'Exact')}</dd></div></dl>
             </section>
-            {selected.is_sample ? <section className="panel"><p>Sample projects can't have tokens or receive events. Create your own project to connect an app.</p><button onClick={() => { setSelected(null); setEditing(true); }}>Create a project</button></section> : <><section className="panel" aria-labelledby="tokens-title"><div className="panel-heading"><div><div className="eyebrow">CREDENTIALS</div><h2 id="tokens-title">Project tokens</h2></div></div>
+            {selected.is_sample ? <section className="panel"><p>Sample projects can't have tokens or receive events. Create your own project to connect an app.</p><button onClick={() => { setSelectedProject(null); setEditing(true); }}>Create a project</button></section> : <><section className="panel" aria-labelledby="tokens-title"><div className="panel-heading"><div><div className="eyebrow">CREDENTIALS</div><h2 id="tokens-title">Project tokens</h2></div></div>
               {createdToken && <div className="secret-reveal" role="alert"><strong>Copy this token now</strong><p>This secret is shown once. Store it securely; it cannot be retrieved later.</p><label htmlFor="new-token">New token</label><div className="copy-row"><input id="new-token" readOnly value={createdToken.token} onFocus={(e) => e.currentTarget.select()} /><button type="button" className="quiet-button" onClick={() => void navigator.clipboard?.writeText(createdToken.token).then(() => setNotice('Token copied to clipboard.')).catch(() => setNotice('Select and copy the token manually.'))}>Copy token</button></div><button className="quiet-button dismiss-button" onClick={() => setCreatedToken(null)}>I have saved it</button></div>}
               {!selected.archived_at && <form className="token-form" onSubmit={createToken}><div className="form-row"><div><label htmlFor="token-name">Token name</label><input id="token-name" name="token-name" maxLength={120} placeholder="Production integration" required /></div><button disabled={busy}>Create token</button></div><p className="subtle">All tokens receive <code>feedback:gap</code>.</p><label className="checkbox-row"><input name="correction-scope" type="checkbox" disabled={!selected.settings.corrections?.enabled} /> Also grant <code>feedback:correction</code>{!selected.settings.corrections?.enabled && <span className="subtle"> (enable project correction policy first)</span>}</label></form>}
               {tokens.length === 0 ? <div className="empty-inline">No tokens have been issued for this project.</div> : <div className="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Scopes</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{tokens.map((token) => <tr key={token.id} className={token.revoked_at ? 'revoked-row' : ''}><th scope="row">{token.name}<small>{token.prefix}… {token.revoked_at ? ' · Revoked' : ''}</small></th><td>{token.scopes.map((scope) => <code className="scope-chip" key={scope}>{scope}</code>)}</td><td>{date(token.created_at)}</td><td>{date(token.last_used_at)}</td><td>{!token.revoked_at && <button className="text-button" disabled={busy || Boolean(selected.archived_at)} onClick={() => void revokeToken(token)}>Revoke</button>}</td></tr>)}</tbody></table></div>}
             </section>
               <ConnectPanel correctionsEnabled={Boolean(selected.settings.corrections?.enabled)} archived={Boolean(selected.archived_at)} projectId={selected.id} /></>}
             <section className="panel project-configuration" aria-label="Project configuration">
-      <DefaultTagsEditor key={selected.id} project={selected} busy={busy} onSaved={(updated) => { setSelected(updated); setNotice('Default tags saved.'); }} onError={setError} />
-              <SemanticSettings key={`semantic-${selected.id}`} project={selected} onSaved={updated => { const backfill = updated.settings.deduplication?.semantic?.method === 'embeddings' && selected.settings.deduplication?.semantic?.method !== 'embeddings'; setSelected(updated); setNotice(`Deduplication settings saved.${backfill ? ' Existing questions are being sent for indexing.' : ''}`); }} onError={setError} />
+      <DefaultTagsEditor key={selected.id} project={selected} busy={busy} onSaved={(updated) => { setSelectedProject(updated); setNotice('Default tags saved.'); }} onError={setError} />
+              <SemanticSettings key={`semantic-${selected.id}`} project={selected} onSaved={updated => { const backfill = updated.settings.deduplication?.semantic?.method === 'embeddings' && selected.settings.deduplication?.semantic?.method !== 'embeddings'; setSelectedProject(updated); setNotice(`Deduplication settings saved.${backfill ? ' Existing questions are being sent for indexing.' : ''}`); }} onError={setError} />
               <div id="routing"><Routing project={selected} /></div>
               <p className="scope-note"><strong>Correction access uses two gates.</strong> The project policy above controls whether corrections are accepted. Each token must also include the <code>feedback:correction</code> scope.</p>
               {selected.archived_at && <p className="inline-note">Archived {date(selected.archived_at)}. Restore this project before issuing credentials.</p>}

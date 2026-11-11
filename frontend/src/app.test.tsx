@@ -160,6 +160,31 @@ describe('authenticated dashboard', () => {
     HTMLDialogElement.prototype.close = originalClose;
   });
 
+  it('keeps archived project details selected without repeating the session check', async () => {
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => true);
+    const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null as string | null, settings: { corrections: { enabled: false }, deduplication: { mode: 'exact' } }, tags: [], created_at: '', updated_at: '' };
+    let archivedAt: string | null = null;
+    let sessionRequests = 0;
+    globalThis.fetch = vi.fn(async input => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) { sessionRequests++; return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' })); }
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: archivedAt ? [] : [project], next_cursor: null }));
+      if (path.endsWith('/projects/p1/archive')) { archivedAt = '2026-11-11T00:00:00Z'; return new Response(JSON.stringify({ ...project, archived_at: archivedAt })); }
+      if (path.endsWith('/projects/p1')) return new Response(JSON.stringify({ ...project, archived_at: archivedAt }));
+      if (path.endsWith('/projects/p1/tokens')) return new Response(JSON.stringify({ items: [] }));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.project-choice')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Archive')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.querySelector('#project-detail-title')?.textContent).toContain('Support');
+    expect([...container.querySelectorAll<HTMLButtonElement>('button')].some(button => button.textContent === 'Restore')).toBe(true);
+    expect(sessionRequests).toBe(1);
+    window.confirm = originalConfirm;
+  });
+
   it('identifies project correction policy separately from token scope', async () => {
     const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' as const } }, tags: [], created_at: '', updated_at: '' };
     const writes: Record<string, unknown>[] = [];
