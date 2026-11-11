@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+import secrets
 import sqlite3
 import time
 import uuid
@@ -39,7 +40,7 @@ from kebivo.feedback_guard import FeedbackBodyGuard
 from kebivo.feedback_limits import FixedWindowLimiter
 from kebivo.llm.routes import install_llm_provider_routes
 from kebivo.mcp_server import install_mcp_route
-from kebivo.models import ProcessingJob
+from kebivo.models import AdminUser, ProcessingJob
 from kebivo.projects import install_project_routes
 from kebivo.routing.routes import install_routing_routes
 from kebivo.security.secretbox import SecretBox
@@ -161,8 +162,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         _configure_logging()
+        if configured.file_backed_keys_with_public_access:
+            logging.getLogger(__name__).warning(
+                "File-backed keys are in use with public access; see self-hosting key custody docs"
+            )
         app.state.search_ready = _probe_fts5()
         tables = set(inspect(app.state.engine).get_table_names())
+        if "admin_users" in tables:
+            with app.state.session_factory() as db:
+                if db.scalar(select(AdminUser.id).limit(1)) is None:
+                    app.state.setup_token = secrets.token_urlsafe(32)
+                    app.state.setup_deadline = time.monotonic() + 3600
+                    base = configured.public_url or "http://127.0.0.1:8000"
+                    print(f"Kebivo setup: {base}/setup#token={app.state.setup_token}", flush=True)
+                    if not configured.public_url:
+                        print(
+                            "If you mapped another host port, change 8000 in the setup URL.",
+                            flush=True,
+                        )
         if app.state.worker is not None and not {"processing_jobs", "deliveries"} <= tables:
             app.state.worker = None
         if "destinations" in tables:
@@ -215,6 +232,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.database_path = configured.database_path
     app.state.search_ready = _probe_fts5()
     app.state.settings = configured
+    app.state.setup_token = None
+    app.state.setup_deadline = 0.0
     app.state.feedback_limiter = FixedWindowLimiter()
     install_error_handlers(app)
     database_url = configured.database_url or (
