@@ -29,13 +29,12 @@ def test_versions_match_pyproject() -> None:
     assert package["registryType"] == "oci"
     assert package["identifier"].endswith(f":{version}")
     assert len(SERVER["description"]) <= 100
+    assert SERVER["websiteUrl"] == "https://kebivo.com"
 
 
 def test_package_runs_the_documented_container() -> None:
     (package,) = SERVER["packages"]
-    env = {item["name"]: item for item in package["environmentVariables"]}
-    assert env["SECRET_KEY"]["isRequired"] and env["SECRET_KEY"]["isSecret"]
-    assert env["ENCRYPTION_KEY"]["isRequired"] and env["ENCRYPTION_KEY"]["isSecret"]
+    assert package.get("environmentVariables", []) == []
     transport = package["transport"]
     url = urlsplit(transport["url"])
     assert transport["type"] == "streamable-http"

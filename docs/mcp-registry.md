@@ -12,7 +12,7 @@ Kebivo is self-hosted, so it is listed as an **OCI package** (`ghcr.io/ocnai/keb
 
 The registry verifies that we own the image through the `io.modelcontextprotocol.server.name` label in the `Dockerfile`. That label must equal `name` in `server.json`. `kebivo/tests/test_mcp_registry_metadata.py` checks this, and `scripts/release-check.sh` checks the label on the built image.
 
-MCP clients can start the container from this entry, but Kebivo is not usable until an administrator has been bootstrapped, a project has been created and a project token has been issued (see the README quickstart). The token goes in the `Authorization` header variable.
+MCP clients can start the container from this entry without an external account or environment variables. On first use, open the one-time setup link printed in the container log, create the local admin and a project, then issue a project token (see the README quickstart). The token goes in the `Authorization` header variable. An existing 0.3.0 data volume must continue supplying its original `SECRET_KEY` and `ENCRYPTION_KEY`; startup fails closed without them.
 
 ## Publishing
 
