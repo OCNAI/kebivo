@@ -66,6 +66,7 @@ run_mode() {
   stage after_restart
   stage before_kill
   "${compose[@]}" kill -s KILL app >/dev/null
+  "${compose[@]}" wait app >/dev/null || true
   "${compose[@]}" up -d --no-build app >/dev/null
   wait_ready
   stage after_kill
