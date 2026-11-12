@@ -7,7 +7,7 @@
 
 # Kebivo: the inbox for questions your AI couldn't answer
 
-Your AI app reports each question it couldn't answer; Kebivo groups the repeats and routes them to whoever can fix the docs.
+For developers who built their own support or docs chatbot. Your app reports each question the bot couldn't answer, over REST or MCP. Kebivo groups the repeats and routes them to whoever can fix the docs. It runs in one container on your own server, with no signup.
 
 ![Demo: a customer asks a shop's AI support chatbot, "Do you ship to Canada?" The bot cannot answer. The app reports the question to Kebivo over MCP; a configured webhook route delivers it. A second report joins one inbox group with 2 occurrences. Product frames use sample data from a real Kebivo container.](docs/assets/demo.gif)
 
