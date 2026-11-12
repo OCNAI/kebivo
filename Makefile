@@ -33,7 +33,7 @@ test:
 
 audit:
 	uv export --locked --no-dev --no-emit-project --format requirements-txt --output-file /tmp/kebivo-python-requirements.txt
-	uv run --with pip-audit==2.9.0 pip-audit -r /tmp/kebivo-python-requirements.txt
+	uv run --with pip-audit==2.9.0 pip-audit --disable-pip -r /tmp/kebivo-python-requirements.txt
 	cd frontend && npm audit --audit-level=high
 
 smoke:

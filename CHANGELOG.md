@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- A fresh `docker run` with a named volume now generates keys in `/data/kebivo-secrets.env` and prints a one-time administrator setup link. Setup can load labelled, removable sample data. Database-only backups exclude the key file; save the matching keys separately before a restore. See [key custody](docs/self-hosting.md#secrets-and-what-to-protect).
+
+### Upgrade
+
+If `ALLOWED_ORIGINS` is empty, an existing installation now accepts browser login from an HTTP loopback origin when its host and port match the request `Host`. Previously, empty refused all browser login. A valid administrator password is still required. Set `ALLOWED_ORIGINS` for proxy or public access; other origins remain refused.
+
 ## 0.3.0 — 2026-11-04
 
 Opt-in embeddings grouping, steadier intake under bursts, and a readiness healthcheck in the image. Exact grouping stays the default; nothing changes unless you turn embeddings on.
