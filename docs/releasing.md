@@ -14,11 +14,12 @@ The check verifies the version and clean tree, then runs `make check`, `make aud
 
 ## Publishing
 
-1. Bump the version in `pyproject.toml` and `server.json` (`version` and the image tag in `identifier`), update `CHANGELOG.md`, and merge to `main` with green CI.
-2. Push an annotated tag `vX.Y.Z` on that commit. `.github/workflows/release.yml` runs `make release-check` (the upgrade check starts from the previous `v*.*.*` tag, or the root commit if there is none), then builds `linux/amd64` and `linux/arm64` with QEMU, pushes `ghcr.io/ocnai/kebivo:X.Y.Z` and `:latest` with the workflow's `GITHUB_TOKEN`, and checks the labels on both platforms. Manual dispatch of the same workflow runs the checks without publishing.
-3. Create the GitHub Release from the tag, with notes taken from `CHANGELOG.md`.
-4. Check that the image pulls without a login: `docker logout ghcr.io; docker pull ghcr.io/ocnai/kebivo:X.Y.Z`. A new GHCR package starts private; an organization owner makes it public once under the package's **Package settings**.
-5. Run the **MCP Registry** workflow (`.github/workflows/mcp-registry.yml`, manual dispatch) to publish `server.json`. See [MCP Registry metadata](mcp-registry.md).
+1. Regenerate the screenshots on `next`: run `make e2e-ui SCREENSHOTS=1` and commit the changed `docs/images/*.png` and `docs/assets/screenshots/inbox.png`, so the README and quickstart show this release's UI. Look at each image before committing.
+2. Bump the version in `pyproject.toml` and `server.json` (`version` and the image tag in `identifier`), update `CHANGELOG.md`, and merge to `main` with green CI.
+3. Push an annotated tag `vX.Y.Z` on that commit. `.github/workflows/release.yml` runs `make release-check` (the upgrade check starts from the previous `v*.*.*` tag, or the root commit if there is none), then builds `linux/amd64` and `linux/arm64` with QEMU, pushes `ghcr.io/ocnai/kebivo:X.Y.Z` and `:latest` with the workflow's `GITHUB_TOKEN`, and checks the labels on both platforms. Manual dispatch of the same workflow runs the checks without publishing.
+4. Create the GitHub Release from the tag, with notes taken from `CHANGELOG.md`.
+5. Check that the image pulls without a login: `docker logout ghcr.io; docker pull ghcr.io/ocnai/kebivo:X.Y.Z`. A new GHCR package starts private; an organization owner makes it public once under the package's **Package settings**.
+6. Run the **MCP Registry** workflow (`.github/workflows/mcp-registry.yml`, manual dispatch) to publish `server.json`. See [MCP Registry metadata](mcp-registry.md).
 
 ## Repository history
 

@@ -42,18 +42,4 @@ node capture/capture.mjs
 
 ## Re-capture the README screenshots
 
-Use a separate fresh container so the sample inbox has exactly the eight questions in `capture/readme-shots.mjs`. From this directory, after `npm ci` and with Playwright installed in `frontend/node_modules`:
-
-```sh
-docker run -d --name kreadme -p 127.0.0.1:18322:8000 \
-  -e SECRET_KEY=$(openssl rand -hex 32) -e ENCRYPTION_KEY=$(openssl rand -hex 32) \
-  -e ALLOWED_ORIGINS=http://127.0.0.1:18322 ghcr.io/ocnai/kebivo:0.2.0
-printf 'DemoPassw0rd-2026\nDemoPassw0rd-2026\n' | docker exec -i kreadme python -m kebivo.cli bootstrap --email admin@example.org --password-stdin
-BASE=http://127.0.0.1:18322 node capture/readme-shots.mjs
-node_modules/ffmpeg-static/ffmpeg -loglevel error -y -i shots-readme/raw-inbox.png \
-  -vf 'scale=1600:-1,crop=1600:923:0:90' -frames:v 1 ../screenshots/inbox.png
-node_modules/ffmpeg-static/ffmpeg -loglevel error -y -i shots-readme/raw-dashboard.png \
-  -vf 'scale=1700:-1,crop=1600:621:50:270' -frames:v 1 ../screenshots/dashboard.png
-```
-
-Wait for `/health/ready` before bootstrap. The capture creates the Shop assistant project and synthetic reports; it sorts the inbox by occurrence count for the README image.
+The README inbox image (`../screenshots/inbox.png`) and the gallery in `docs/images` come from `make e2e-ui SCREENSHOTS=1` in the repository root. It creates the administrator on the setup page with the built-in sample data, so the inbox shows the Shop assistant sample.

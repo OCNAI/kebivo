@@ -58,6 +58,10 @@ test('setup, inbox, and group detail have no serious or critical axe violations'
   expect(await moreFilters.evaluate(element => (element as HTMLDetailsElement).open)).toBe(false);
   await check(page, 'inbox');
 
+  await page.goto('/inbox?q=no-matching-groups-for-accessibility-check');
+  await expect(page.getByRole('heading', { name: 'No matching groups' })).toBeVisible();
+  await check(page, 'inbox filtered empty');
+
   await page.goto(`/inbox/groups/${data.hrGroupId}`);
   await expect(page.getByRole('heading', { name: 'Occurrences' })).toBeVisible();
   await check(page, 'group detail');

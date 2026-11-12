@@ -57,7 +57,7 @@ footer { padding: 18px; text-align: center; color: #5f6f67; font-size: 11px; }
 .project-info { display: grid; min-width: 0; flex: 1; gap: 3px; }
 .project-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .project-info small { color: #5f6f67; }
-.badge { padding: 4px 7px; border-radius: 99px; background: #f1f2f1; color: #707973; font-size: 10px; white-space: nowrap; }
+.badge { padding: 4px 7px; border-radius: 99px; background: #f1f2f1; color: #5f6f67; font-size: 10px; white-space: nowrap; }
 .badge.active { background: #eaf4ed; color: #317051; }
 .archived-toggle { margin-top: 13px; }
 .checkbox-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; }
@@ -92,8 +92,8 @@ footer { padding: 18px; text-align: center; color: #5f6f67; font-size: 11px; }
 .form-row > div { flex: 1; display: grid; gap: 7px; }
 .token-form { padding: 15px 0 17px; margin-bottom: 14px; border-top: 1px solid #edf0ed; border-bottom: 1px solid #edf0ed; }
 .token-form .subtle { margin: 8px 0; }
-.empty-inline { color: #839087; font-size: 12px; padding: 10px 0; }
-.empty-state { padding: 18px 8px; color: #748078; font-size: 12px; line-height: 1.6; }
+.empty-inline { color: #5f6f67; font-size: 12px; padding: 10px 0; }
+.empty-state { padding: 18px 8px; color: #5f6f67; font-size: 12px; line-height: 1.6; }
 .empty-state p { margin: 0 0 12px; }
 .sample-banner { width:min(100%,1180px); margin:12px auto 0; padding:14px 18px; display:flex; justify-content:space-between; align-items:center; gap:18px; background:#f3f6f3; border-left:3px solid #285f4c; color:#50645a; font-size:13px; line-height:1.55; }
 .star-prompt { display:flex; align-items:center; flex-wrap:wrap; gap:8px 16px; margin:-8px 0 18px; padding:9px 12px; border-left:2px solid #a8b9ad; color:#5d6b63; font-size:12px; line-height:1.5; }
@@ -136,7 +136,7 @@ thead th { color: #5f6f67; font-size: 10px; text-transform: uppercase; letter-sp
 tbody th { min-width: 120px; font-weight: 600; }
 tbody th small { display: block; margin-top: 4px; color: #5f6f67; font-weight: 400; }
 .scope-chip { display: inline-block; margin: 1px 3px 2px 0; padding: 3px 5px; border-radius: 4px; color: #446052; background: #eef5f0; white-space: nowrap; }
-.revoked-row { color: #88918b; }
+.revoked-row { color: #5f6f67; }
 .secret-reveal { margin: 0 0 15px; padding: 14px; border: 1px solid #e9d99e; border-radius: 9px; background: #fff9e7; }
 .secret-reveal p { margin: 5px 0 10px; color: #716744; font-size: 12px; }
 .secret-reveal label { display: block; margin-bottom: 5px; }

@@ -1,6 +1,22 @@
 {
   "projects": [
     {
+      "name": "Shop assistant", "slug": "sample-shop-assistant", "description": "Sample questions an online shop's support chatbot could not answer.",
+      "destinations": [
+        {"name": "Sample shipping webhook", "url": "https://shop.example.invalid/feedback"}
+      ],
+      "rules": [
+        {"name": "Shipping questions", "tag": "shipping", "destination": "Sample shipping webhook", "priority": 10}
+      ],
+      "groups": [
+        {"question": "Do you ship to Canada?", "count": 7, "days_ago": 13, "last_days_ago": 0.45, "status": "open", "tags": ["shipping"], "notes": ["The shipping page needs a clear answer about Canada."], "delivery": "delivered"},
+        {"question": "Can I return something after 30 days?", "count": 5, "days_ago": 12, "last_days_ago": 0.6, "status": "in_progress", "tags": ["returns"], "notes": ["Check whether late returns can be exchanged before updating the returns page."], "delivery": null},
+        {"question": "Do you have a student discount?", "count": 4, "days_ago": 9, "last_days_ago": 0.75, "status": "open", "tags": ["discounts"], "notes": [], "delivery": null},
+        {"question": "Can I change my delivery address after ordering?", "count": 3, "days_ago": 7, "last_days_ago": 0.9, "status": "resolved", "tags": ["orders", "shipping"], "notes": ["Added address changes to the order FAQ."], "delivery": "delivered"},
+        {"question": "Do you ship to PO boxes?", "count": 1, "days_ago": 1, "status": "open", "tags": ["shipping"], "notes": [], "delivery": "delivered"}
+      ]
+    },
+    {
       "name": "API Assistant", "slug": "sample-api-assistant", "description": "Sample questions from a developer support assistant.",
       "destinations": [
         {"name": "Sample API webhook", "url": "https://api.example.invalid/feedback"},
@@ -11,9 +27,9 @@
         {"name": "Docs questions", "tag": "docs", "destination": "Sample docs webhook", "priority": 20}
       ],
       "groups": [
-        {"question": "How do I paginate the /orders endpoint?", "count": 6, "days_ago": 12, "last_days_ago": 0.5, "status": "in_progress", "tags": ["api", "pagination", "needs-docs"], "notes": ["Document cursor pagination with a short example.", "Confirm the maximum page size before updating the guide."], "delivery": "delivered"},
-        {"question": "Why does the webhook signature fail in my test client?", "count": 4, "days_ago": 10, "last_days_ago": 1, "status": "open", "tags": ["api", "webhooks"], "notes": [], "delivery": "failed"},
-        {"question": "Where is the OpenAPI schema published?", "count": 3, "days_ago": 8, "last_days_ago": 1.5, "status": "resolved", "tags": ["docs"], "notes": ["Added the schema link to the API reference."], "delivery": "delivered"},
+        {"question": "How do I paginate the /orders endpoint?", "count": 6, "days_ago": 12, "last_days_ago": 1.2, "status": "in_progress", "tags": ["api", "pagination", "needs-docs"], "notes": ["Document cursor pagination with a short example.", "Confirm the maximum page size before updating the guide."], "delivery": "delivered"},
+        {"question": "Why does the webhook signature fail in my test client?", "count": 4, "days_ago": 10, "last_days_ago": 1.4, "status": "open", "tags": ["api", "webhooks"], "notes": [], "delivery": "failed"},
+        {"question": "Where is the OpenAPI schema published?", "count": 3, "days_ago": 8, "last_days_ago": 1.7, "status": "resolved", "tags": ["docs"], "notes": ["Added the schema link to the API reference."], "delivery": "delivered"},
         {"question": "Can I filter /orders by updated_at?", "count": 2, "days_ago": 6, "last_days_ago": 2.5, "status": "open", "tags": ["api"], "notes": [], "delivery": "delivered"},
         {"question": "Does the SDK support Python 3.12?", "count": 1, "days_ago": 4, "status": "dismissed", "tags": ["docs", "sdk"], "notes": [], "delivery": "delivered"},
         {"question": "How do I rotate a sandbox API key?", "count": 1, "days_ago": 2, "status": "open", "tags": ["api"], "notes": [], "delivery": "delivered"}
