@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.OCNAI/kebivo",
   "title": "Kebivo",
-  "description": "Logs the questions your chatbot couldn't answer and counts repeats. Self-hosted, no account needed.",
+  "description": "Your chatbot reports misses via REST or MCP; Kebivo groups and routes them. Self-hosted, no signup.",
   "websiteUrl": "https://kebivo.com",
   "repository": {
     "url": "https://github.com/OCNAI/kebivo",
