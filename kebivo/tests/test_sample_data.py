@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from kebivo.feedback.groups import check_integrity
 from kebivo.models import (
+    ApiToken,
     AuditEvent,
     Base,
     Delivery,
@@ -20,6 +21,7 @@ from kebivo.models import (
     ProcessingJob,
     Project,
     RoutingRule,
+    RoutingRuleDestination,
     Tag,
     now_utc,
 )
@@ -139,6 +141,15 @@ def test_sample_api_totals_status_conflicts_and_complete_removal(tmp_path: Path)
 
     with app.state.session_factory() as db:
         assert db.scalar(select(func.count()).select_from(ProcessingJob)) == 0
+        sample_groups = list(
+            db.scalars(select(FeedbackGroup).join(Project).where(Project.is_sample.is_(True)))
+        )
+        last_seen = [group.last_seen_at for group in sample_groups]
+        assert len(last_seen) == len(set(last_seen)) == totals["groups"]
+        assert all(
+            0.4 < (now_utc().replace(tzinfo=None) - seen).total_seconds() / 86400 < 14
+            for seen in last_seen
+        )
         ids = {
             "projects": set(db.scalars(select(Project.id).where(Project.is_sample.is_(True)))),
             "destinations": set(
@@ -163,11 +174,38 @@ def test_sample_api_totals_status_conflicts_and_complete_removal(tmp_path: Path)
         )
         ids["tags"] = set(db.scalars(select(Tag.id).where(Tag.project_id.in_(ids["projects"]))))
         assert check_integrity(db) == []
+    with app.state.session_factory() as db:
+        destination = Destination(name="Real inbox", type="inbox")
+        rule = RoutingRule(
+            project_id=real["id"],
+            name="Real rule",
+            priority=1,
+            event_types_json='["knowledge_gap"]',
+            match_mode="any",
+            match_behavior="continue",
+        )
+        token = ApiToken(
+            project_id=real["id"], name="Real token", token_hash="a" * 64, token_prefix="real"
+        )
+        db.add_all((destination, rule, token))
+        db.flush()
+        event = FeedbackEvent(
+            project_id=real["id"],
+            api_token_id=token.id,
+            submitted_via="rest",
+            event_type="knowledge_gap",
+            question="Real question",
+            normalized_question_hash="b" * 64,
+            processing_status="completed",
+        )
+        db.add_all((RoutingRuleDestination(rule_id=rule.id, destination_id=destination.id), event))
+        db.commit()
+        real_ids = (destination.id, rule.id, token.id, event.id)
     assert client.delete(PATH, headers=headers).status_code == 204
     assert client.delete(PATH, headers=headers).status_code == 204
     assert client.get(PATH).json() == {
         "present": False,
-        "has_real_events": False,
+        "has_real_events": True,
         "has_real_projects": True,
     }
     assert client.get(f"/api/v1/projects/{real['id']}").status_code == 200
@@ -175,6 +213,11 @@ def test_sample_api_totals_status_conflicts_and_complete_removal(tmp_path: Path)
     assert client.post(f"/api/v1/projects/{real['id']}/archive", headers=headers).status_code == 200
     assert client.get(PATH).json()["has_real_projects"] is False
     with app.state.session_factory() as db:
+        assert db.get(Destination, real_ids[0]) is not None
+        assert db.get(RoutingRule, real_ids[1]) is not None
+        assert db.get(ApiToken, real_ids[2]) is not None
+        assert db.get(FeedbackEvent, real_ids[3]) is not None
+        assert db.get(RoutingRuleDestination, (real_ids[1], real_ids[0])) is not None
         assert sorted(
             row.action
             for row in db.scalars(select(AuditEvent).where(AuditEvent.action.like("sample_data.%")))

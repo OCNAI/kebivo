@@ -126,9 +126,10 @@ def _load(db: Session) -> dict[str, int]:
         for group_spec in spec["groups"]:
             count = group_spec["count"]
             first = now - timedelta(days=group_spec["days_ago"])
+            last = now - timedelta(days=group_spec.get("last_days_ago", group_spec["days_ago"]))
             events = []
             for index in range(count):
-                when = first + (now - first) * index / max(1, count - 1)
+                when = first + (last - first) * index / max(1, count - 1)
                 event = FeedbackEvent(
                     project_id=project.id,
                     submitted_via="rest",

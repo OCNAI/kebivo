@@ -11,10 +11,10 @@
         {"name": "Docs questions", "tag": "docs", "destination": "Sample docs webhook", "priority": 20}
       ],
       "groups": [
-        {"question": "How do I paginate the /orders endpoint?", "count": 6, "days_ago": 12, "status": "in_progress", "tags": ["api", "pagination", "needs-docs"], "notes": ["Document cursor pagination with a short example.", "Confirm the maximum page size before updating the guide."], "delivery": "delivered"},
-        {"question": "Why does the webhook signature fail in my test client?", "count": 4, "days_ago": 10, "status": "open", "tags": ["api", "webhooks"], "notes": [], "delivery": "failed"},
-        {"question": "Where is the OpenAPI schema published?", "count": 3, "days_ago": 8, "status": "resolved", "tags": ["docs"], "notes": ["Added the schema link to the API reference."], "delivery": "delivered"},
-        {"question": "Can I filter /orders by updated_at?", "count": 2, "days_ago": 6, "status": "open", "tags": ["api"], "notes": [], "delivery": "delivered"},
+        {"question": "How do I paginate the /orders endpoint?", "count": 6, "days_ago": 12, "last_days_ago": 0.5, "status": "in_progress", "tags": ["api", "pagination", "needs-docs"], "notes": ["Document cursor pagination with a short example.", "Confirm the maximum page size before updating the guide."], "delivery": "delivered"},
+        {"question": "Why does the webhook signature fail in my test client?", "count": 4, "days_ago": 10, "last_days_ago": 1, "status": "open", "tags": ["api", "webhooks"], "notes": [], "delivery": "failed"},
+        {"question": "Where is the OpenAPI schema published?", "count": 3, "days_ago": 8, "last_days_ago": 1.5, "status": "resolved", "tags": ["docs"], "notes": ["Added the schema link to the API reference."], "delivery": "delivered"},
+        {"question": "Can I filter /orders by updated_at?", "count": 2, "days_ago": 6, "last_days_ago": 2.5, "status": "open", "tags": ["api"], "notes": [], "delivery": "delivered"},
         {"question": "Does the SDK support Python 3.12?", "count": 1, "days_ago": 4, "status": "dismissed", "tags": ["docs", "sdk"], "notes": [], "delivery": "delivered"},
         {"question": "How do I rotate a sandbox API key?", "count": 1, "days_ago": 2, "status": "open", "tags": ["api"], "notes": [], "delivery": "delivered"}
       ]
@@ -23,8 +23,8 @@
       "name": "Developer Docs", "slug": "sample-developer-docs", "description": "Sample documentation feedback.",
       "destinations": [], "rules": [],
       "groups": [
-        {"question": "How do I configure retries for webhook deliveries?", "count": 3, "days_ago": 11, "status": "in_progress", "tags": ["docs", "webhooks"], "notes": ["Add a retry schedule table to the guide."], "delivery": null},
-        {"question": "What does a 429 response mean for the SDK?", "count": 2, "days_ago": 7, "status": "open", "tags": ["sdk"], "notes": [], "delivery": null},
+        {"question": "How do I configure retries for webhook deliveries?", "count": 3, "days_ago": 11, "last_days_ago": 3.5, "status": "in_progress", "tags": ["docs", "webhooks"], "notes": ["Add a retry schedule table to the guide."], "delivery": null},
+        {"question": "What does a 429 response mean for the SDK?", "count": 2, "days_ago": 7, "last_days_ago": 5, "status": "open", "tags": ["sdk"], "notes": [], "delivery": null},
         {"question": "Where can I find the local Docker example?", "count": 1, "days_ago": 3, "status": "resolved", "tags": ["docs"], "notes": ["Linked the example from the quickstart."], "delivery": null}
       ]
     }
