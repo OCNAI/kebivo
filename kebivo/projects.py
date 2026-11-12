@@ -517,6 +517,16 @@ def install_project_routes(app: Any) -> None:
                     422, "invalid_destination", "Fallback destination does not exist"
                 )
         if "settings" in changes and changes["settings"] is not None:
+            if (
+                project.is_sample
+                and changes["settings"].get("deduplication", {}).get("mode") == "semantic"
+            ):
+                raise ProjectAPIError(
+                    422,
+                    "sample_project",
+                    "Sample projects cannot use semantic deduplication; "
+                    "it would send sample questions to a provider",
+                )
             _require_provider(db, changes["settings"])
             acknowledged = (
                 changes["settings"].get("deduplication", {}).get("privacy_acknowledged") is True

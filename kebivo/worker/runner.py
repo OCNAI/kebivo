@@ -334,6 +334,7 @@ class Worker:
                     (candidate, configured, source)
                     for candidate in jobs
                     if (configured := db.get(Project, candidate.project_id)) is not None
+                    and not configured.is_sample
                     and (source := db.get(LlmProviderConfig, candidate.provider_id)) is not None
                     and source.enabled
                     and self.provider_failures.get(source.id, (0, 0.0))[1] <= time.monotonic()
@@ -645,7 +646,7 @@ class Worker:
             if event is None:
                 return None
             project = db.get(Project, event.project_id)
-            if project is None:
+            if project is None or project.is_sample:
                 return None
             dedup = json.loads(project.settings_json).get("deduplication", {})
             if dedup.get("mode") != "semantic":
