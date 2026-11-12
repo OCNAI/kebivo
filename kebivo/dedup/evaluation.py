@@ -127,6 +127,8 @@ def evaluate_project(db: Session, settings: Settings, project_id: str, use_corpu
     project = db.get(Project, project_id)
     if project is None:
         raise ValueError("Project not found")
+    if project.is_sample:
+        raise ValueError("Sample projects cannot use embeddings")
     dedup = json.loads(project.settings_json).get("deduplication", {})
     semantic = dedup.get("semantic", {})
     if dedup.get("privacy_acknowledged") is not True or semantic.get("method") != "embeddings":

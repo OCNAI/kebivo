@@ -121,7 +121,9 @@ def install_dedup_routes(app: Any) -> None:
         )
         member = db.get(FeedbackGroupMember, prior.id) if prior else None
         exact_group_id = member.group_id if member else None
-        settings = json.loads(project.settings_json).get("deduplication", {})
+        settings = (
+            {} if project.is_sample else json.loads(project.settings_json).get("deduplication", {})
+        )
         semantic = settings.get("semantic", {})
         if settings.get("mode") == "semantic" and semantic.get("method") == "embeddings":
             embedding_response: dict[str, Any] = {

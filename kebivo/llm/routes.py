@@ -94,7 +94,8 @@ def _embedding_projects(db: Session, provider_id: str) -> list[tuple[Project, di
         dedup = json.loads(project.settings_json).get("deduplication", {})
         semantic = dedup.get("semantic", {})
         if (
-            dedup.get("mode") == "semantic"
+            not project.is_sample
+            and dedup.get("mode") == "semantic"
             and semantic.get("method") == "embeddings"
             and semantic.get("provider_id") == provider_id
         ):

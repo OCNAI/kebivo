@@ -1,5 +1,7 @@
 """Removable sample rows and their outbound safety boundary."""
 
+import asyncio
+import json
 import threading
 from dataclasses import replace
 from datetime import timedelta
@@ -7,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from alembic import command
 from sqlalchemy import func, select
 
 from kebivo.feedback.groups import check_integrity
@@ -16,17 +19,27 @@ from kebivo.models import (
     Base,
     Delivery,
     Destination,
+    EmbeddingBackfill,
     FeedbackEvent,
     FeedbackGroup,
+    LlmProviderConfig,
     ProcessingJob,
     Project,
+    QuestionEmbedding,
     RoutingRule,
     RoutingRuleDestination,
     Tag,
     now_utc,
 )
 from kebivo.retention import preview, run
+from kebivo.tests.test_db import _alembic_config
+from kebivo.tests.test_llm_providers import payload
 from kebivo.tests.test_projects import make_client, write_headers
+from kebivo.tests.test_semantic_dedup import fake
+from kebivo.worker.runner import Worker
+from scripts.fake_llm_server import FakeLLMServer
+
+__all__ = ["fake"]
 
 PATH = "/api/v1/admin/sample-data"
 REFERENCING_TABLES = {
@@ -333,3 +346,77 @@ def test_sample_rows_work_with_retention_and_group_check(tmp_path: Path) -> None
     assert run(app.state.session_factory, settings, now_utc() + timedelta(days=1))["feedback"] > 0
     with app.state.session_factory() as db:
         assert check_integrity(db) == []
+
+
+def test_sample_project_never_reaches_embedding_provider(
+    tmp_path: Path, fake: FakeLLMServer
+) -> None:
+    command.upgrade(_alembic_config(tmp_path / "sample.db"), "head")
+    client, app = make_client(tmp_path / "sample.db")
+    headers = write_headers(client)
+    assert client.post(PATH, headers=headers).status_code == 201
+    provider = client.post(
+        "/api/v1/admin/llm-providers",
+        json=payload(f"http://127.0.0.1:{fake.server_port}"),
+        headers=headers,
+    )
+    assert provider.status_code == 201, provider.text
+    semantic = {
+        "method": "embeddings",
+        "provider_id": provider.json()["id"],
+        "embedding_model": "fake-64",
+        "embedding_dimensions": 64,
+    }
+    dedup = {"mode": "semantic", "semantic": semantic, "privacy_acknowledged": True}
+    sample = next(
+        item for item in client.get("/api/v1/projects").json()["items"] if item["is_sample"]
+    )
+    judge = {"method": "judge", "provider_id": semantic["provider_id"]}
+    for settings in (semantic, judge):
+        refused = client.patch(
+            f"/api/v1/projects/{sample['id']}",
+            json={"settings": {"deduplication": dedup | {"semantic": settings}}},
+            headers=headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "sample_project"
+    preview = client.post(
+        f"/api/v1/admin/projects/{sample['id']}/dedup/preview",
+        json={"event_type": "knowledge_gap", "question": "Reset VPN"},
+        headers=headers,
+    )
+    assert preview.status_code == 200, preview.text
+
+    # Rows written before this guard existed must still stay offline.
+    worker = Worker(app.state.session_factory, app.state.settings)
+    with app.state.session_factory() as db:
+        project = db.get(Project, sample["id"])
+        assert project is not None
+        project.settings_json = json.dumps({"deduplication": dedup})
+        db.add(
+            EmbeddingBackfill(
+                project_id=project.id,
+                provider_id=semantic["provider_id"],
+                embedding_revision=db.get(
+                    LlmProviderConfig, semantic["provider_id"]
+                ).embedding_revision,
+                model="fake-64",
+                remaining=100,
+            )
+        )
+        event_id = db.scalar(
+            select(FeedbackEvent.id).where(FeedbackEvent.project_id == project.id).limit(1)
+        )
+        assert event_id is not None
+        job = ProcessingJob(
+            event_id=event_id, status="processing", lease_owner=worker.boot_id
+        )
+        db.add(job)
+        db.commit()
+        job_id = job.id
+    asyncio.run(worker._backfill())
+    assert worker._prepare_semantic(job_id) is None
+    asyncio.run(worker._process(job_id))
+    assert fake.requests == []
+    with app.state.session_factory() as db:
+        assert db.scalar(select(func.count()).select_from(QuestionEmbedding)) == 0
