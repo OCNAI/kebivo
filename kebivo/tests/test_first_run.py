@@ -1,3 +1,4 @@
+import errno
 import os
 import sqlite3
 import subprocess
@@ -38,12 +39,14 @@ def test_generated_keys_are_atomic_and_visible_to_new_process(
     assert path.read_text() == original
     configured = Settings.from_env(env)
     assert configured.secret_key == original.splitlines()[0].split("=", 1)[1]
-    override = Settings.from_env({**env, "SECRET_KEY": "z" * 40})
-    assert override.secret_key == "z" * 40
-    assert override.encryption_key == configured.encryption_key
-    encryption_override = Settings.from_env({**env, "ENCRYPTION_KEY": "ab" * 32})
-    assert encryption_override.secret_key == configured.secret_key
-    assert encryption_override.encryption_key == "ab" * 32
+    for name, other in (("SECRET_KEY", "z" * 40), ("ENCRYPTION_KEY", "ab" * 32)):
+        with pytest.raises(SettingsError, match=f"delete the {name} line") as mismatch:
+            Settings.from_env({**env, name: other})
+        assert other not in str(mismatch.value)
+        assert configured.secret_key not in str(mismatch.value)
+        assert configured.encryption_key not in str(mismatch.value)
+    same = {**env, "SECRET_KEY": configured.secret_key, "ENCRYPTION_KEY": configured.encryption_key}
+    assert Settings.from_env(same).encryption_key == configured.encryption_key
     blank_override = {**env, "SECRET_KEY": "", "ENCRYPTION_KEY": ""}
     assert Settings.from_env(blank_override).secret_key == configured.secret_key
     assert Settings.from_env(blank_override).encryption_key == configured.encryption_key
@@ -102,6 +105,53 @@ def test_blank_environment_keys_use_generated_file(tmp_path: Path) -> None:
     configured = Settings.from_env(env)
     assert configured.secret_key and configured.encryption_key
     assert path.exists()
+
+
+def test_one_generated_key_is_logged_by_name(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "secrets.env"
+    env = {
+        "KEBIVO_SECRETS_FILE": str(path),
+        "DATABASE_URL": f"sqlite:///{tmp_path / 'db.sqlite3'}",
+        "APP_ENV": "production",
+        "SECRET_KEY": "z" * 40,
+    }
+    generate(env)
+    (line,) = path.read_text().splitlines()
+    assert line.startswith("ENCRYPTION_KEY=")
+    assert "Generated ENCRYPTION_KEY" in caplog.text
+    assert line.split("=", 1)[1] not in caplog.text
+    configured = Settings.from_env(env)
+    assert configured.secret_key == "z" * 40
+
+
+def test_secrets_file_without_hard_links(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "secrets.env"
+    env = {
+        "KEBIVO_SECRETS_FILE": str(path),
+        "DATABASE_URL": f"sqlite:///{tmp_path / 'db.sqlite3'}",
+        "APP_ENV": "production",
+    }
+
+    def no_link(source: str, target: Path) -> None:
+        raise OSError(errno.ENOTSUP, "Operation not supported")
+
+    monkeypatch.setattr(os, "link", no_link)
+    generate(env)
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert len(path.read_text().splitlines()) == 2
+    assert [p.name for p in tmp_path.iterdir() if p.name.startswith(".kebivo-")] == []
+    assert Settings.from_env(env).secret_key
+
+    def denied(source: str, target: Path) -> None:
+        raise PermissionError(errno.EACCES, "Permission denied")
+
+    path.unlink()
+    monkeypatch.setattr(os, "link", denied)
+    with pytest.raises(SettingsError, match="uid 10001"):
+        generate(env)
+    assert not path.exists()
 
 
 def test_public_file_key_warning_only_on_startup(

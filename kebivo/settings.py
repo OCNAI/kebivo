@@ -65,9 +65,14 @@ class Settings:
                 for line in path.read_text(encoding="utf-8").splitlines():
                     name, separator, value = line.partition("=")
                     if separator and name in {"SECRET_KEY", "ENCRYPTION_KEY"}:
-                        if not values.get(name):
+                        if not values.get(name, "").strip():
                             file_keys_used = True
                             values[name] = value
+                        elif values[name] != value:
+                            raise SettingsError(
+                                f"{name} differs from the key in KEBIVO_SECRETS_FILE; to change "
+                                f"it on purpose, delete the {name} line from {secrets_file}"
+                            )
             except OSError:
                 raise SettingsError("Could not read KEBIVO_SECRETS_FILE") from None
         try:

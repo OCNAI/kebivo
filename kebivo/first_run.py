@@ -1,5 +1,6 @@
 """Create trial keys once, before the container validates settings or migrates."""
 
+import logging
 import os
 import secrets
 import sqlite3
@@ -52,16 +53,26 @@ def generate(environ: dict[str, str] | None = None) -> None:
     database_path = Path(url.database)
     if not database_is_fresh(database_path) or path.exists():
         raise SettingsError(f"{missing[0]} is required for an existing database or secrets file")
+    content = "".join(f"{name}={secrets.token_hex(32)}\n" for name in missing)
     try:
         fd, temporary = tempfile.mkstemp(prefix=".kebivo-secrets-", dir=path.parent)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as output:
-                for name in missing:
-                    output.write(f"{name}={secrets.token_hex(32)}\n")
+                output.write(content)
                 output.flush()
                 os.fsync(output.fileno())
             os.chmod(temporary, 0o600)
-            os.link(temporary, path)
+            try:
+                os.link(temporary, path)
+            except (FileExistsError, PermissionError):
+                raise
+            except OSError:
+                # The filesystem has no hard links; create the file exclusively instead.
+                flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                with os.fdopen(os.open(path, flags, 0o600), "w", encoding="utf-8") as output:
+                    output.write(content)
+                    output.flush()
+                    os.fsync(output.fileno())
             directory = os.open(path.parent, os.O_RDONLY)
             try:
                 os.fsync(directory)
@@ -72,10 +83,19 @@ def generate(environ: dict[str, str] | None = None) -> None:
     except FileExistsError:
         # A concurrent start installed its own complete file first.
         return
-    except OSError:
+    except PermissionError:
         raise SettingsError(
             "Cannot write secrets file as uid 10001; set SECRET_KEY and ENCRYPTION_KEY"
         ) from None
+    except OSError as exc:
+        raise SettingsError(
+            f"Cannot write secrets file ({exc.strerror}); set SECRET_KEY and ENCRYPTION_KEY"
+        ) from None
+    if len(missing) == 1:
+        logging.getLogger(__name__).warning(
+            "Generated %s in KEBIVO_SECRETS_FILE; the other key comes from the environment",
+            missing[0],
+        )
 
 
 if __name__ == "__main__":
