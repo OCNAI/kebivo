@@ -1,11 +1,11 @@
 ---
 title: Documentation
-description: "Open-source, self-hosted tool that collects the questions your AI assistant couldn't answer and routes them to the people who own the content."
+description: "Your chatbot app reports each question it couldn't answer over REST or MCP. Kebivo groups repeats and routes them to whoever fixes the docs. Self-hosted, no signup."
 ---
 
 # Kebivo documentation
 
-Kebivo is an open-source, self-hosted tool that collects the questions your AI assistant, chatbot or RAG app couldn't answer, groups repeats, and routes them to the people who own the content. Your agent or app reports a gap over REST or MCP, and routing rules deliver it to an admin inbox, Slack, email or signed webhooks. It runs as one container with no cloud account or AI provider required, under Apache-2.0.
+Kebivo is a self-hosted inbox for questions your chatbot couldn't answer. Your app reports each one over REST or MCP; Kebivo groups repeats and routes them to whoever can fix the docs. No signup needed.
 
 Kebivo does not answer questions or edit your knowledge base.
 
