@@ -79,7 +79,7 @@ export function Inbox({ navigate }: { path?: string; navigate: (url: string) => 
     navigate(`/inbox${params.size ? `?${params}` : ''}`);
   }
   const availableTags = Array.from(new Map(items.flatMap(item => item.tags).map(tag => [tag.slug, tag])).values());
-  function clearFilters() { navigate('/inbox'); setLoading(true); setError(''); }
+  function clearFilters() { setMoreOpen(false); navigate('/inbox'); setLoading(true); setError(''); }
   function removeTag(tag: string) { setLoading(true); setError(''); const params = new URLSearchParams(window.location.search); params.delete('tag'); tags.filter(item => item !== tag).forEach(item => params.append('tag', item)); navigate(`/inbox${params.size ? `?${params}` : ''}`); }
   async function loadMore() {
     if (!cursor) return; const requestedFilterKey = filterKey; setMoreLoading(true); setError('');
@@ -88,10 +88,10 @@ export function Inbox({ navigate }: { path?: string; navigate: (url: string) => 
     catch (e) { setError(e instanceof Error ? e.message : 'Could not load more groups.'); } finally { setMoreLoading(false); }
   }
   const filtered = Boolean(projectId || eventType || status.length || tags.length || q || firstFrom || firstTo || lastFrom || lastTo || minOccurrences);
-  const moreFilterCount = Number(Boolean(firstFrom || firstTo)) + Number(Boolean(lastFrom || lastTo)) + Number(Boolean(minOccurrences)) + tags.length;
+  const moreFilterCount = Number(Boolean(projectId)) + Number(Boolean(eventType)) + Number(Boolean(firstFrom || firstTo)) + Number(Boolean(lastFrom || lastTo)) + Number(Boolean(minOccurrences)) + tags.length;
   const statusCounts = summary?.groups_by_status ?? {};
   const statusCountLabel = statuses.map(value => `${statusLabels[value]} ${statusCounts[value] ?? 0}`).join(', ');
-  return <main className="dashboard-main"><section className="dashboard" aria-labelledby="inbox-title">
+  return <main className="dashboard-main inbox-page"><section className="dashboard" aria-labelledby="inbox-title">
     <div className="dashboard-heading"><div><div className="eyebrow">FEEDBACK</div><h1 id="inbox-title" tabIndex={-1}>Group inbox</h1><p className="subtle">Recurring questions, grouped by project and type.</p></div></div>
     <StarPrompt />
     {error && <div role="alert" className="error-message"><span>{error}</span> <button className="quiet-button" onClick={() => { setLoading(true); setRetry(v => v + 1); }}>Retry</button></div>}
@@ -100,17 +100,17 @@ export function Inbox({ navigate }: { path?: string; navigate: (url: string) => 
       <div className={`inbox-filter-content${mobileFiltersOpen ? ' is-open' : ''}`}>
       <div className="group-filters">
         <label className="wide-filter">Search<input aria-label="Search groups" type="search" value={searchDraft} onChange={e => setSearchState({ source: q, value: e.target.value })} placeholder="Search questions" /></label>
-        <label>Project<select aria-label="Filter by project" value={projectId} onChange={e => update('project_id', e.target.value)}><option value="">All projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.is_sample ? ' · Sample' : ''}</option>)}</select></label>
-        <label>Type<select aria-label="Filter by type" value={eventType} onChange={e => update('event_type', e.target.value)}><option value="">All types</option><option value="knowledge_gap">Knowledge gap</option><option value="knowledge_correction">Knowledge correction</option></select></label>
         <fieldset className="status-filter"><legend>Status</legend><div role="group" aria-label={`Filter by status. Total groups by status: ${statusCountLabel}`} className="status-toggles">{statuses.map(value => <button type="button" key={value} aria-pressed={status.includes(value)} className={`status-toggle${status.includes(value) ? ' is-selected' : ''}`} onClick={() => setStatuses(status.includes(value) ? status.filter(item => item !== value) : [...status, value])}>{statusLabels[value]} <span>{statusCounts[value] ?? 0}</span></button>)}</div></fieldset>
         <label>Sort<select aria-label="Sort groups" value={sort} onChange={e => update('sort', e.target.value)}>{sorts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       </div>
-      <details className="more-filters" open={moreOpen} onToggle={e => setMoreOpen(e.currentTarget.open)}><summary>More filters{moreFilterCount ? <span className="filter-count">{moreFilterCount}</span> : null}</summary>
-        <div className="more-filter-grid"><label>Minimum occurrences<input aria-label="Minimum occurrences" type="number" min="1" value={minOccurrences} onChange={e => update('min_occurrences', e.target.value)} /></label>
+      <details className="more-filters" open={moreFilterCount > 0 || moreOpen} onToggle={e => setMoreOpen(e.currentTarget.open)}><summary>More filters{moreFilterCount ? <span className="filter-count">{moreFilterCount}</span> : null}</summary>
+        <div className="more-filter-grid"><label>Project<select aria-label="Filter by project" value={projectId} onChange={e => update('project_id', e.target.value)}><option value="">All projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.is_sample ? ' · Sample' : ''}</option>)}</select></label>
+        <label>Type<select aria-label="Filter by type" value={eventType} onChange={e => update('event_type', e.target.value)}><option value="">All types</option><option value="knowledge_gap">Knowledge gap</option><option value="knowledge_correction">Knowledge correction</option></select></label>
+        <label>Minimum occurrences<input aria-label="Minimum occurrences" type="number" min="1" value={minOccurrences} onChange={e => update('min_occurrences', e.target.value)} /></label>
         {([['first_seen_from','First seen from (UTC day)',firstFrom],['first_seen_to','First seen to (UTC day)',firstTo],['last_seen_from','Last seen from (UTC day)',lastFrom],['last_seen_to','Last seen to (UTC day)',lastTo]] as const).map(([key,label,value]) => <label key={key}>{label}<input aria-label={label} type="date" value={value} onChange={e => update(key, e.target.value ? `${e.target.value}T${key.endsWith('_to') ? '23:59:59' : '00:00:00'}Z` : '')} /></label>)}
         <label>Tag<select aria-label="Filter by existing tag" value="" onChange={e => e.target.value && update('tag', e.target.value)}><option value="">Choose a tag…</option>{availableTags.filter(tag => !tags.includes(tag.slug)).map(tag => <option key={tag.slug} value={tag.slug}>{tag.name}</option>)}</select></label></div>
       </details>
-      <div className="filter-chips" aria-label="Active filters">{status.map(s => <button key={s} type="button" className="scope-chip" onClick={() => setStatuses(status.filter(value => value !== s))} aria-label={`Remove status ${statusLabels[s]}`}>Status: {statusLabels[s]} ×</button>)}{tags.map(tag => <button key={tag} type="button" className="scope-chip" onClick={() => removeTag(tag)} aria-label={`Remove tag ${tag}`}>Tag: {availableTags.find(item => item.slug === tag)?.name ?? tag} ×</button>)}</div>
+      <div className="filter-chips" role="group" aria-label="Active filters">{status.map(s => <button key={s} type="button" className="scope-chip" onClick={() => setStatuses(status.filter(value => value !== s))} aria-label={`Remove status ${statusLabels[s]}`}>Status: {statusLabels[s]} ×</button>)}{tags.map(tag => <button key={tag} type="button" className="scope-chip" onClick={() => removeTag(tag)} aria-label={`Remove tag ${tag}`}>Tag: {availableTags.find(item => item.slug === tag)?.name ?? tag} ×</button>)}</div>
       </div>
       <div className="filter-summary"><p aria-live="polite" aria-atomic="true">{loading ? 'Loading groups…' : filtered ? `Showing ${items.length} groups` : `Showing ${items.length} of ${summary?.total_groups ?? items.length} groups`}</p>{filtered && <button type="button" className="text-button" onClick={clearFilters}>Clear filters</button>}</div>
       {loading ? <p role="status">Loading groups…</p> : !error && items.length === 0 ? filtered ? <div className="empty-state"><h2>No matching groups</h2><p>Your filters hide all results. Try changing or clearing them.</p></div> : <FirstRunEmpty navigate={navigate} projectId={projects.find(project => !project.is_sample)?.id} /> : items.length > 0 && <><GroupTable items={items} />{cursor && <button className="quiet-button" onClick={() => void loadMore()} disabled={moreLoading}>{moreLoading ? 'Loading…' : 'Load more'}</button>}</>}
