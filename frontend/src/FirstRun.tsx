@@ -2,9 +2,11 @@ import React from 'react';
 import { ApiError, apiRequest, setCsrfToken } from './api';
 
 export type SampleStatus = { present: boolean; has_real_events: boolean; has_real_projects: boolean };
-type FirstRunContextValue = { sample: SampleStatus | null; refreshSample: () => Promise<SampleStatus | null>; sampleError: boolean; announce: (message: string) => void };
+type FirstRunContextValue = { sample: SampleStatus | null; refreshSample: () => Promise<SampleStatus | null>; sampleError: boolean; notice: string; announce: (message: string) => void };
 const FirstRunContext = React.createContext<FirstRunContextValue | null>(null);
 export function useFirstRun() { return React.useContext(FirstRunContext); }
+
+export function FirstRunNotice() { const notice = useFirstRun()?.notice; return notice ? <p role="status" className="sample-announcement" aria-live="polite">{notice}</p> : null; }
 
 export function FirstRunProvider({ children, navigate }: { children: React.ReactNode; navigate: (url: string) => void }) {
   const [sample, setSample] = React.useState<SampleStatus | null>(null);
@@ -16,8 +18,8 @@ export function FirstRunProvider({ children, navigate }: { children: React.React
   }, []);
   React.useEffect(() => { const refresh = () => void refreshSample(); void Promise.resolve().then(refreshSample); addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshSample]);
   React.useEffect(() => { const listener = (event: Event) => setNotice((event as CustomEvent<string>).detail); addEventListener('first-run-notice', listener); return () => removeEventListener('first-run-notice', listener); }, []);
-  const value = React.useMemo(() => ({ sample, refreshSample, sampleError, announce: setNotice }), [sample, refreshSample, sampleError]);
-  return <FirstRunContext.Provider value={value}>{sample?.present && <SampleBanner sample={sample} refresh={refreshSample} navigate={navigate} announce={setNotice} />}{notice && <p role="status" className="sample-announcement" aria-live="polite">{notice}</p>}{children}</FirstRunContext.Provider>;
+  const value = React.useMemo(() => ({ sample, refreshSample, sampleError, notice, announce: setNotice }), [sample, refreshSample, sampleError, notice]);
+  return <FirstRunContext.Provider value={value}>{sample?.present && <SampleBanner sample={sample} refresh={refreshSample} navigate={navigate} announce={setNotice} />}{children}</FirstRunContext.Provider>;
 }
 
 function SampleBanner({ sample, refresh, navigate, announce }: { sample: SampleStatus; refresh: () => Promise<SampleStatus | null>; navigate: (url: string) => void; announce: (message: string) => void }) {

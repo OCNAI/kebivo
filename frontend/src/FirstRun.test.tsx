@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FirstRunEmpty, FirstRunProvider, SetupPage, takeSetupTokenFromLocation } from './FirstRun';
+import { FirstRunEmpty, FirstRunNotice, FirstRunProvider, SetupPage, takeSetupTokenFromLocation } from './FirstRun';
 import { setCsrfToken } from './api';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -104,7 +104,7 @@ describe('sample banner removal', () => {
       return new Response('{}');
     }) as typeof fetch;
     const navigate = vi.fn();
-    await act(async () => { root.render(<FirstRunProvider navigate={navigate}><main><h1 tabIndex={-1}>Inbox</h1></main></FirstRunProvider>); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { root.render(<FirstRunProvider navigate={navigate}><header>Nav</header><FirstRunNotice /><main><h1 tabIndex={-1}>Inbox</h1></main></FirstRunProvider>); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(host.textContent).toContain("You're looking at sample data.");
     const remove = [...host.querySelectorAll('button')].find(button => button.textContent === 'Remove sample data')!;
     await act(async () => { remove.click(); });
@@ -118,6 +118,7 @@ describe('sample banner removal', () => {
     expect(navigate).toHaveBeenCalledWith('/inbox');
     expect(host.textContent).not.toContain("You're looking at sample data.");
     expect(host.textContent).toContain('Sample data removed.');
+    expect(host.querySelector('header')!.compareDocumentPosition(host.querySelector('[role=status]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('keeps the sample action available when sample status cannot be fetched', async () => {
