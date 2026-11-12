@@ -87,12 +87,22 @@ test('01 dashboard', async () => {
   await shot('01-dashboard.png');
 });
 
-test('02 inbox filtered by tag', async () => {
+test('02 inbox default filters', async () => {
   await page.goto('/inbox');
-  await page.getByText('More filters').click();
-  await page.getByLabel('Filter by existing tag').selectOption({ label: 'it' });
-  await expect(page.getByLabel('Active filters')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Group inbox', level: 1 })).toBeVisible();
+  await expect(page.locator('.more-filters')).not.toHaveAttribute('open', '');
+  await expect(page.locator('.group-table tbody tr').first()).toBeVisible();
   await shot('02-inbox.png');
+  const mobile = await page.context().browser()!.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  const mobilePage = await mobile.newPage();
+  await signIn(mobilePage);
+  await expect(mobilePage.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeVisible();
+  await mobilePage.goto('/inbox');
+  await expect(mobilePage.getByRole('heading', { name: 'Group inbox', level: 1 })).toBeVisible();
+  const mobileShot = path.resolve(process.cwd(), '../artifacts/mobile-inbox-390.png');
+  mkdirSync(path.dirname(mobileShot), { recursive: true });
+  await mobilePage.screenshot({ path: mobileShot, fullPage: true });
+  await mobile.close();
 });
 
 test('03 group detail', async () => {

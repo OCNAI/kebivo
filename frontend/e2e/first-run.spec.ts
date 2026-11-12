@@ -47,7 +47,10 @@ test('first real report shows a quiet, durable star prompt in the labelled inbox
   await page.screenshot({ path: screenshot, fullPage: true });
   expect(externalRequests).toEqual([]);
 
-  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/admin/star-prompt/dismiss') && response.request().method() === 'POST'),
+    page.getByRole('button', { name: 'Dismiss', exact: true }).click(),
+  ]);
   await expect(page.getByRole('complementary', { name: 'Support Kebivo' })).toHaveCount(0);
   expect(await admin.call<{ show: boolean }>('GET', '/admin/star-prompt')).toEqual({ show: false });
   await page.reload();
