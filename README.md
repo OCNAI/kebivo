@@ -63,14 +63,16 @@ All screenshots use synthetic data.
 
 | | |
 | --- | --- |
-| ![Dashboard with feedback counts by status and the top recurring open gaps](docs/images/01-dashboard.png) | ![Group inbox filtered by the tag it, with status counts and filters](docs/images/02-inbox.png) |
-| **Dashboard** | **Inbox** |
-| ![Feedback group with occurrences, notes, history and deliveries](docs/images/03-group-detail.png) | ![Project page with the REST and MCP connection snippets (cURL tab)](docs/images/04-connect.png) |
-| **Feedback group** | **Connect a client** |
-| ![Ordered routing rules, the fallback destination and the dry-run simulator](docs/images/05-routing.png) | ![A failed webhook delivery with its attempts and a Retry button](docs/images/07-deliveries.png) |
-| **Routing rules** | **Failed delivery** |
+| ![First-time setup page: create the administrator account, with Start with sample data selected](docs/images/00-first-run.png) | ![Dashboard with feedback counts by status and the top recurring open gaps](docs/images/01-dashboard.png) |
+| **First-run setup** | **Dashboard** |
+| ![Group inbox filtered by the tag it, with status counts and filters](docs/images/02-inbox.png) | ![Feedback group with occurrences, notes, history and deliveries](docs/images/03-group-detail.png) |
+| **Inbox** | **Feedback group** |
+| ![Project page with the REST and MCP connection snippets (cURL tab)](docs/images/04-connect.png) | ![Ordered routing rules, the fallback destination and the dry-run simulator](docs/images/05-routing.png) |
+| **Connect a client** | **Routing rules** |
+| ![A failed webhook delivery with its attempts and a Retry button](docs/images/07-deliveries.png) | ![Destinations: the built-in inbox, a webhook and an SMTP mail destination](docs/images/06-destinations.png) |
+| **Failed delivery** | **Destinations** |
 
-More: [destinations](docs/images/06-destinations.png), [settings](docs/images/08-settings.png), [LLM settings](docs/images/09-llm-settings.png), [sign-in](docs/images/10-sign-in.png). Regenerate them with `make e2e-ui SCREENSHOTS=1`.
+More: [settings](docs/images/08-settings.png), [LLM settings](docs/images/09-llm-settings.png), [sign-in](docs/images/10-sign-in.png). Regenerate them with `make e2e-ui SCREENSHOTS=1`.
 
 The demo's product frames come from a real container with sample data; its chat and end card are drawn. See the [demo source](docs/assets/demo-src/README.md).
 
@@ -100,7 +102,7 @@ curl -i http://127.0.0.1:8000/api/v1/feedback \
   --data '{"event_type":"knowledge_gap","question":"Do you ship to Canada?","tags":["shipping"]}'
 ```
 
-Both responses are `202 Accepted` with distinct `event_id` values. Find **Do you ship to Canada?** in the Inbox with **2 occurrences**. The sample rows are labelled separately.
+Both responses are `202 Accepted` with distinct `event_id` values. Find **Do you ship to Canada?** from your **Shop assistant** project in the Inbox with **2 occurrences**. The row with 7 occurrences is labelled **Sample** and stays separate.
 
 If this was useful, a [GitHub star](https://github.com/OCNAI/kebivo) helps other people find Kebivo.
 

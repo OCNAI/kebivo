@@ -91,7 +91,7 @@ def test_sample_api_totals_status_conflicts_and_complete_removal(tmp_path: Path)
     loaded = client.post(PATH, headers=headers)
     assert loaded.status_code == 201, loaded.text
     totals = loaded.json()
-    assert totals == {"projects": 2, "groups": 9, "events": 23, "deliveries": 6}
+    assert totals == {"projects": 3, "groups": 14, "events": 43, "deliveries": 9}
     assert client.post(PATH, headers=headers).status_code == 409
     state = client.get(PATH).json()
     assert state == {"present": True, "has_real_events": False, "has_real_projects": True}
@@ -99,6 +99,12 @@ def test_sample_api_totals_status_conflicts_and_complete_removal(tmp_path: Path)
     summary = client.get("/api/v1/admin/groups/summary").json()
     deliveries = client.get("/api/v1/deliveries?limit=100").json()["items"]
     assert len(groups) == totals["groups"] == summary["total_groups"]
+    top = groups[0]  # the inbox's default sort is last seen, newest first
+    assert (top["project"]["name"], top["representative"]["question_excerpt"]) == (
+        "Shop assistant",
+        "Do you ship to Canada?",
+    )
+    assert top["occurrence_count"] == 7
     assert (
         sum(item["occurrence_count"] for item in groups)
         == totals["events"]

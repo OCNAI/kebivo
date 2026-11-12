@@ -2,7 +2,7 @@
 # Kebivo browser end-to-end tests (Playwright, Chromium) against the built image.
 #
 #   bash scripts/e2e-ui.sh              # run the browser tests
-#   bash scripts/e2e-ui.sh screenshots  # also regenerate docs/images/*.png
+#   bash scripts/e2e-ui.sh screenshots  # regenerate docs/images/*.png and docs/assets/screenshots/inbox.png
 #   bash scripts/e2e-ui.sh demo         # capture frames for the README demo GIF (artifacts/demo-frames)
 #
 # Starts the e2e stack (compose.yaml + compose.e2e.yaml + compose.e2e-ui.yaml),
@@ -43,9 +43,16 @@ if [[ -z "${ready:-}" ]]; then
   echo "app or test doubles did not become ready" >&2
   exit 1
 fi
-printf '%s\n%s\n' "$admin_password" "$admin_password" | \
-  "${compose[@]}" exec -T app python -m kebivo.cli bootstrap \
-    --email "$admin_email" --password-stdin >/dev/null
+if [[ "${1:-}" == screenshots ]]; then
+  # The screenshots start from the browser setup page, so read the one-time link instead of bootstrapping.
+  setup_token="$("${compose[@]}" logs app | sed -n 's/.*Kebivo setup: .*#token=\([A-Za-z0-9_-]*\).*/\1/p' | tail -n 1)"
+  [[ -n "$setup_token" ]] || { echo "no setup link in the app logs" >&2; exit 1; }
+  export E2E_SETUP_TOKEN="$setup_token"
+else
+  printf '%s\n%s\n' "$admin_password" "$admin_password" | \
+    "${compose[@]}" exec -T app python -m kebivo.cli bootstrap \
+      --email "$admin_email" --password-stdin >/dev/null
+fi
 
 cd frontend
 export E2E_BASE_URL="http://127.0.0.1:${E2E_UI_PORT}"
