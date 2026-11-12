@@ -16,6 +16,8 @@ docker run --name kebivo -p 127.0.0.1:8000:8000 \
 
 Open the printed `Kebivo setup:` link in your browser. It expires after 60 minutes; restart the container for a new link. Create your administrator with a password of at least 12 characters. **Start with sample data** is selected by default; it opens a filled inbox with labelled, removable examples. If you map another host port, change `8000` in the printed link to that port. The generated keys live in the named volume; [protect them before using real credentials](self-hosting.md#secrets-and-what-to-protect).
 
+![First-time setup page: create the administrator account, with Start with sample data selected](images/00-first-run.png)
+
 **2. Report the same unanswered question twice.** In **Projects**, create a real project named **Shop assistant** and a token. Copy the token when shown; it is issued once. In a second terminal, enter it. Use a different idempotency key for each occurrence. Reuse a key only when retrying the *same* request.
 
 ```sh
