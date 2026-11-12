@@ -42,7 +42,7 @@ test('first real report shows a quiet, durable star prompt in the labelled inbox
   await expect(page.getByText(question).first()).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Support Kebivo' })).toBeVisible();
 
-  const screenshot = path.resolve(process.cwd(), '../artifacts/ogs-630/02-inbox-labelled.png');
+  const screenshot = path.resolve(process.cwd(), '../artifacts/first-run/inbox-labelled.png');
   mkdirSync(path.dirname(screenshot), { recursive: true });
   await page.screenshot({ path: screenshot, fullPage: true });
   expect(externalRequests).toEqual([]);
