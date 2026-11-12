@@ -30,7 +30,13 @@ from kebivo.admin_group_mutations import install_admin_group_mutation_routes
 from kebivo.admin_groups import install_admin_group_routes
 from kebivo.admin_settings import install_admin_settings_routes
 from kebivo.auth import install_auth_routes
-from kebivo.db import make_engine
+from kebivo.settings import Settings, SettingsError
+
+try:
+    from kebivo.db import make_engine
+except SettingsError as exc:
+    raise SystemExit(f"SettingsError: {exc}") from None
+
 from kebivo.dedup.routes import install_dedup_routes
 from kebivo.deliveries import install_delivery_routes, install_test_route
 from kebivo.destinations.routes import install_destination_routes
@@ -45,7 +51,6 @@ from kebivo.projects import install_project_routes
 from kebivo.routing.routes import install_routing_routes
 from kebivo.sample_data import install_sample_data_routes
 from kebivo.security.secretbox import SecretBox
-from kebivo.settings import Settings
 from kebivo.star_prompt import install_star_prompt_routes
 from kebivo.tokens import install_token_routes
 from kebivo.worker.runner import Worker
@@ -444,4 +449,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-app = create_app()
+try:
+    app = create_app()
+except SettingsError as exc:
+    raise SystemExit(f"SettingsError: {exc}") from None
