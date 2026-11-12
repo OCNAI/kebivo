@@ -19,6 +19,80 @@ from kebivo.models import AdminUser, Base
 from kebivo.settings import Settings, SettingsError
 
 
+@pytest.mark.parametrize("case", ["key_mismatch", "existing_database", "unwritable_data"])
+def test_entrypoint_settings_errors_are_one_line(tmp_path: Path, case: str) -> None:
+    data = tmp_path / "data"
+    data.mkdir()
+    secrets_file = data / "kebivo-secrets.env"
+    database = data / "app.sqlite3"
+    env = {
+        **os.environ,
+        "APP_ENV": "production",
+        "KEBIVO_SECRETS_FILE": str(secrets_file),
+        "DATABASE_URL": f"sqlite:///{database}",
+        "SECRET_KEY": "",
+        "ENCRYPTION_KEY": "",
+    }
+    if case == "key_mismatch":
+        secrets_file.write_text("SECRET_KEY=" + "s" * 40 + "\nENCRYPTION_KEY=" + "ab" * 32 + "\n")
+        secrets_file.chmod(0o600)
+        env["SECRET_KEY"] = "t" * 40
+        expected = (
+            "SECRET_KEY differs from the key in KEBIVO_SECRETS_FILE; to change it on purpose, "
+            f"delete the SECRET_KEY line from {secrets_file}"
+        )
+    elif case == "existing_database":
+        with sqlite3.connect(database) as db:
+            db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+            db.execute("INSERT INTO alembic_version VALUES ('0016')")
+        expected = "SECRET_KEY is required for an existing database or secrets file"
+    else:
+        data.rmdir()
+        data.write_text("not a directory")
+        expected = "Cannot write secrets file (Not a directory); set SECRET_KEY and ENCRYPTION_KEY"
+
+    result = subprocess.run(
+        ["sh", "docker/entrypoint.sh"], env=env, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == f"SettingsError: {expected}\n"
+    assert "Traceback" not in result.stderr
+    assert "s" * 40 not in result.stderr
+    assert "t" * 40 not in result.stderr
+    assert "ab" * 32 not in result.stderr
+
+
+def test_app_import_settings_error_is_one_line(tmp_path: Path) -> None:
+    secrets_file = tmp_path / "kebivo-secrets.env"
+    secrets_file.write_text("SECRET_KEY=" + "s" * 40 + "\nENCRYPTION_KEY=" + "ab" * 32 + "\n")
+    secrets_file.chmod(0o600)
+    env = {
+        **os.environ,
+        "APP_ENV": "production",
+        "KEBIVO_SECRETS_FILE": str(secrets_file),
+        "DATABASE_URL": f"sqlite:///{tmp_path / 'app.sqlite3'}",
+        "SECRET_KEY": "t" * 40,
+        "ENCRYPTION_KEY": "",
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", "import kebivo.app"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == (
+        "SettingsError: SECRET_KEY differs from the key in KEBIVO_SECRETS_FILE; "
+        f"to change it on purpose, delete the SECRET_KEY line from {secrets_file}\n"
+    )
+    assert "s" * 40 not in result.stderr
+    assert "t" * 40 not in result.stderr
+    assert "ab" * 32 not in result.stderr
+
+
 def test_generated_keys_are_atomic_and_visible_to_new_process(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

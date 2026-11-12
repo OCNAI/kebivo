@@ -103,7 +103,9 @@ if __name__ == "__main__":
         generate()
     except (SettingsError, sqlite3.Error) as exc:
         print(
-            str(exc) if isinstance(exc, SettingsError) else "Cannot inspect database for first run",
+            f"SettingsError: {exc}"
+            if isinstance(exc, SettingsError)
+            else "Cannot inspect database for first run",
             file=sys.stderr,
         )
         raise SystemExit(1) from None

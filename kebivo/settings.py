@@ -276,3 +276,10 @@ class Settings:
                 file_keys_used and (allowed_origins or public_url)
             ),
         )
+
+
+if __name__ == "__main__":
+    try:
+        Settings.from_env()
+    except SettingsError as exc:
+        raise SystemExit(f"SettingsError: {exc}") from None
