@@ -100,7 +100,7 @@ curl -i http://127.0.0.1:8000/api/v1/feedback \
   --data '{"event_type":"knowledge_gap","question":"Do you ship to Canada?","tags":["shipping"]}'
 ```
 
-Both responses are `202 Accepted` with distinct `event_id` values. Find **Do you ship to Canada?** in the Inbox with **2 occurrences**. The sample rows are labelled separately.
+Both responses are `202 Accepted` with distinct `event_id` values. Find **Do you ship to Canada?** from your **Shop assistant** project in the Inbox with **2 occurrences**. The row with 7 occurrences is labelled **Sample** and stays separate.
 
 If this was useful, a [GitHub star](https://github.com/OCNAI/kebivo) helps other people find Kebivo.
 
