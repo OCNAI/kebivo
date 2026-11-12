@@ -54,21 +54,33 @@ run_mode() {
       -e E2E_ADMIN_EMAIL="$admin_email" -e E2E_ADMIN_PASSWORD="$admin_password" \
       runner python -m pytest e2e -p no:cacheprovider -rs "${pytest_args[@]}"
   }
+  assert_star_log_count() {
+    local expected="$1" actual
+    actual="$("${compose[@]}" logs --no-color app | grep -Fc 'If Kebivo is useful, a GitHub star helps other people find it:' || true)"
+    if [[ "$actual" != "$expected" ]]; then
+      echo "expected $expected GitHub star startup log line(s), saw $actual" >&2
+      return 1
+    fi
+  }
   wait_ready
   printf '%s\n%s\n' "$admin_password" "$admin_password" | \
     "${compose[@]}" exec -T app python -m kebivo.cli bootstrap \
       --email "$admin_email" --password-stdin >/dev/null
 
+  assert_star_log_count 1
+  stage first_run
   stage main
   stage before_restart
   "${compose[@]}" restart app >/dev/null
   wait_ready
+  assert_star_log_count 1
   stage after_restart
   stage before_kill
   "${compose[@]}" kill -s KILL app >/dev/null
   "${compose[@]}" wait app >/dev/null || true
   "${compose[@]}" up -d --no-build app >/dev/null
   wait_ready
+  assert_star_log_count 1
   stage after_kill
 
   # Retention and integrity run through the documented CLI (no API exists).
