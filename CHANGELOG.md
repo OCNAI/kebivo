@@ -6,7 +6,9 @@
 
 ### Upgrade
 
-If `ALLOWED_ORIGINS` is empty, an existing installation now accepts browser login from an HTTP loopback origin when its host and port match the request `Host`. Previously, empty refused all browser login. A valid administrator password is still required. Set `ALLOWED_ORIGINS` for proxy or public access; other origins remain refused.
+If `ALLOWED_ORIGINS` is empty, an existing installation now accepts browser login from an HTTP loopback origin when its host and port match the request `Host`. Previously, empty refused all browser login. A valid administrator password is still required. Set `ALLOWED_ORIGINS` for proxy or public access; other origins remain refused. With it empty, the origin check stops other websites, not other hosts, so keep the port bound to `127.0.0.1`.
+
+When `/data/kebivo-secrets.env` holds a key and the environment sets that key to a different value, the container now refuses to start and names the variable instead of starting with a key that breaks project tokens or stored secrets. Passing the same value, or leaving the variable unset or blank, works as before. To change a key on purpose, delete its line from the file first.
 
 ## 0.3.0 — 2026-11-04
 

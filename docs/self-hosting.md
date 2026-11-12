@@ -176,7 +176,7 @@ docker run --name kebivo -p 127.0.0.1:8000:8000 -v kebivo-data:/data \
   --env-file ./kebivo.env ghcr.io/ocnai/kebivo:0.3.0
 ```
 
-After verifying the restart and a database-only backup, keep `kebivo.env` in your managed secret storage. To make a whole-volume copy independent of the keys, remove `/data/kebivo-secrets.env` from the volume only after confirming the env file supplies **both** keys on restart. If an environment key is omitted, the remaining file key is still used.
+After verifying the restart and a database-only backup, keep `kebivo.env` in your managed secret storage. To make a whole-volume copy independent of the keys, remove `/data/kebivo-secrets.env` from the volume only after confirming the env file supplies **both** keys on restart. If an environment key is omitted, the remaining file key is still used. If the environment sets a key to a different value from the one in `/data/kebivo-secrets.env`, the container refuses to start and names the variable. To change a key on purpose, delete that line from the file first.
 
 ## Backup and restore
 
@@ -228,7 +228,7 @@ Migrations are versioned and run automatically before the server starts. A faile
 
 The data volume survives the rebuild. To go back, restore the backup you took and check out the matching source; migration downgrades can drop data and are not an upgrade path. Release maintainers verify each version with an image-to-image upgrade check on a populated volume (see [releasing](releasing.md)).
 
-**Browser login change from 0.3.0:** An install with `ALLOWED_ORIGINS` empty previously refused every browser login. It now permits a valid administrator login from an HTTP loopback origin only when the browser origin exactly matches the request host and port. Set `ALLOWED_ORIGINS` explicitly if you need access through a proxy; an empty value still rejects public origins and a different local port.
+**Browser login change from 0.3.0:** An install with `ALLOWED_ORIGINS` empty previously refused every browser login. It now permits a valid administrator login from an HTTP loopback origin only when the browser origin exactly matches the request host and port. Set `ALLOWED_ORIGINS` explicitly if you need access through a proxy; an empty value still rejects public origins and a different local port. With it empty, the origin check stops other websites, not other hosts, so keep the port bound to `127.0.0.1`.
 
 ## Rotate credentials
 
