@@ -42,7 +42,7 @@ Compose runs only the `app` service. It builds the image `kebivo:local`, stores 
 
 ## Configuration
 
-Settings come from environment variables. Compose reads them from `.env`, which you copy from [`.env.example`](../.env.example). Every value is validated at startup: an invalid or missing required value stops the container with a message that names the variable (never its value). The one-command image creates `/data/kebivo-secrets.env` only on a fresh volume; it never replaces missing keys for an existing database. Environment values override file values per key.
+Settings come from environment variables. Compose reads them from `.env`, which you copy from [`.env.example`](../.env.example). Every value is validated at startup: an invalid or missing required value stops the container with a message that names the variable (never its value). The one-command image creates `/data/kebivo-secrets.env` only on a fresh volume; it never replaces missing keys for an existing database. An environment key that is blank or equal to the file key is fine; a different one stops the container and names the variable. To change a key on purpose, delete that line from the file first.
 
 ### Required
 
