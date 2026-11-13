@@ -20,7 +20,7 @@ from kebivo.feedback.ingest import (
 )
 from kebivo.feedback.schemas import CorrectionSubmission, GapSubmission
 from kebivo.feedback.service import IdempotencyConflict, submit_feedback
-from kebivo.tokens import authenticate_project_token
+from kebivo.tokens import INVALID_TOKEN_MESSAGE, authenticate_project_token
 
 GAP_EXAMPLE: dict[str, Any] = {
     "event_type": "knowledge_gap",
@@ -158,7 +158,7 @@ def install_feedback_routes(app: FastAPI) -> None:
             detail = {
                 "scope_required": "Project token scope required",
                 "corrections_disabled": "Project corrections are disabled",
-                "unauthorized": "Invalid project token",
+                "unauthorized": INVALID_TOKEN_MESSAGE,
             }[exc.code]
             raise HTTPException(
                 status_code=401 if exc.code == "unauthorized" else 403, detail=detail

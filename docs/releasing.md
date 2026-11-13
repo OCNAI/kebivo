@@ -10,7 +10,7 @@ From a clean checkout:
 make release-check VERSION=0.1.0 PREVIOUS_REF=<previous-release-tag-or-baseline-commit>
 ```
 
-The check verifies the version and clean tree, then runs `make check`, `make audit`, a labelled local image build, `make smoke`, `make e2e`, and the image-to-image upgrade check. It prints the local image ID. The upgrade check uses a temporary worktree, two local images, and a disposable Docker volume. It initializes the older image through its API, starts the current image on the same volume, checks existing table counts and content hashes, group integrity, old credentials, and a new token-authenticated submission. It removes its temporary containers, volume, and worktree on exit. Use the previous release tag. For 0.1.0, the first release, use the root commit of the public repository.
+The check verifies the version and clean tree, and that `README.md` and `docs/quickstart.md` name only `ghcr.io/ocnai/kebivo:X.Y.Z` for this release. It then runs `make check`, `make audit`, a labelled local image build, a first-run check (the README `docker run` line on a fresh volume prints a `Kebivo setup:` URL, and `SECRET_KEY=bad` prints one line), `make smoke`, `make e2e`, and the image-to-image upgrade check. It prints the local image ID. The upgrade check uses a temporary worktree, two local images, and a disposable Docker volume. It initializes the older image through its API, starts the current image on the same volume, checks existing table counts and content hashes, group integrity, old credentials, and a new token-authenticated submission. It removes its temporary containers, volume, and worktree on exit. Use the previous release tag. For 0.1.0, the first release, use the root commit of the public repository.
 
 ## Publishing
 

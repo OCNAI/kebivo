@@ -21,6 +21,13 @@ if [[ -z "$previous_ref" ]]; then
   exit 2
 fi
 git rev-parse --verify "${previous_ref}^{commit}" >/dev/null
+for doc in README.md docs/quickstart.md; do
+  tags="$(grep -oE "ghcr\.io/ocnai/kebivo:[0-9]+\.[0-9]+\.[0-9]+" "$doc" | sort -u)"
+  if [[ "$tags" != "ghcr.io/ocnai/kebivo:$version" ]]; then
+    echo "$doc must name only ghcr.io/ocnai/kebivo:$version; found: ${tags:-none}" >&2
+    exit 2
+  fi
+done
 
 make check
 make audit
@@ -42,6 +49,7 @@ if [[ "$server_json" != "$label_mcp_name $version" ]]; then
   echo "server.json ($server_json) does not match the image MCP label and release version." >&2
   exit 1
 fi
+bash scripts/first-run-check.sh "kebivo:$version"
 make smoke
 if make -n e2e >/dev/null 2>&1; then
   make e2e
