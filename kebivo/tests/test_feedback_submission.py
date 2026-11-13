@@ -249,8 +249,19 @@ def test_auth_policy_and_bad_json_write_nothing(tmp_path: Path) -> None:
     client, app, project, token = setup(tmp_path, corrections=False)
     gap_only = issue_token(client, project["id"], "gap").json()["token"]
     before = counts(app)
-    assert post(client, None, GAP_EXAMPLE).status_code == 401
-    assert post(client, "invalid", GAP_EXAMPLE).status_code == 401
+    missing = post(client, None, GAP_EXAMPLE)
+    assert missing.status_code == 401
+    assert missing.json()["error"]["code"] == "unauthorized"
+    assert "Authorization: Bearer <project token>" in missing.json()["error"]["message"]
+    submitted = "kebivo_pt_unknown.never-echo-this"
+    for bad in ("invalid", submitted):
+        invalid = post(client, bad, GAP_EXAMPLE)
+        assert invalid.status_code == 401
+        assert invalid.json()["error"]["code"] == "unauthorized"
+        message = invalid.json()["error"]["message"]
+        assert "kebivo-admin project create" in message
+        assert "https://docs.kebivo.com/rest-api/#authentication" in message
+        assert bad not in invalid.text
     assert post(client, gap_only, CORRECTION_EXAMPLE).status_code == 403
     assert post(client, token, CORRECTION_EXAMPLE).status_code == 403
     assert post(client, token, GAP_EXAMPLE, "bad key").status_code == 400

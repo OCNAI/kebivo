@@ -40,7 +40,7 @@ from kebivo.models import (
 from kebivo.settings import Settings, SettingsError
 from kebivo.tests.test_projects import make_client
 from kebivo.tests.test_tokens import create_project, issue_token
-from kebivo.tokens import CORRECTION_SCOPE, GAP_SCOPE
+from kebivo.tokens import CORRECTION_SCOPE, GAP_SCOPE, INVALID_TOKEN_MESSAGE, MISSING_TOKEN_MESSAGE
 
 
 @pytest.fixture
@@ -273,6 +273,11 @@ def test_auth_lifecycle_and_zero_rows(running: tuple[str, Any, dict[str, Any], s
     for token in (None, "malformed", "kebivo_pt_unknown.invalid"):
         response = _mcp_post(url, token)
         assert response.status_code == 401
+        error = response.json()["error"]
+        assert error["code"] == "unauthorized"
+        expected = MISSING_TOKEN_MESSAGE if token is None else INVALID_TOKEN_MESSAGE
+        assert error["message"] == expected
+        assert token is None or token not in response.text
         assert response.headers["www-authenticate"] == "Bearer"
         assert "resource_metadata" not in str(response.headers)
         assert _counts(app) == original

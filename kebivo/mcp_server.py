@@ -31,6 +31,8 @@ from kebivo.models import ApiToken, Project
 from kebivo.tokens import (
     CORRECTION_SCOPE,
     GAP_SCOPE,
+    INVALID_TOKEN_MESSAGE,
+    MISSING_TOKEN_MESSAGE,
     ProjectTokenPrincipal,
     _corrections_enabled,
     authenticate_bearer,
@@ -337,7 +339,8 @@ def install_mcp_route(app: Any) -> Server[Any] | None:
         authorization = request.headers.get("authorization", "")
         scheme, separator, token = authorization.partition(" ")
         principal = None
-        if separator and scheme.casefold() == "bearer" and token and token.strip() == token:
+        presented = bool(separator and scheme.casefold() == "bearer" and token)
+        if presented and token.strip() == token:
 
             def authenticate() -> ProjectTokenPrincipal:
                 with app.state.session_factory() as db:
@@ -351,7 +354,7 @@ def install_mcp_route(app: Any) -> Server[Any] | None:
             response = error_response(
                 401,
                 "unauthorized",
-                "Authentication required",
+                INVALID_TOKEN_MESSAGE if presented else MISSING_TOKEN_MESSAGE,
                 scope.get("state", {}).get("request_id"),
             )
             response.headers["WWW-Authenticate"] = "Bearer"

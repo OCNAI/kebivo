@@ -21,6 +21,14 @@ from kebivo.models import ApiToken, AuditEvent, Project, now_utc
 GAP_SCOPE = "feedback:gap"
 CORRECTION_SCOPE = "feedback:correction"
 VALID_SCOPES = {GAP_SCOPE, CORRECTION_SCOPE}
+MISSING_TOKEN_MESSAGE = (
+    "Authentication required: send the header Authorization: Bearer <project token>"
+)
+INVALID_TOKEN_MESSAGE = (
+    "Invalid project token: create or copy one in the admin UI under Projects, or run "
+    "kebivo-admin project create --name <name>; see "
+    "https://docs.kebivo.com/rest-api/#authentication"
+)
 
 
 @dataclass(frozen=True)
@@ -60,7 +68,7 @@ def authenticate_project_token(
         authorization = request.headers.get("authorization", "")
         scheme, separator, bearer_token = authorization.partition(" ")
         if not separator or scheme.casefold() != "bearer" or not bearer_token:
-            raise HTTPException(status_code=401, detail="Authentication required")
+            raise HTTPException(status_code=401, detail=MISSING_TOKEN_MESSAGE)
     return authenticate_bearer(request.state.db, request.app.state.settings, bearer_token)
 
 
@@ -69,28 +77,28 @@ def authenticate_bearer(
 ) -> tuple[ProjectTokenPrincipal, Project]:
     """Authenticate a bearer credential and its active project; never commit."""
     if len(token) > 256 or "." not in token:
-        raise HTTPException(status_code=401, detail="Invalid project token")
+        raise HTTPException(status_code=401, detail=INVALID_TOKEN_MESSAGE)
     prefix, _secret = token.split(".", 1)
     if not prefix.startswith("kebivo_pt_") or len(prefix) > 32:
-        raise HTTPException(status_code=401, detail="Invalid project token")
+        raise HTTPException(status_code=401, detail=INVALID_TOKEN_MESSAGE)
 
     row = db.scalar(select(ApiToken).where(ApiToken.token_prefix == prefix))
     expected_digest = _token_digest(settings, token)
     if row is None or not hmac.compare_digest(row.token_hash, expected_digest):
-        raise HTTPException(status_code=401, detail="Invalid project token")
+        raise HTTPException(status_code=401, detail=INVALID_TOKEN_MESSAGE)
     now = now_utc()
     expiry = row.expires_at
     if expiry is not None and expiry.tzinfo is None:
         expiry = expiry.replace(tzinfo=UTC)
     if row.revoked_at is not None or (expiry is not None and expiry <= now):
-        raise HTTPException(status_code=401, detail="Invalid project token")
+        raise HTTPException(status_code=401, detail=INVALID_TOKEN_MESSAGE)
     project = db.get(Project, row.project_id)
     if project is None or not project.is_active or project.archived_at is not None:
-        raise HTTPException(status_code=401, detail="Invalid project token")
+        raise HTTPException(status_code=401, detail=INVALID_TOKEN_MESSAGE)
     try:
         scopes = frozenset(json.loads(row.scopes_json))
     except (TypeError, json.JSONDecodeError):
-        raise HTTPException(status_code=401, detail="Invalid project token") from None
+        raise HTTPException(status_code=401, detail=INVALID_TOKEN_MESSAGE) from None
     return ProjectTokenPrincipal(project_id=project.id, token_id=row.id, scopes=scopes), project
 
 
@@ -144,7 +152,7 @@ def require_project_token(
         authorization = request.headers.get("authorization", "")
         scheme, separator, token = authorization.partition(" ")
         if not separator or scheme.casefold() != "bearer" or not token:
-            raise HTTPException(status_code=401, detail="Authentication required")
+            raise HTTPException(status_code=401, detail=MISSING_TOKEN_MESSAGE)
         return verify_project_token(request, token, required_scope=required_scope)
 
     return dependency

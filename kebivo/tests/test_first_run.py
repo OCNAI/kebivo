@@ -19,7 +19,9 @@ from kebivo.models import AdminUser, Base
 from kebivo.settings import Settings, SettingsError
 
 
-@pytest.mark.parametrize("case", ["key_mismatch", "existing_database", "unwritable_data"])
+@pytest.mark.parametrize(
+    "case", ["key_mismatch", "existing_database", "unwritable_data", "not_a_url"]
+)
 def test_entrypoint_settings_errors_are_one_line(tmp_path: Path, case: str) -> None:
     data = tmp_path / "data"
     data.mkdir()
@@ -46,6 +48,9 @@ def test_entrypoint_settings_errors_are_one_line(tmp_path: Path, case: str) -> N
             db.execute("CREATE TABLE alembic_version (version_num TEXT)")
             db.execute("INSERT INTO alembic_version VALUES ('0016')")
         expected = "SECRET_KEY is required for an existing database or secrets file"
+    elif case == "not_a_url":
+        env["DATABASE_URL"] = "not-a-url"
+        expected = "DATABASE_URL must be a SQLite URL, such as sqlite:////data/app.sqlite3"
     else:
         data.rmdir()
         data.write_text("not a directory")
