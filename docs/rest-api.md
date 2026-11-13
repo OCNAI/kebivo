@@ -7,6 +7,8 @@ description: Send AI agent knowledge gaps and proposed corrections to Kebivo ove
 
 Send knowledge gaps and corrections with `POST /api/v1/feedback`. Your application decides when to report, so REST can collect every gap you choose to record. For reports initiated by an agent, see the [MCP guide](mcp.md).
 
+For a small fallback you can adapt to your chatbot, see [Report from your own app](report-from-your-app.md).
+
 The examples below assume Kebivo runs at `http://127.0.0.1:8000` (see the [quickstart](../README.md#quickstart)). Use your HTTPS URL in production.
 
 ## Authentication

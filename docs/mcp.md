@@ -104,6 +104,7 @@ across MCP and REST. Reusing the key for different content returns a conflict.
 | Tool result `validation_error` | Invalid or extra input; `isError: true`, with `error.fields[]` containing `field`, `code`, and `message`. |
 | Tool result `idempotency_conflict` | Key was already used for a different submission; `isError: true`. |
 | Tool result `rate_limited` | Per-token limit (`FEEDBACK_RATE_LIMIT_PER_TOKEN`, shared with REST) reached; `isError: true` and `retry_after_seconds`. |
+| Tool result `storage_busy` | Storage could not acquire a writer lock or pooled connection within the bounded wait; `isError: true` with `retry_after_seconds` (currently 1). Retry after that wait with the same `idempotency_key`. |
 | Tool result `internal_error` | Unexpected failure; `isError: true` and a `request_id`. |
 
 HTTP errors use `{ "error": { "code", "message", "request_id" } }` where the
