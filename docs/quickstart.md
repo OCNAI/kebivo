@@ -39,7 +39,7 @@ curl -i http://127.0.0.1:8000/api/v1/feedback \
 
 Both responses are `202 Accepted` with distinct `event_id` values. Find **Do you ship to Canada?** from your **Shop assistant** project in the Inbox with **2 occurrences**. The row with 7 occurrences is labelled **Sample**: sample rows stay separate from yours, and you can remove them using the sample-data banner.
 
-**If this fails:** A `401` means the project token is missing or invalid; copy a new token from **Projects** and retry. If Docker says port 8000 is already allocated, stop the process using it or map another host port and use that port in the URLs. If the setup link has expired, restart the container and open the new link printed in its log.
+**If this fails:** A `401` means the project token is missing or invalid; create a new token in **Projects** and retry. If Docker says port 8000 is already allocated, map an unused host port and use it in the URLs. If the setup link has expired, restart the container and open the new link printed in its log.
 
 To report unanswered questions from your own chatbot, see [Report from your own app](report-from-your-app.md).
 
