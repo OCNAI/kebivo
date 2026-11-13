@@ -278,6 +278,7 @@ button:disabled, button[aria-disabled="true"] { opacity:1; color:#3d4942; backgr
 .connect-tabs { display:flex; gap:4px; overflow-x:auto; border-bottom:1px solid #dfe7e0; margin:12px 0; }
 .connect-tabs [role=tab] { flex:0 0 auto; border-radius:7px 7px 0 0; background:transparent; color:#52645b; }
 .connect-tabs [aria-selected=true] { background:#eaf2ec; color:#285f4c; }
+.connect-tabs [role=tab][aria-selected=true]:hover:not(:disabled) { background:#eaf2ec; color:#285f4c; }
 .event-type-toggle { display:flex; align-items:center; flex-wrap:wrap; gap:8px; border:0; padding:8px 0; }
 .event-type-toggle button[aria-pressed=true] { outline:2px solid #285f4c; outline-offset:2px; }
 .event-type-toggle span { color:var(--ink-muted); font-size:12px; }
