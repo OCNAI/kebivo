@@ -43,6 +43,7 @@ nav:
   - Home: index.md
   - Quickstart: quickstart.md
   - REST API: rest-api.md
+  - Report from your own app: report-from-your-app.md
   - MCP:
       - Connecting clients: mcp.md
       - MCP Registry metadata: mcp-registry.md

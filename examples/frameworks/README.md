@@ -19,7 +19,7 @@ an SDK and are not part of the `make e2e` acceptance suite.
 
 Every example needs a running Kebivo and a project token (create one on the
 project page in the admin UI). The scripts read `KEBIVO_URL` (default
-`http://127.0.0.1:8000`) and `KEBIVO_TOKEN`. The MCP agent scripts take `--list-tools`, which checks the connection without calling a model. The LangChain and LlamaIndex scripts instead run a known and an unmatched question.
+`http://127.0.0.1:8000`) and `KEBIVO_TOKEN`. The MCP agent scripts take `--list-tools`, which checks the connection without calling a model. LlamaIndex can then run a question through a configured model; whether the model calls Kebivo is not guaranteed. The LangChain script uses local matching for a deterministic known-question and unmatched-question check.
 
 A model may not call the tool when it should. Pair the tool with the
 [agent instructions](../agent-instructions.md), and use REST from your own code
