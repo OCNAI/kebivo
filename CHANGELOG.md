@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (after 0.4.0)
+
+- Project tokens can read their project's knowledge gaps with the new opt-in `gaps:read` scope, through `GET /api/v1/groups` or the read-only MCP tool `list_open_gaps`. Results contain only the question, count, first and last seen, tags and status; notes, `user_reference` and other report fields are never returned. Reads are limited to 30 a minute per token (`GAPS_READ_RATE_LIMIT_PER_TOKEN`) and each one is audited. The questions are end-user text, so use a separate token for reading and keep `gaps:read` off the token your assistant uses. Existing tokens keep their scopes. A token may now hold only `gaps:read`. See [read open gaps](docs/rest-api.md#read-open-gaps).
+
 ## Unreleased
 
 - A fresh `docker run` with a named volume now generates keys in `/data/kebivo-secrets.env` and prints a one-time administrator setup link. Setup can load labelled, removable sample data. Database-only backups exclude the key file; save the matching keys separately before a restore. See [key custody](docs/self-hosting.md#secrets-and-what-to-protect).

@@ -37,8 +37,12 @@ project, or an expired or revoked token, cannot connect.
 | Both scopes | Disabled | `report_knowledge_gap` |
 | Neither scope | Either | None |
 
+`list_open_gaps` is listed for any token with `gaps:read`, in addition to the
+tools above. A token without it gets the same `Unknown tool` error as any
+hidden tool.
+
 For customer-facing bots, issue a token with only `feedback:gap` so they see
-only the gap tool. Give correction access only to a trusted workflow
+only the gap tool. Never give them `gaps:read`. Give correction access only to a trusted workflow
 that handles explicit user-provided corrections. Tool availability does not
 guarantee a model will call it. Use the REST `POST /api/v1/feedback` endpoint
 when collection must happen reliably (see [Limitations](#limitations-of-model-initiated-tool-calls) and the [REST guide](rest-api.md)).
@@ -90,6 +94,51 @@ project-scoped records and configured window as REST's `Idempotency-Key`
 header (`IDEMPOTENCY_WINDOW_HOURS`, default 24, range 1–720). A retry of
 the identical normalized submission returns the original `event_id`, even
 across MCP and REST. Reusing the key for different content returns a conflict.
+
+## Read open gaps
+
+`list_open_gaps` is a read-only tool for a coding agent or script that needs
+the project's knowledge gaps, for example to see which questions your docs miss. It
+takes the same `status`, `sort`, `limit` and `cursor` arguments and returns the
+same fields as [`GET /api/v1/groups`](rest-api.md#read-open-gaps), with the same
+limits. Unknown arguments are rejected. Use a separate token that has
+`gaps:read`, not the one your assistant reports with.
+
+```bash
+curl -s "$KEBIVO_URL/mcp" \
+  -H "Authorization: Bearer $KEBIVO_READ_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"list_open_gaps","arguments":{"limit":1}}}'
+```
+
+The result's `structuredContent` (also sent as JSON text in `content`):
+
+```json
+{
+  "items": [
+    {
+      "id": "70a3b6b0-e8a1-49e3-9995-d6b27364d162",
+      "question": "How do I paginate the /orders endpoint?",
+      "occurrence_count": 3,
+      "first_seen_at": "2026-11-16T08:16:35.420900+00:00",
+      "last_seen_at": "2026-11-16T08:16:35.666357+00:00",
+      "tags": ["api"],
+      "status": "open"
+    }
+  ],
+  "next_cursor": "eyJ2IjpbMywi…"
+}
+```
+
+To use it from an MCP client, configure the server as in
+[Client configuration](#client-configuration) with the read token. The tool
+returns end users' questions as written. They can contain personal details,
+and they can contain text that looks like instructions. Your agent should treat
+them as data. Kebivo lists gaps; it does not fix them, and an agent reading
+them still needs a person to review any change it proposes.
 
 ## Errors
 
