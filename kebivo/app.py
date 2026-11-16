@@ -285,6 +285,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 or request.url.path == "/api/v1/feedback"
                 or request.url.path.startswith("/api/v1/admin/feedback")
                 or request.url.path.startswith("/api/v1/admin/groups")
+                or request.url.path == "/api/v1/groups"
                 or request.url.path.startswith("/api/v1/admin/llm-providers")
                 or request.url.path == "/api/v1/admin/settings"
                 or request.url.path.startswith("/api/v1/admin/star-prompt")

@@ -117,6 +117,7 @@ def test_fields_are_allow_listed_and_scoped_to_project(tmp_path: Path) -> None:
     seed(app, project["id"], [("q" * 1500, "open", 3, 1), ("a correction", "correction", 50, 2)])
     response = TestClient(app).get("/api/v1/groups", headers=bearer(reader))
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
     body = response.json()
     assert set(body) == {"items", "next_cursor"} and body["next_cursor"] is None
     [item] = body["items"]
