@@ -109,3 +109,22 @@ def test_note_on_resolve_is_optional_and_needs_a_resolved_group(tmp_path: Path) 
     client.delete(f"{notes}/{note['id']}", headers=write_headers(client))
     assert _row(client, group_id)["resolution_note"] is None  # type: ignore[index]
     app.state.engine.dispose()
+
+
+def test_merging_a_reopened_group_does_not_mark_the_target_reopened(tmp_path: Path) -> None:
+    client, app, project, token = setup(tmp_path)
+    other = post(client, token, {"event_type": "knowledge_gap", "question": "Is there a VPN?"})
+    target = client.get(f"/api/v1/admin/feedback/{other.json()['event_id']}").json()["group"]["id"]
+    source = _group(client, project["id"], token)
+    _resolve(client, source)
+    post(client, token, QUESTION)
+    assert _row(client, source, reopened="true") is not None
+    merged = client.post(
+        f"/api/v1/admin/groups/{target}/merge",
+        json={"source_group_ids": [source]},
+        headers=write_headers(client),
+    )
+    assert merged.is_success
+    assert _row(client, target, reopened="true") is None
+    assert _row(client, target)["reopened"] is None  # type: ignore[index]
+    app.state.engine.dispose()

@@ -184,6 +184,7 @@ def _reopened() -> ColumnElement[bool]:
         select(FeedbackGroupHistory.id)
         .where(
             FeedbackGroupHistory.group_id == FeedbackGroup.id,
+            FeedbackGroupHistory.origin_group_id.is_(None),
             FeedbackGroupHistory.action == "status_changed",
             FeedbackGroupHistory.actor_type == "system",
             FeedbackGroupHistory.from_status == "resolved",
@@ -214,6 +215,8 @@ def _follow_up(db: Session, groups: list[FeedbackGroup]) -> dict[str, dict[str, 
             FeedbackGroupHistory.to_status,
         ).where(
             FeedbackGroupHistory.group_id.in_([group.id for group in candidates]),
+            # History moved in by a merge describes the source group, not this one.
+            FeedbackGroupHistory.origin_group_id.is_(None),
             FeedbackGroupHistory.action == "status_changed",
             or_(
                 FeedbackGroupHistory.to_status == "resolved",
@@ -226,7 +229,7 @@ def _follow_up(db: Session, groups: list[FeedbackGroup]) -> dict[str, dict[str, 
     ).all()
     since: dict[str, datetime] = {}
     for group in candidates:
-        rows = [(_utc(at), actor, to) for group_id, at, actor, to in changes if group_id == group.id]
+        rows = [(_utc(at), actor, to) for owner, at, actor, to in changes if owner == group.id]
         if group.status == "resolved":
             since[group.id] = _utc(group.resolved_at or group.status_changed_at)
             continue
@@ -260,6 +263,7 @@ def _follow_up(db: Session, groups: list[FeedbackGroup]) -> dict[str, dict[str, 
         )
         .where(
             FeedbackGroupHistory.group_id.in_(list(since)),
+            FeedbackGroupHistory.origin_group_id.is_(None),
             FeedbackGroupHistory.action == "note_added",
             func.json_extract(FeedbackGroupHistory.details_json, "$.resolution") == 1,
         )

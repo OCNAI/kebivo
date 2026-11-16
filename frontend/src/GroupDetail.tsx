@@ -1,6 +1,7 @@
 import React from "react";
 import { apiRequest, ApiError } from "./api";
 import { SampleBadge } from "./FirstRun";
+import { FollowUp } from "./Inbox";
 
 type Event = {
   id: string;
@@ -18,9 +19,8 @@ type Event = {
   match?: { method: "initial" | "exact" | "semantic" | "manual_merge" | "manual_split"; triggered_reopen: boolean };
   semantic?: { outcome: string; confidence?: number | null; reason?: string | null; error_category?: string | null } | null;
 };
-type Group = {
+type Group = React.ComponentProps<typeof FollowUp>["group"] & {
   id: string;
-  status: string;
   occurrence_count: number;
   representative: { event_id: string; question: string };
   project: { id: string; name: string; is_sample?: boolean };
@@ -69,7 +69,9 @@ export function GroupDetail({
     [loading, setLoading] = React.useState(true),
     [more, setMore] = React.useState<string | null>(null),
     [note, setNote] = React.useState(""),
-    [tag, setTag] = React.useState("");
+    [tag, setTag] = React.useState(""),
+    [askChange, setAskChange] = React.useState(false),
+    [change, setChange] = React.useState("");
   const [notice, setNotice] = React.useState("");
   const [deleteNoteId, setDeleteNoteId] = React.useState<string | null>(null);
   const [questionExpanded, setQuestionExpanded] = React.useState(false);
@@ -245,7 +247,7 @@ export function GroupDetail({
               {group.representative.question || "Untitled feedback group"}
             </h1>
             <button className="text-button" aria-expanded={questionExpanded} onClick={() => setQuestionExpanded(value => !value)}>{questionExpanded ? "Show less" : "Show full question"}</button>
-            <div className="group-chips"><span className="scope-chip">{group.project.name} {group.project.is_sample && <SampleBadge />}</span><span className="scope-chip">{group.event_type.replaceAll("_", " ")}</span><span className={`status status-${group.status}`}>{statusLabels[group.status] ?? group.status}</span></div>
+            <div className="group-chips"><span className="scope-chip">{group.project.name} {group.project.is_sample && <SampleBadge />}</span><span className="scope-chip">{group.event_type.replaceAll("_", " ")}</span><span className={`status status-${group.status}`}>{statusLabels[group.status] ?? group.status}</span></div><FollowUp group={group} />
             <p className="subtle">{group.occurrence_count} {group.occurrence_count === 1 ? "occurrence" : "occurrences"}</p>
           </div>
         </div>
@@ -296,17 +298,25 @@ export function GroupDetail({
             <select
               aria-label="Group status"
               value={group.status}
-              onChange={(e) =>
-                void mutate(`admin/groups/${groupId}`, "PATCH", {
-                  status: e.target.value,
-                })
-              }
+              onChange={(e) => {
+                const status = e.target.value;
+                setAskChange(false);
+                void mutate(`admin/groups/${groupId}`, "PATCH", { status }).then(saved => { if (saved && status === "resolved") setAskChange(true); });
+              }}
             >
               {["open", "in_progress", "resolved", "dismissed"].map((x) => (
                 <option key={x} value={x}>{statusLabels[x]}</option>
               ))}
             </select>
           </label>
+          {askChange && group.status === "resolved" && <form className="resolve-note" aria-label="What did you change" onSubmit={e => {
+            e.preventDefault();
+            void mutate(`admin/groups/${groupId}/notes`, "POST", { body: change.trim(), resolution: true }).then(saved => { if (saved) { setAskChange(false); setChange(""); } });
+          }}>
+            <label htmlFor="resolve-change">What did you change? (optional)</label>
+            <input id="resolve-change" value={change} maxLength={280} onChange={e => setChange(e.target.value)} placeholder="For example: added shipping countries to the FAQ" />
+            <div className="action-row"><button className="primary-button" disabled={!change.trim()}>Save note</button><button type="button" className="quiet-button" onClick={() => { setAskChange(false); setChange(""); }}>Skip</button></div>
+          </form>}
           <section aria-labelledby="admin-notes-title">
           <h3 id="admin-notes-title">Administrator notes</h3>
           <form

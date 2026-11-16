@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (after 0.4.0)
+
+- After you resolve a group, the inbox and group page show "Resolved 3 days ago, no new occurrences since". If the question comes back, the group shows a **Reopened** chip with how many new occurrences arrived since you resolved it. The inbox has a **Reopened** filter, and the dashboard counts groups resolved and reopened in the last 7 days, each linking to the filtered inbox.
+- Choosing **Resolved** on a group offers an optional "What did you change?" note, shown beside the resolved or reopened chip. Skipping it still resolves the group.
+- The grouping hint and the "Report from your own app" guide now say that only identical wording is grouped by default, and that connecting your bot's model as the LLM judge groups paraphrases.
+
 ## Unreleased
 
 - A fresh `docker run` with a named volume now generates keys in `/data/kebivo-secrets.env` and prints a one-time administrator setup link. Setup can load labelled, removable sample data. Database-only backups exclude the key file; save the matching keys separately before a restore. See [key custody](docs/self-hosting.md#secrets-and-what-to-protect).
