@@ -4,12 +4,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
+DeliveryMode = Literal["new_groups_only", "every_occurrence", "weekly_digest"]
+
 
 @dataclass(frozen=True)
 class DestinationInput:
     id: str
     enabled: bool = True
-    delivery_mode: Literal["new_groups_only", "every_occurrence"] = "new_groups_only"
+    delivery_mode: DeliveryMode = "new_groups_only"
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,7 @@ class RoutingMatchInput:
         "destination_disabled",
         "fallback_skipped_disabled",
         "suppressed_duplicate",
+        "digest_queued",
     ]
     rule_id: str | None = None
 
@@ -108,9 +111,13 @@ def evaluate(
                     "destination_disabled",
                     "fallback_skipped_disabled",
                     "suppressed_duplicate",
+                    "digest_queued",
                 ] = "destination_disabled"
             elif destination_id in seen:
                 outcome = "duplicate_destination"
+            elif destination.delivery_mode == "weekly_digest":
+                outcome = "digest_queued"
+                seen.add(destination_id)
             elif destination.delivery_mode == "new_groups_only" and not (
                 initial or triggered_reopen or destination_id not in previously_delivered
             ):
@@ -134,13 +141,22 @@ def evaluate(
     if fallback_applied and fallback_destination_id is not None:
         destination = by_id.get(fallback_destination_id)
         fallback_outcome: Literal[
-            "delivery_created", "fallback_skipped_disabled", "suppressed_duplicate"
+            "delivery_created",
+            "fallback_skipped_disabled",
+            "suppressed_duplicate",
+            "digest_queued",
         ] = (
             "delivery_created"
             if destination and destination.enabled
             else "fallback_skipped_disabled"
         )
         if (
+            fallback_outcome == "delivery_created"
+            and destination is not None
+            and destination.delivery_mode == "weekly_digest"
+        ):
+            fallback_outcome = "digest_queued"
+        elif (
             fallback_outcome == "delivery_created"
             and destination is not None
             and destination.delivery_mode == "new_groups_only"
