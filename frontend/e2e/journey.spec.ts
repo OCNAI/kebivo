@@ -124,8 +124,12 @@ test('open a group and update its status; the filter survives a reload', async (
   await expect(page.getByText('Time unavailable')).toHaveCount(0);
   await page.getByLabel('Group status').selectOption({ label: 'Resolved' });
   await expect(page.getByLabel('Group status')).toHaveValue('resolved');
+  await page.getByLabel('What did you change? (optional)').fill('Added the answer to the FAQ');
+  await page.getByRole('button', { name: 'Save note' }).click();
+  await expect(page.getByText('You changed: Added the answer to the FAQ').first()).toBeVisible();
   await page.reload();
   await expect(page.getByLabel('Group status')).toHaveValue('resolved');
+  await expect(page.getByText(/^Resolved .*, no new occurrences since$/)).toBeVisible();
 
   await page.goto('/inbox');
   await page.getByRole('button', { name: /^Open \d/ }).click();

@@ -298,3 +298,11 @@ button:disabled, button[aria-disabled="true"] { opacity:1; color:#3d4942; backgr
 @media(max-width:540px) { .table-wrap { position:relative; } .recurring-table { min-width:600px; } }
 @media(max-width:720px) { .retention-list > div { grid-template-columns:1fr; } .operational-values { grid-template-columns:1fr; } .export-controls { grid-template-columns:1fr; } .export-controls small { grid-column:auto; } }
 @media(max-width:540px) { .request-summary { grid-template-columns:1fr; } .top-nav a { min-height:44px; display:inline-flex; align-items:center; } .account-email { display:none; } .account-mobile-label { display:inline; } .topbar { gap:6px; } }
+.follow-up { display:block; margin-top:4px; color:#52645b; font-size:11px; line-height:1.4; }
+.follow-up-note { display:block; max-width:28ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.group-chips + .follow-up { margin-top:8px; font-size:12px; }
+.group-chips + .follow-up .follow-up-note { max-width:none; overflow:visible; white-space:normal; }
+.status.status-reopened { margin-right:4px; background:#fff1df; color:#6f4200; }
+.resolve-note { display:grid; gap:6px; margin:8px 0 12px; }
+.status-filter-row { display:flex; flex-wrap:wrap; align-items:flex-start; gap:4px; }
+.reopened-toggle { margin-left:6px; }

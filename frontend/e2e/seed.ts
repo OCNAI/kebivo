@@ -126,7 +126,15 @@ export async function seed(baseURL: string): Promise<Seeded> {
   await admin.call('POST', `/admin/groups/${vpn.id}/notes`, { body: 'Reset link expires after 15 minutes. Add this to the VPN guide.' });
   await admin.call('POST', `/admin/groups/${vpn.id}/notes`, { body: 'Waiting for the IT team to confirm the Linux client.' });
   await admin.call('PATCH', `/admin/groups/${vpn.id}/tags`, { add: ['needs-docs'], remove: [] });
-  await admin.call('PATCH', `/admin/groups/${byQuestion('Where can I find the expense').id}`, { status: 'resolved' });
+  // After a fix: one resolved group stays quiet, one comes back with a new occurrence.
+  const expense = byQuestion('Where can I find the expense');
+  await admin.call('PATCH', `/admin/groups/${expense.id}`, { status: 'resolved' });
+  await admin.call('POST', `/admin/groups/${expense.id}/notes`, { body: 'Linked the expense policy from the HR start page.', resolution: true });
+  const shipping = byQuestion('How do I change my shipping address');
+  await admin.call('PATCH', `/admin/groups/${shipping.id}`, { status: 'resolved' });
+  await admin.call('POST', `/admin/groups/${shipping.id}/notes`, { body: 'Added address changes to the account FAQ.', resolution: true });
+  await send(supportToken, 'How do I change my shipping address?', []);
+  await expect.poll(async () => (await admin.call<{ reopened: unknown }>('GET', `/admin/groups/${shipping.id}`)).reopened !== null, { timeout: 60_000, message: 'reopen after resolve' }).toBe(true);
   await admin.call('PATCH', `/admin/groups/${byQuestion('Can I get an invoice').id}`, { status: 'resolved' });
   await admin.call('PATCH', `/admin/groups/${byQuestion('Which browser versions').id}`, { status: 'dismissed' });
   const hrGroup = byQuestion('How many vacation days');

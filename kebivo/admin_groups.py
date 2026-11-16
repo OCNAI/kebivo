@@ -177,6 +177,119 @@ def _row(
     }
 
 
+def _reopened() -> ColumnElement[bool]:
+    """Open again because an occurrence arrived after it was resolved, and not triaged since."""
+    return and_(
+        FeedbackGroup.status == "open",
+        select(FeedbackGroupHistory.id)
+        .where(
+            FeedbackGroupHistory.group_id == FeedbackGroup.id,
+            FeedbackGroupHistory.origin_group_id.is_(None),
+            FeedbackGroupHistory.action == "status_changed",
+            FeedbackGroupHistory.actor_type == "system",
+            FeedbackGroupHistory.from_status == "resolved",
+            FeedbackGroupHistory.created_at >= FeedbackGroup.status_changed_at,
+        )
+        .exists(),
+    )
+
+
+def _follow_up(db: Session, groups: list[FeedbackGroup]) -> dict[str, dict[str, Any]]:
+    """Whether a resolved group stayed quiet, and what the administrator changed."""
+    result: dict[str, dict[str, Any]] = {
+        group.id: {
+            "resolved_at": _iso_utc(group.resolved_at) if group.resolved_at else None,
+            "reopened": None,
+            "resolution_note": None,
+        }
+        for group in groups
+    }
+    candidates = [group for group in groups if group.status in ("open", "resolved")]
+    if not candidates:
+        return result
+    changes = db.execute(
+        select(
+            FeedbackGroupHistory.group_id,
+            FeedbackGroupHistory.created_at,
+            FeedbackGroupHistory.actor_type,
+            FeedbackGroupHistory.to_status,
+        ).where(
+            FeedbackGroupHistory.group_id.in_([group.id for group in candidates]),
+            # History moved in by a merge describes the source group, not this one.
+            FeedbackGroupHistory.origin_group_id.is_(None),
+            FeedbackGroupHistory.action == "status_changed",
+            or_(
+                FeedbackGroupHistory.to_status == "resolved",
+                and_(
+                    FeedbackGroupHistory.actor_type == "system",
+                    FeedbackGroupHistory.from_status == "resolved",
+                ),
+            ),
+        )
+    ).all()
+    since: dict[str, datetime] = {}
+    for group in candidates:
+        rows = [(_utc(at), actor, to) for owner, at, actor, to in changes if owner == group.id]
+        if group.status == "resolved":
+            since[group.id] = _utc(group.resolved_at or group.status_changed_at)
+            continue
+        reopens = [at for at, actor, to in rows if actor == "system" and to == "open"]
+        if not reopens or max(reopens) < _utc(group.status_changed_at):
+            continue
+        reopened_at = max(reopens)
+        resolves = [at for at, _, to in rows if to == "resolved" and at <= reopened_at]
+        resolved_on = max(resolves) if resolves else None
+        since[group.id] = resolved_on or reopened_at
+        new = db.scalar(
+            select(func.count())
+            .select_from(FeedbackGroupMember)
+            .where(
+                FeedbackGroupMember.group_id == group.id,
+                FeedbackGroupMember.added_at >= since[group.id],
+            )
+        )
+        result[group.id]["reopened"] = {
+            "reopened_at": _iso_utc(reopened_at),
+            "resolved_at": _iso_utc(resolved_on) if resolved_on else None,
+            "new_occurrences": new or 0,
+        }
+    if not since:
+        return result
+    added = db.execute(
+        select(
+            FeedbackGroupHistory.group_id,
+            FeedbackGroupHistory.created_at,
+            func.json_extract(FeedbackGroupHistory.details_json, "$.note_id"),
+        )
+        .where(
+            FeedbackGroupHistory.group_id.in_(list(since)),
+            FeedbackGroupHistory.origin_group_id.is_(None),
+            FeedbackGroupHistory.action == "note_added",
+            func.json_extract(FeedbackGroupHistory.details_json, "$.resolution") == 1,
+        )
+        .order_by(FeedbackGroupHistory.created_at.desc(), FeedbackGroupHistory.id.desc())
+    ).all()
+    latest: dict[str, str] = {}
+    for group_id, at, note_id in added:
+        if group_id not in latest and _utc(at) >= since[group_id]:
+            latest[group_id] = note_id
+    notes = {
+        note.id: note
+        for note in db.scalars(
+            select(FeedbackGroupNote).where(FeedbackGroupNote.id.in_(list(latest.values())))
+        )
+    }
+    for group_id, note_id in latest.items():
+        note = notes.get(note_id)
+        if note is not None:
+            result[group_id]["resolution_note"] = {
+                "id": note.id,
+                "body": note.body,
+                "created_at": _iso_utc(note.created_at),
+            }
+    return result
+
+
 def install_admin_group_routes(app: Any) -> None:
     router = APIRouter(
         prefix="/api/v1/admin/groups", tags=["admin-groups"], dependencies=[Depends(_reject_bearer)]
@@ -196,6 +309,8 @@ def install_admin_group_routes(app: Any) -> None:
         last_seen_from: datetime | None = None,
         last_seen_to: datetime | None = None,
         min_occurrences: int | None = None,
+        reopened: bool = False,
+        status_changed_from: datetime | None = None,
         sort: str = "last_activity_desc",
         limit: int = Query(50, ge=1, le=100),
         cursor: str | None = None,
@@ -223,6 +338,7 @@ def install_admin_group_routes(app: Any) -> None:
         first_seen_to = _utc(first_seen_to) if first_seen_to else None
         last_seen_from = _utc(last_seen_from) if last_seen_from else None
         last_seen_to = _utc(last_seen_to) if last_seen_to else None
+        status_changed_from = _utc(status_changed_from) if status_changed_from else None
         filters = {
             "project_id": project_id,
             "event_type": event_type,
@@ -234,6 +350,8 @@ def install_admin_group_routes(app: Any) -> None:
             "last_seen_from": last_seen_from.isoformat() if last_seen_from else None,
             "last_seen_to": last_seen_to.isoformat() if last_seen_to else None,
             "min_occurrences": min_occurrences,
+            "reopened": reopened,
+            "status_changed_from": status_changed_from.isoformat() if status_changed_from else None,
             "sort": sort,
         }
         digest = hashlib.sha256(json.dumps(filters, sort_keys=True).encode()).hexdigest()
@@ -288,6 +406,10 @@ def install_admin_group_routes(app: Any) -> None:
                 statement = statement.where(field <= upper)
         if min_occurrences is not None:
             statement = statement.where(FeedbackGroup.occurrence_count >= min_occurrences)
+        if reopened:
+            statement = statement.where(_reopened())
+        if status_changed_from:
+            statement = statement.where(FeedbackGroup.status_changed_at >= status_changed_from)
         if cursor is not None:
             point = _cursor_decode(cursor, digest, len(order))
             if point is None:
@@ -322,6 +444,7 @@ def install_admin_group_routes(app: Any) -> None:
         ids = [group.id for group, _, _ in page]
         tags_by_group = _tag_rows(db, ids)
         summaries = _delivery_summaries(db, ids)
+        follow = _follow_up(db, [group for group, _, _ in page])
         next_cursor = None
         if len(rows) > limit:
             last = page[-1][0]
@@ -336,7 +459,10 @@ def install_admin_group_routes(app: Any) -> None:
             next_cursor = _cursor_encode(values, last.id, digest)
         return {
             "items": [
-                _row(group, project, event, tags_by_group[group.id], summaries[group.id])
+                {
+                    **_row(group, project, event, tags_by_group[group.id], summaries[group.id]),
+                    **follow[group.id],
+                }
                 for group, project, event in page
             ],
             "next_cursor": next_cursor,
@@ -371,6 +497,17 @@ def install_admin_group_routes(app: Any) -> None:
         )
         if project_id:
             failed = failed.where(Delivery.project_id == _id(project_id))
+        week = datetime.now(UTC) - timedelta(days=7)
+        follow_counts = select(
+            func.count().filter(_reopened()),
+            func.count().filter(_reopened(), FeedbackGroup.status_changed_at >= week),
+            func.count().filter(
+                FeedbackGroup.status == "resolved", FeedbackGroup.status_changed_at >= week
+            ),
+        ).select_from(FeedbackGroup)
+        if project_id:
+            follow_counts = follow_counts.where(FeedbackGroup.project_id == _id(project_id))
+        reopened_total, reopened_week, resolved_week = db.execute(follow_counts).one()
         top_query = select(FeedbackGroup).where(
             FeedbackGroup.status == "open", FeedbackGroup.event_type == "knowledge_gap"
         )
@@ -404,6 +541,10 @@ def install_admin_group_routes(app: Any) -> None:
             "total_events": total_events,
             "groups_by_status": counts,
             "failed_deliveries_last_24h": db.scalar(failed),
+            "reopened": reopened_total,
+            "last_7d_from": week.isoformat(),
+            "resolved_last_7d": resolved_week,
+            "reopened_last_7d": reopened_week,
             "top_open_gaps": [
                 _row(
                     group,
@@ -442,7 +583,7 @@ def install_admin_group_routes(app: Any) -> None:
             "tags": tags,
             "tags_more": False,
             "status_changed_at": _iso_utc(group.status_changed_at),
-            "resolved_at": _iso_utc(group.resolved_at) if group.resolved_at else None,
+            **_follow_up(db, [group])[group.id],
             "notes": [
                 {
                     "id": note.id,

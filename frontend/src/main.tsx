@@ -27,7 +27,7 @@ type Project = {
 type Deduplication = { mode?: 'disabled' | 'exact' | 'semantic'; enabled?: boolean; privacy_acknowledged?: boolean; semantic?: { method?: 'judge' | 'embeddings'; provider_id?: string; model?: string | null; embedding_model?: string; similarity_threshold?: number; max_scan?: number; candidate_count?: number; min_confidence?: number; timeout_seconds?: number; max_attempts?: number } };
 type Token = { id: string; name: string; prefix: string; scopes: string[]; created_at: string; expires_at: string | null; last_used_at: string | null; revoked_at: string | null };
 type CreatedToken = Token & { token: string };
-const exactHelp = 'Exact groups identical questions in the same project and event type. To also group paraphrases, use Semantic: the LLM judge method finds the most paraphrases, and the embeddings method groups only very close matches by default.';
+const exactHelp = 'Only identical wording is grouped by default: Exact groups identical questions in the same project and event type. Your bot already has a model, so connect it as the judge (Semantic, LLM judge method) to group paraphrases. The embeddings method groups only very close matches by default.';
 const date = (value: string | null) => value ? new Date(value).toLocaleDateString() : 'Never';
 
 function apiErrorMessage(error: unknown) {
