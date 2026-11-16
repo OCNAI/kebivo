@@ -301,6 +301,7 @@ button:disabled, button[aria-disabled="true"] { opacity:1; color:#3d4942; backgr
 .follow-up { display:block; margin-top:4px; color:#52645b; font-size:11px; line-height:1.4; }
 .follow-up-note { display:block; max-width:28ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .group-chips + .follow-up { margin-top:8px; font-size:12px; }
+.group-chips + .follow-up .follow-up-note { max-width:none; overflow:visible; white-space:normal; }
 .status.status-reopened { margin-right:4px; background:#fff1df; color:#6f4200; }
 .resolve-note { display:grid; gap:6px; margin:8px 0 12px; }
 .status-filter-row { display:flex; flex-wrap:wrap; align-items:flex-start; gap:4px; }
