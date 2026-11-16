@@ -33,6 +33,7 @@ class Settings:
     trusted_proxy_ips: tuple[str, ...] = ()
     feedback_rate_limit_per_token: int = 120
     feedback_rate_limit_per_ip: int = 300
+    gaps_read_rate_limit_per_token: int = 30
     idempotency_window_hours: int = 24
     mcp_enabled: bool = True
     mcp_allowed_hosts: tuple[str, ...] = ()
@@ -255,6 +256,7 @@ class Settings:
             trusted_proxy_ips=trusted_proxy_ips,
             feedback_rate_limit_per_token=positive_limit("FEEDBACK_RATE_LIMIT_PER_TOKEN", 120),
             feedback_rate_limit_per_ip=positive_limit("FEEDBACK_RATE_LIMIT_PER_IP", 300),
+            gaps_read_rate_limit_per_token=positive_limit("GAPS_READ_RATE_LIMIT_PER_TOKEN", 30),
             idempotency_window_hours=window_hours,
             mcp_enabled=enabled_raw == "true",
             mcp_allowed_hosts=hosts,

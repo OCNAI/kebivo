@@ -69,6 +69,7 @@ A wrong-origin 403 lists configured `ALLOWED_ORIGINS` when set. With an empty li
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `FEEDBACK_RATE_LIMIT_PER_TOKEN` | `120` | Submissions per token per minute, shared by REST and MCP. |
+| `GAPS_READ_RATE_LIMIT_PER_TOKEN` | `30` | Gap reads per `gaps:read` token per minute, shared by `GET /api/v1/groups` and the MCP `list_open_gaps` tool. |
 | `FEEDBACK_RATE_LIMIT_PER_IP` | `300` | Feedback and MCP requests per client IP per minute. Counters are in memory and reset on restart. |
 | `IDEMPOTENCY_WINDOW_HOURS` | `24` | How long an idempotency key replays its original event (1–720). |
 

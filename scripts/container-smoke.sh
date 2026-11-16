@@ -33,6 +33,7 @@ fi
 # Verify Compose passes overrides into a fresh app container, including the
 # MCP switch that controls whether /mcp is installed at startup.
 FEEDBACK_RATE_LIMIT_PER_TOKEN=17 FEEDBACK_RATE_LIMIT_PER_IP=19 \
+  GAPS_READ_RATE_LIMIT_PER_TOKEN=1 \
   IDEMPOTENCY_WINDOW_HOURS=6 MCP_ENABLED=false \
   MCP_ALLOWED_HOSTS=smoke.example.invalid:8443 \
   "${compose[@]}" run --rm --no-deps -T --entrypoint python app - <<'PY'
@@ -40,6 +41,7 @@ from kebivo.app import app
 
 settings = app.state.settings
 assert settings.feedback_rate_limit_per_token == 17
+assert settings.gaps_read_rate_limit_per_token == 1
 assert settings.feedback_rate_limit_per_ip == 19
 assert settings.idempotency_window_hours == 6
 assert settings.mcp_enabled is False

@@ -44,6 +44,7 @@ from kebivo.errors import error_response, install_error_handlers
 from kebivo.feedback.routes import install_feedback_routes
 from kebivo.feedback_guard import FeedbackBodyGuard
 from kebivo.feedback_limits import FixedWindowLimiter
+from kebivo.gaps_read import install_gaps_read_routes
 from kebivo.llm.routes import install_llm_provider_routes
 from kebivo.mcp_server import install_mcp_route
 from kebivo.models import AdminUser, ProcessingJob
@@ -284,6 +285,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 or request.url.path == "/api/v1/feedback"
                 or request.url.path.startswith("/api/v1/admin/feedback")
                 or request.url.path.startswith("/api/v1/admin/groups")
+                or request.url.path == "/api/v1/groups"
                 or request.url.path.startswith("/api/v1/admin/llm-providers")
                 or request.url.path == "/api/v1/admin/settings"
                 or request.url.path.startswith("/api/v1/admin/star-prompt")
@@ -404,6 +406,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_routing_routes(app)
     install_token_routes(app)
     install_feedback_routes(app)
+    install_gaps_read_routes(app)
     install_admin_feedback_routes(app)
     install_admin_group_routes(app)
     install_dedup_routes(app)

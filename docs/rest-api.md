@@ -25,6 +25,7 @@ Create a token in the admin UI (open a project, then **Project tokens**) or with
 | --- | --- |
 | `feedback:gap` | `knowledge_gap` events. The default scope. |
 | `feedback:correction` | `knowledge_correction` events, and only while the project's corrections policy is enabled. Grant it explicitly. |
+| `gaps:read` | Reading the project's knowledge gaps with [`GET /api/v1/groups`](#read-open-gaps). Off unless you grant it. |
 
 Tokens can have an expiry date and can be revoked at any time. A token stops working when it expires or is revoked, or when its project is disabled or archived. Project tokens cannot call admin APIs, and an admin session cannot submit arbitrary feedback through `POST /api/v1/feedback`. Keep tokens in a secret store or environment variable, never in source code or client-side JavaScript.
 
@@ -109,6 +110,56 @@ Retry only `429`, `5xx` and network errors. Use exponential backoff (for example
 Default limits are per one-minute window: 120 submissions per token (`FEEDBACK_RATE_LIMIT_PER_TOKEN`, shared with MCP tool calls) and 300 requests per client IP (`FEEDBACK_RATE_LIMIT_PER_IP`). Repeated authentication failures from one IP also count. Counters are kept in memory and reset when Kebivo restarts.
 
 Reporting feedback should never break your user's conversation. Send it in the background, or catch errors and log them, so a failed report does not fail the answer.
+
+## Read open gaps
+
+A token with the `gaps:read` scope can list its project's knowledge gaps, for example from a nightly job that writes the top questions into your docs repo. Correction groups are not included.
+
+```bash
+curl -s "$KEBIVO_URL/api/v1/groups?status=open&sort=occurrences&limit=2" \
+  -H "Authorization: Bearer $KEBIVO_READ_TOKEN"
+```
+
+```json
+{
+  "items": [
+    {
+      "id": "70a3b6b0-e8a1-49e3-9995-d6b27364d162",
+      "question": "How do I paginate the /orders endpoint?",
+      "occurrence_count": 3,
+      "first_seen_at": "2026-11-16T08:16:35.420900+00:00",
+      "last_seen_at": "2026-11-16T08:16:35.666357+00:00",
+      "tags": ["api"],
+      "status": "open"
+    },
+    {
+      "id": "c9d5e51b-7407-4070-bacc-d0d60c968479",
+      "question": "Can I rotate an API key without downtime?",
+      "occurrence_count": 2,
+      "first_seen_at": "2026-11-16T08:16:35.741371+00:00",
+      "last_seen_at": "2026-11-16T08:16:35.810099+00:00",
+      "tags": ["api"],
+      "status": "open"
+    }
+  ],
+  "next_cursor": "eyJ2IjpbMiwi…"
+}
+```
+
+| Parameter | Values | Default |
+| --- | --- | --- |
+| `status` | `open`, `in_progress`, `resolved`, `dismissed`; repeat to combine | `open` |
+| `sort` | `occurrences` (most asked first, then most recent) or `last_seen` (most recent first) | `occurrences` |
+| `limit` | 1–50 | 20 |
+| `cursor` | `next_cursor` from the previous page, with the same `status` and `sort` | none |
+
+Each item has only the fields shown: the group's representative question (up to 1,000 characters), how many times it was asked, when it was first and last seen, its tag slugs (up to 20) and its status. Admin notes, `user_reference`, context, previous answers, other reports in the group and delivery details are never returned. A token without `gaps:read` receives `403`; an invalid value returns `422` and an invalid cursor `400`. Reads are limited to 30 per minute per token (`GAPS_READ_RATE_LIMIT_PER_TOKEN`, shared with the MCP `list_open_gaps` tool) and also count toward the per-IP limit. Each successful read writes an audit event that records the token, the filters and the number of items, never the question text.
+
+The questions are text your end users typed, and can include names, email addresses or other personal details. Treat a `gaps:read` token like a database read credential:
+
+- Create a separate token for reading. Never grant `gaps:read` to the token your assistant or app uses to report gaps. The API accepts a token with only `gaps:read`; the admin UI adds it to a `feedback:gap` token.
+- Keep it in a secret store and out of public CI logs.
+- Revoke it as soon as it is no longer needed. Revocation takes effect on the next request.
 
 ## Python SDK
 
