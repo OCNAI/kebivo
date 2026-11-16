@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from kebivo.auth import AdminAuth
 from kebivo.destinations.validation import ConfigError, validate_config
+from kebivo.digest import latest_slot
 from kebivo.errors import error_response
 from kebivo.models import (
     AuditEvent,
@@ -145,8 +146,9 @@ def _apply_schedule(row: Destination, changes: dict[str, Any]) -> None:
     if isinstance(hour, bool) or not 0 <= hour <= 23:
         raise ConfigError("digest_hour", "Hour must be 0 to 23")
     if (weekday, hour) != (row.digest_weekday, row.digest_hour):
-        # The worker starts the new schedule at its latest slot, so nothing sends at once.
-        row.digest_checked_through = None
+        # Persist the baseline now, so a shutdown before the worker's next tick
+        # cannot cause the first scheduled digest to be skipped on restart.
+        row.digest_checked_through = latest_slot(now_utc(), weekday, hour)
     row.digest_weekday, row.digest_hour = weekday, hour
 
 

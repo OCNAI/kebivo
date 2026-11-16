@@ -306,7 +306,7 @@ def test_slack_and_email_render_digest(monkeypatch: Any) -> None:
 
 
 def test_destination_api_schedules_digest(tmp_path: Path) -> None:
-    client, _ = make_client(tmp_path / "api.db")
+    client, app = make_client(tmp_path / "api.db")
     headers = write_headers(client)
     body = {
         "name": "Weekly",
@@ -320,6 +320,13 @@ def test_destination_api_schedules_digest(tmp_path: Path) -> None:
     assert created.status_code == 201, created.text
     assert (created.json()["digest_weekday"], created.json()["digest_hour"]) == (4, 16)
     identifier = created.json()["id"]
+    with app.state.session_factory() as db:
+        destination = db.get(Destination, identifier)
+        assert destination is not None
+        assert destination.digest_checked_through is not None
+        assert destination.digest_checked_through.replace(tzinfo=None) == digest.latest_slot(
+            now_utc(), 4, 16
+        )
     for patch, field in (
         ({"digest_hour": 24}, "digest_hour"),
         ({"digest_weekday": 7}, "digest_weekday"),
