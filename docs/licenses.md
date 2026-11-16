@@ -38,7 +38,7 @@ Kebivo itself is licensed under Apache-2.0 (the `LICENSE` file in the repository
 | markupsafe | 3.0.4 | BSD-3-Clause | Compatible |
 | mcp | 2.3.0 | MIT | Compatible |
 | mcp-types | 2.3.0 | MIT | Compatible |
-| opentelemetry-api | 1.45.1 | Apache-2.0 | Compatible |
+| opentelemetry-api | 1.45.2 | Apache-2.0 | Compatible |
 | pycparser | 3.11 | BSD-3-Clause | Compatible |
 | pydantic | 2.14.1 | MIT | Compatible |
 | pydantic-core | 2.50.1 | MIT | Compatible |
