@@ -119,7 +119,15 @@ def verify() -> None:
         "tags": ["upgrade"]
     }, state["token"])
     assert result["status"] == "accepted"
-    print(json.dumps({"upgrade_api": "passed", "old_token": "accepted"}))
+    tokens = call("GET", f"/api/v1/projects/{project_id}/tokens")["items"]
+    assert [token["scopes"] for token in tokens] == [["feedback:gap"]]
+    try:
+        call("GET", "/api/v1/groups", token=state["token"])
+    except RuntimeError as exc:
+        assert "HTTP 403" in str(exc), exc
+    else:
+        raise AssertionError("an upgraded token must not read gaps")
+    print(json.dumps({"upgrade_api": "passed", "old_token": "accepted", "old_scopes": "kept"}))
 
 
 if __name__ == "__main__":
