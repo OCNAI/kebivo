@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -42,6 +43,22 @@ def test_latest_slot_is_the_most_recent_weekday_hour() -> None:
     assert digest.latest_slot(wednesday, 2, 12) == datetime(2026, 11, 18, 12)
     assert digest.latest_slot(wednesday, 2, 13) == datetime(2026, 11, 11, 13)
     assert digest.period_start(datetime(2026, 11, 16, 9)) == datetime(2026, 11, 9, 9)
+
+
+def test_slot_follows_server_time_zone_across_dst(monkeypatch: pytest.MonkeyPatch) -> None:
+    import time
+
+    monkeypatch.setenv("TZ", "Europe/Oslo")
+    time.tzset()
+    try:
+        # Monday 09:30 in Oslo, the day after clocks went back.
+        monday = datetime(2026, 10, 26, 8, 30, tzinfo=UTC)
+        slot = digest.latest_slot(monday, 0, 9)
+        assert slot == datetime(2026, 10, 26, 8)
+        assert digest.period_start(slot) == datetime(2026, 10, 19, 7)
+    finally:
+        monkeypatch.delenv("TZ")
+        time.tzset()
 
 
 class World:
@@ -188,6 +205,10 @@ def test_digest_lists_top_open_groups_and_status_counts(tmp_path: Path) -> None:
         "start": digest.period_start(world.slot).replace(tzinfo=UTC).isoformat(),
         "end": world.slot.replace(tzinfo=UTC).isoformat(),
     }
+    schema = json.loads(
+        (Path(__file__).parents[2] / "docs/webhook-digest-payload.schema.json").read_text()
+    )
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(message)
 
 
 def test_empty_week_and_new_schedule_send_nothing(tmp_path: Path) -> None:
@@ -393,3 +414,40 @@ def test_migration_keeps_rows_and_downgrade_needs_no_digest_mode(tmp_path: Path)
         assert db.execute("SELECT id FROM deliveries").fetchall() == [("x",)]
         assert db.execute("SELECT count(*) FROM delivery_attempts").fetchone() == (1,)
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_webhook_digest_is_signed_and_matches_schema(monkeypatch: Any) -> None:
+    import base64
+    import hashlib
+    import hmac
+
+    received: list[tuple[dict[str, str], bytes]] = []
+
+    async def post(url: str, headers: dict[str, str], body: bytes, **_: Any) -> tuple[int, None]:
+        received.append((headers, body))
+        return 202, None
+
+    monkeypatch.setattr(base, "post_pinned", post)
+    key = b"k" * 32
+    message = digest.test_digest_payload()
+    result = asyncio.run(
+        REGISTRY["webhook"].send(
+            message,
+            {"signing": True},
+            {
+                "url": "https://example.com/hook",
+                "signing_secret": "whsec_" + base64.b64encode(key).decode(),
+            },
+            timeout=5,
+        )
+    )
+    assert result.outcome == "success"
+    headers, body = received[0]
+    signed = f"{headers['webhook-id']}.{headers['webhook-timestamp']}.".encode() + body
+    expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+    assert headers["webhook-signature"] == "v1," + expected
+    assert headers["webhook-id"] == message["delivery_id"]
+    schema = json.loads(
+        (Path(__file__).parents[2] / "docs/webhook-digest-payload.schema.json").read_text()
+    )
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(json.loads(body))
