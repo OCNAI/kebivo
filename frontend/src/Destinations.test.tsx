@@ -204,6 +204,46 @@ describe("Destinations admin UI", () => {
     expect(url.value).toBe("");
     expect(url.placeholder).toBe("https://hooks.slack.com · path hidden");
   });
+  it("schedules a weekly digest with a day and hour", async () => {
+    await render();
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent === "New Slack")!
+        .click();
+    });
+    expect(container.querySelector('select[name="digest_hour"]')).toBeNull();
+    const choose = (name: string, value: string) => {
+      const select = container.querySelector<HTMLSelectElement>(
+        `select[name="${name}"]`,
+      )!;
+      select.value = value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    await act(async () => {
+      choose("delivery_mode", "weekly_digest");
+    });
+    expect(container.textContent).toContain("Server time.");
+    await act(async () => {
+      container.querySelector<HTMLInputElement>('input[name="name"]')!.value =
+        "Weekly";
+      container.querySelector<HTMLInputElement>('input[name="url"]')!.value =
+        "https://hooks.slack.com/services/T123/B456/secret";
+      choose("digest_weekday", "4");
+      choose("digest_hour", "16");
+      container
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    const post = requests.find(
+      (request) => request.method === "POST" && request.path.endsWith("/destinations"),
+    );
+    expect(JSON.parse(post!.body)).toMatchObject({
+      delivery_mode: "weekly_digest",
+      digest_weekday: 4,
+      digest_hour: 16,
+    });
+  });
   it("creates a webhook and clears the one-time secret when dismissed", async () => {
     await render();
     await act(async () => {

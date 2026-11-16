@@ -45,6 +45,8 @@ type DestinationBase = {
   name: string;
   enabled: boolean;
   delivery_mode: string;
+  digest_weekday?: number | null;
+  digest_hour?: number | null;
   allow_private_network: boolean;
   is_system: boolean;
   is_sample?: boolean;
@@ -61,12 +63,33 @@ type FormData = {
   type: string;
   enabled: boolean;
   delivery_mode: string;
+  digest_weekday?: number;
+  digest_hour?: number;
   allow_private_network: boolean;
   config: ConfigUpdate;
   secrets: Record<string, string>;
 };
+const WEEKDAYS = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
 const modeLabel = (mode: string) =>
-  mode === "every_occurrence" ? "Every occurrence" : "New groups only";
+  mode === "every_occurrence"
+    ? "Every occurrence"
+    : mode === "weekly_digest"
+      ? "Weekly digest"
+      : "New groups only";
+const scheduleLabel = (item: DestinationBase) =>
+  item.delivery_mode === "weekly_digest" &&
+  item.digest_weekday != null &&
+  item.digest_hour != null
+    ? ` (${WEEKDAYS[item.digest_weekday]} ${String(item.digest_hour).padStart(2, "0")}:00)`
+    : "";
 
 export function Destinations() {
   const [items, setItems] = React.useState<Destination[]>([]);
@@ -81,6 +104,7 @@ export function Destinations() {
   const [privateConfirm, setPrivateConfirm] = React.useState(false);
   const [pendingPrivate, setPendingPrivate] = React.useState(false);
   const [tlsNone, setTlsNone] = React.useState(false);
+  const [mode, setMode] = React.useState("new_groups_only");
   const formRef = React.useRef<HTMLFormElement>(null);
   const previousFocus = React.useRef<HTMLElement | null>(null);
   const dialogRef = React.useRef<HTMLElement>(null);
@@ -111,6 +135,7 @@ export function Destinations() {
     setCreating(true);
     setKind(type);
     setTlsNone(false);
+    setMode("new_groups_only");
     setFields({});
     setError("");
     setNotice("");
@@ -126,6 +151,7 @@ export function Destinations() {
       setCreating(true);
       setKind(fresh.type as DestinationKind);
       setTlsNone(fresh.config.tls_mode === "none");
+      setMode(fresh.delivery_mode);
       setNotice("");
       setOnceSecret("");
     } catch (e) {
@@ -193,11 +219,16 @@ export function Destinations() {
       if (get("tls_mode") !== "none" && get("password"))
         secrets.password = get("password");
     }
+    const digest = get("delivery_mode") === "weekly_digest";
     return {
       name: get("name"),
       type,
       enabled: d.has("enabled"),
       delivery_mode: get("delivery_mode"),
+      ...(digest && {
+        digest_weekday: Number(get("digest_weekday")),
+        digest_hour: Number(get("digest_hour")),
+      }),
       allow_private_network: d.has("allow_private_network"),
       config,
       secrets,
@@ -244,6 +275,13 @@ export function Destinations() {
         if (f.enabled !== selected.enabled) payload.enabled = f.enabled;
         if (f.delivery_mode !== selected.delivery_mode)
           payload.delivery_mode = f.delivery_mode;
+        if (
+          f.digest_weekday !== undefined &&
+          f.digest_weekday !== selected.digest_weekday
+        )
+          payload.digest_weekday = f.digest_weekday;
+        if (f.digest_hour !== undefined && f.digest_hour !== selected.digest_hour)
+          payload.digest_hour = f.digest_hour;
         if (f.allow_private_network !== selected.allow_private_network)
           payload.allow_private_network = f.allow_private_network;
         const config: ConfigUpdate = {};
@@ -459,7 +497,10 @@ export function Destinations() {
                           : "Built-in inbox"}
                     </td>
                     <td>{item.enabled ? "Enabled" : "Disabled"}</td>
-                    <td>{modeLabel(item.delivery_mode)}</td>
+                    <td>
+                      {modeLabel(item.delivery_mode)}
+                      {scheduleLabel(item)}
+                    </td>
                     <td>
                       {item.type === "webhook" || item.type === "slack"
                         ? `${item.config.url_origin ?? ""}${item.config.url_has_path ? " · path hidden" : ""}`
@@ -542,6 +583,7 @@ export function Destinations() {
                 ? `${selected.config.url_origin ?? ""} · path hidden`
                 : selected.type.toUpperCase()}{" "}
               · {modeLabel(selected.delivery_mode)}
+              {scheduleLabel(selected)}
             </p>
             {selected.is_sample && <p id="sample-destination-help" className="subtle">Sample destinations never send requests, even if you change the URL.</p>}
             {!selected.is_system && (
@@ -612,12 +654,52 @@ export function Destinations() {
               <select
                 id="delivery_mode"
                 name="delivery_mode"
-                defaultValue={selected?.delivery_mode ?? "new_groups_only"}
+                value={mode}
+                onChange={(e) => setMode(e.target.value)}
               >
                 <option value="new_groups_only">New groups only</option>
                 <option value="every_occurrence">Every occurrence</option>
+                <option value="weekly_digest">Weekly digest</option>
               </select>
-              <p className="help-text">New groups only sends for new or reopened groups; every occurrence sends each report. Reopening a group sends a new notification in either mode.</p>
+              <p className="help-text">New groups only sends for new or reopened groups; every occurrence sends each report. Reopening a group sends a new notification in either mode. Weekly digest sends one message a week with the top open groups instead.</p>
+              {mode === "weekly_digest" && (
+                <>
+                  <label htmlFor="digest_weekday">Digest day</label>
+                  <select
+                    id="digest_weekday"
+                    name="digest_weekday"
+                    defaultValue={selected?.digest_weekday ?? 0}
+                  >
+                    {WEEKDAYS.map((day, index) => (
+                      <option key={day} value={index}>
+                        {day}
+                      </option>
+                    ))}
+                  </select>
+                  <label htmlFor="digest_hour">Digest hour</label>
+                  <select
+                    id="digest_hour"
+                    name="digest_hour"
+                    defaultValue={selected?.digest_hour ?? 9}
+                    aria-describedby="digest-hour-help"
+                  >
+                    {Array.from({ length: 24 }, (_, hour) => (
+                      <option key={hour} value={hour}>
+                        {String(hour).padStart(2, "0")}:00
+                      </option>
+                    ))}
+                  </select>
+                  <p id="digest-hour-help" className="help-text">
+                    Server time. Weeks with nothing to report send nothing.
+                  </p>
+                  {fields.digest_weekday && (
+                    <small className="field-error">{fields.digest_weekday}</small>
+                  )}
+                  {fields.digest_hour && (
+                    <small className="field-error">{fields.digest_hour}</small>
+                  )}
+                </>
+              )}
               {kind === "slack" ? (
                 <>
                   <Field

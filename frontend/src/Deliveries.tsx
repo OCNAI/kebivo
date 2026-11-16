@@ -3,7 +3,9 @@ import { apiRequest } from "./api";
 import { SampleBadge } from "./FirstRun";
 type Delivery = {
   id: string;
-  event_id: string;
+  event_id: string | null;
+  digest_period_start?: string | null;
+  digest_period_end?: string | null;
   project_id: string;
   destination_id: string;
   status: string;
@@ -282,15 +284,21 @@ export function Deliveries({ navigate }: { navigate: (url: string) => void }) {
                           {projects.find((p) => p.id === x.project_id)?.name ?? x.project_id}{projects.find((p) => p.id === x.project_id)?.is_sample && <SampleBadge />}
                         </td>
                         <td>
-                          <a
-                            href={`/inbox/${x.event_id}`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              navigate(`/inbox/${x.event_id}`);
-                            }}
-                          >
-                            View event
-                          </a>
+                          {x.event_id ? (
+                            <a
+                              href={`/inbox/${x.event_id}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                navigate(`/inbox/${x.event_id}`);
+                              }}
+                            >
+                              View event
+                            </a>
+                          ) : (
+                            <span title={`${date(x.digest_period_start ?? null)} to ${date(x.digest_period_end ?? null)}`}>
+                              Weekly digest
+                            </span>
+                          )}
                         </td>
                         <td>
                           {destinations.find((d) => d.id === x.destination_id)?.name ?? x.destination_id}{destinations.find((d) => d.id === x.destination_id)?.is_sample && <SampleBadge />}
