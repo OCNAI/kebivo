@@ -80,6 +80,7 @@ test('create a routing rule for the "it" tag', async () => {
 
 test('generate a project token, shown once', async () => {
   await page.getByLabel('Token name').fill(`bot ${suffix}`);
+  await expect(page.getByRole('checkbox', { name: /gaps:read/ })).not.toBeChecked();
   await page.getByRole('button', { name: 'Create token' }).click();
   const field = page.getByRole('textbox', { name: 'New token' });
   token = await field.inputValue();

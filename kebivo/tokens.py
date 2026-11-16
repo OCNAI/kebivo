@@ -20,7 +20,8 @@ from kebivo.models import ApiToken, AuditEvent, Project, now_utc
 
 GAP_SCOPE = "feedback:gap"
 CORRECTION_SCOPE = "feedback:correction"
-VALID_SCOPES = {GAP_SCOPE, CORRECTION_SCOPE}
+GAPS_READ_SCOPE = "gaps:read"
+VALID_SCOPES = {GAP_SCOPE, CORRECTION_SCOPE, GAPS_READ_SCOPE}
 MISSING_TOKEN_MESSAGE = (
     "Authentication required: send the header Authorization: Bearer <project token>"
 )
@@ -130,7 +131,7 @@ def verify_project_token(
     request: Request, bearer_token: str, *, required_scope: str = GAP_SCOPE
 ) -> ProjectTokenPrincipal:
     """Compatibility wrapper for the Phase 1 scope verifier."""
-    if required_scope not in VALID_SCOPES:
+    if required_scope not in {GAP_SCOPE, CORRECTION_SCOPE}:
         raise ValueError(f"Unknown project token scope: {required_scope}")
     principal, project = authenticate_project_token(request, bearer_token)
     authorize_feedback(
@@ -145,7 +146,7 @@ def require_project_token(
     required_scope: str = GAP_SCOPE,
 ) -> Callable[[Request], ProjectTokenPrincipal]:
     """Build a FastAPI dependency for a downstream route's required scope."""
-    if required_scope not in VALID_SCOPES:
+    if required_scope not in {GAP_SCOPE, CORRECTION_SCOPE}:
         raise ValueError(f"Unknown project token scope: {required_scope}")
 
     def dependency(request: Request) -> ProjectTokenPrincipal:
@@ -162,7 +163,7 @@ class TokenCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=120)
-    scopes: list[str] = Field(default_factory=lambda: [GAP_SCOPE], min_length=1, max_length=2)
+    scopes: list[str] = Field(default_factory=lambda: [GAP_SCOPE], min_length=1, max_length=3)
     expires_at: datetime | None = None
 
     @field_validator("name")
@@ -179,9 +180,11 @@ class TokenCreate(BaseModel):
         if (
             len(set(value)) != len(value)
             or not set(value) <= VALID_SCOPES
-            or GAP_SCOPE not in value
+            or (CORRECTION_SCOPE in value and GAP_SCOPE not in value)
         ):
-            raise ValueError("Scopes must include feedback:gap and contain only supported scopes")
+            raise ValueError(
+                "Scopes must contain only supported scopes; feedback:correction needs feedback:gap"
+            )
         return sorted(value)
 
     @field_validator("expires_at")
