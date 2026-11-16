@@ -13,6 +13,7 @@ from email.policy import SMTP
 from typing import Any
 from urllib.parse import quote
 
+from kebivo.destinations.payload import digest_lines
 from kebivo.destinations.validation import ConfigError, validate_config
 from kebivo.security.outbound import allowed_address
 
@@ -58,7 +59,35 @@ def _header(value: object) -> str:
     return " ".join(cleaned.split())
 
 
+def _digest_mail(message: dict[str, Any], config: dict[str, Any]) -> EmailMessage:
+    project = str(message["project"]["name"])
+    delivery_id = str(message["delivery_id"])
+    heading, lines = digest_lines(message)
+    mail = EmailMessage(policy=SMTP)
+    mail["From"] = config["from"]
+    mail["To"] = ", ".join(config["to"])
+    subject = f"[Weekly digest] {_header(project)} — {message['open_group_count']} open groups"
+    mail["Subject"] = f"[TEST] {subject}" if message.get("test") is True else subject
+    mail["Message-ID"] = f"<{delivery_id}@feedback.local>"
+    mail["X-Feedback-Delivery-Id"] = delivery_id
+    body = [f"Kebivo weekly digest: {project}", heading, ""]
+    for item, line in zip(message["top_groups"], lines, strict=True):
+        body.append(line)
+        if item.get("url"):
+            body.append(f"  {item['url']}")
+    if not lines:
+        body.append("No open groups had new occurrences.")
+    mail.set_content("\n".join(body) + "\n")
+    mail.add_alternative(
+        "<html><body><pre>" + html.escape("\n".join(body)) + "</pre></body></html>",
+        subtype="html",
+    )
+    return mail
+
+
 def _mail(message: dict[str, Any], config: dict[str, Any]) -> EmailMessage:
+    if message.get("event_type") == "weekly_digest":
+        return _digest_mail(message, config)
     project = str(message["project"]["name"])
     feedback = message["feedback"]
     event_type = str(message["event_type"])

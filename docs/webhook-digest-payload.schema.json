@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/webhook-digest-payload.schema.json",
+  "title": "Kebivo weekly digest webhook payload v1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "delivery_id",
+    "event_type",
+    "project",
+    "period",
+    "top_groups",
+    "open_group_count",
+    "resolved_count",
+    "reopened_count",
+    "test"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "delivery_id": {"type": "string", "format": "uuid"},
+    "event_type": {"const": "weekly_digest"},
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "string", "format": "uuid"},
+        "name": {"type": "string"}
+      }
+    },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "string", "format": "date-time"},
+        "end": {"type": "string", "format": "date-time"}
+      }
+    },
+    "top_groups": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["group_id", "question", "occurrences", "last_seen_at", "url"],
+        "properties": {
+          "group_id": {"type": "string", "format": "uuid"},
+          "question": {"type": "string"},
+          "occurrences": {"type": "integer", "minimum": 1},
+          "last_seen_at": {"type": "string", "format": "date-time"},
+          "url": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "open_group_count": {"type": "integer", "minimum": 0},
+    "resolved_count": {"type": "integer", "minimum": 0},
+    "reopened_count": {"type": "integer", "minimum": 0},
+    "test": {"type": "boolean"}
+  }
+}

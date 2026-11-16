@@ -14,6 +14,7 @@ from typing import Any, Literal, Protocol
 
 import httpx
 
+from kebivo.destinations.payload import digest_lines
 from kebivo.destinations.smtp import SmtpAdapter
 from kebivo.destinations.validation import validate_config
 from kebivo.security.outbound import BlockedDestination, post_pinned
@@ -195,6 +196,11 @@ class WebhookAdapter:
         return failure("permanent", "http_4xx", http_status=status)
 
 
+def _clip(value: object, limit: int) -> str:
+    text = str(value)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 class SlackAdapter(WebhookAdapter):
     async def send(
         self,
@@ -204,6 +210,8 @@ class SlackAdapter(WebhookAdapter):
         *,
         timeout: int,
     ) -> DeliveryResult:
+        if message.get("event_type") == "weekly_digest":
+            return await self._digest(message, config, secrets, timeout=timeout)
         question = str(message["feedback"]["question"])
         # Slack rejects section text over 3000 characters; questions may be longer.
         if len(question) > 3000:
@@ -245,6 +253,48 @@ class SlackAdapter(WebhookAdapter):
                 "text": "New Kebivo feedback",
                 "blocks": blocks,
             },
+            config,
+            secrets,
+            timeout=timeout,
+        )
+
+    async def _digest(
+        self,
+        message: dict[str, Any],
+        config: dict[str, Any],
+        secrets: dict[str, Any],
+        *,
+        timeout: int,
+    ) -> DeliveryResult:
+        heading, lines = digest_lines(message)
+        title = f"Kebivo weekly digest: {message['project']['name']}"
+        blocks: list[dict[str, Any]] = [
+            {"type": "header", "text": {"type": "plain_text", "text": _clip(title, 150)}},
+            {"type": "context", "elements": [{"type": "plain_text", "text": heading}]},
+        ]
+        for item, line in zip(message["top_groups"], lines, strict=True):
+            # Questions are user text: plain_text keeps mentions and links inert.
+            block: dict[str, Any] = {
+                "type": "section",
+                "text": {"type": "plain_text", "text": _clip(line, 3000)},
+            }
+            if item.get("url"):
+                block["accessory"] = {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "View group"},
+                    "url": item["url"],
+                }
+            blocks.append(block)
+        if not lines:
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "plain_text", "text": "No open groups had new occurrences."},
+                }
+            )
+        return await WebhookAdapter.send(
+            self,
+            {"delivery_id": message["delivery_id"], "text": _clip(title, 3000), "blocks": blocks},
             config,
             secrets,
             timeout=timeout,

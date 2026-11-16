@@ -8,9 +8,12 @@
 
 ## Unreleased
 
+- New delivery mode: a weekly digest. A webhook, Slack or email destination can send one message a week, on a day and hour you choose, with the top five open groups by occurrences, each with a link, plus how many groups were resolved and reopened. A week with nothing to report sends nothing, and a digest missed while Kebivo was down is sent once on the next start. It uses the same retries, signing and delivery log as other deliveries. See [weekly digest](docs/destinations.md#weekly-digest).
 - A fresh `docker run` with a named volume now generates keys in `/data/kebivo-secrets.env` and prints a one-time administrator setup link. Setup can load labelled, removable sample data. Database-only backups exclude the key file; save the matching keys separately before a restore. See [key custody](docs/self-hosting.md#secrets-and-what-to-protect).
 
 ### Upgrade
+
+On start, migration `0019` rebuilds the `destinations`, `routing_matches` and `deliveries` tables to allow the new mode. Existing rows are kept. Back up first; an older image will not start on a database that has this migration.
 
 If `ALLOWED_ORIGINS` is empty, an existing installation now accepts browser login from an HTTP loopback origin when its host and port match the request `Host`. Previously, empty refused all browser login. A valid administrator password is still required. Set `ALLOWED_ORIGINS` for proxy or public access; other origins remain refused. With it empty, the origin check stops other websites, not other hosts, so keep the port bound to `127.0.0.1`.
 
