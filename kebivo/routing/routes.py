@@ -24,7 +24,7 @@ from kebivo.models import (
     now_utc,
 )
 from kebivo.routing.coverage import delivered_destinations, has_unrouted_earlier_member
-from kebivo.routing.engine import DestinationInput, RuleInput, evaluate
+from kebivo.routing.engine import DeliveryMode, DestinationInput, RuleInput, evaluate
 
 
 class RuleBody(BaseModel):
@@ -355,7 +355,7 @@ def install_routing_routes(app: Any) -> None:
             DestinationInput(
                 row.id,
                 row.enabled,
-                cast(Literal["new_groups_only", "every_occurrence"], row.delivery_mode),
+                cast(DeliveryMode, row.delivery_mode),
             )
             for row in db.scalars(select(Destination))
         ]

@@ -39,7 +39,7 @@ describe('SemanticSettings embeddings', () => {
     await render();
     const mode = container.querySelector<HTMLSelectElement>('#dedup-mode')!;
     await act(async () => { mode.value = 'exact'; mode.dispatchEvent(new Event('change', { bubbles: true })); });
-    expect(container.querySelector('#dedup-mode-help')?.textContent).toBe('Exact groups identical questions in the same project and event type. To also group paraphrases, use Semantic: the LLM judge method finds the most paraphrases, and the embeddings method groups only very close matches by default.');
+    expect(container.querySelector('#dedup-mode-help')?.textContent).toBe('Only identical wording is grouped by default: Exact groups identical questions in the same project and event type. Your bot already has a model, so connect it as the judge (Semantic, LLM judge method) to group paraphrases. The embeddings method groups only very close matches by default.');
     await act(async () => { mode.value = 'semantic'; mode.dispatchEvent(new Event('change', { bubbles: true })); });
     expect(container.querySelector('#semantic-method-help')?.textContent).toBe('Sends each new question and similar existing ones to an LLM, which decides if they match. Slower; handles subtle cases.');
     await selectEmbeddings();

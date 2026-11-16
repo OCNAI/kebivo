@@ -14,6 +14,7 @@ from uuid import uuid4
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from kebivo import digest
 from kebivo.dedup.embeddings import normalize, store
 from kebivo.dedup.semantic import (
     SYSTEM_PROMPT,
@@ -56,7 +57,7 @@ from kebivo.retention import RetentionCancelled
 from kebivo.retention import due as retention_due
 from kebivo.retention import run as retention_run
 from kebivo.routing.coverage import delivered_destinations, has_unrouted_earlier_member
-from kebivo.routing.engine import DestinationInput, RuleInput, evaluate
+from kebivo.routing.engine import DeliveryMode, DestinationInput, RuleInput, evaluate
 from kebivo.security.secretbox import SecretBox, SecretError
 from kebivo.settings import Settings
 
@@ -112,6 +113,8 @@ class Worker:
         self.provider_failures: dict[str, tuple[int, float]] = {}
         self.backfill_retry_at: dict[str, float] = {}
         self.retention_check_at = time.monotonic() + 300
+        # Zero runs the first digest check on start, so a missed slot is sent then.
+        self.digest_check_at = 0.0
         self.retention_task: asyncio.Task[None] | None = None
         self.backfill_task: asyncio.Task[None] | None = None
         self.retention_stop = threading.Event()
@@ -279,6 +282,9 @@ class Worker:
                 ):
                     self.retention_check_at = time.monotonic() + 600
                     self.retention_task = asyncio.create_task(self._retention(), name="retention")
+                if time.monotonic() >= self.digest_check_at:
+                    self.digest_check_at = time.monotonic() + 60
+                    await asyncio.to_thread(self._queue_digests)
                 # Even a one-slot worker needs a separate lane for a model call.
                 total_slots = max(2, self.settings.worker_concurrency)
                 capacity = total_slots - len(self.inflight)
@@ -558,6 +564,14 @@ class Worker:
     def _retention_due(self) -> bool:
         with self.factory() as db:
             return retention_due(db, now_utc())
+
+    def _queue_digests(self) -> int:
+        with self.factory() as db, db.begin():
+            db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+            created = digest.queue_due(db)
+        if created:
+            _log("digest_queued", deliveries=created)
+        return created
 
     def _spawn(self, coroutine: Any, *, semantic: bool = False) -> None:
         task = asyncio.create_task(coroutine)
@@ -1081,7 +1095,7 @@ class Worker:
                 DestinationInput(
                     row.id,
                     row.enabled,
-                    cast(Literal["new_groups_only", "every_occurrence"], row.delivery_mode),
+                    cast(DeliveryMode, row.delivery_mode),
                 )
                 for row in db.scalars(select(Destination))
             ]
@@ -1171,8 +1185,8 @@ class Worker:
             ):
                 return None
             destination = db.get(Destination, delivery.destination_id)
-            event = db.get(FeedbackEvent, delivery.event_id)
-            assert destination is not None and event is not None
+            event = db.get(FeedbackEvent, delivery.event_id) if delivery.event_id else None
+            assert destination is not None and (event is not None or delivery.event_id is None)
             for old in db.scalars(
                 select(DeliveryAttempt).where(
                     DeliveryAttempt.delivery_id == identifier,
@@ -1197,32 +1211,10 @@ class Worker:
             )
             db.add(attempt)
             db.flush()
-            project = db.get(Project, event.project_id)
-            assert project is not None
-            member = db.get(FeedbackGroupMember, event.id)
-            assert member is not None
-            group = db.get(FeedbackGroup, member.group_id)
-            assert group is not None
-            tag_names = db.scalars(
-                select(Tag.name)
-                .join(FeedbackEventTag, FeedbackEventTag.tag_id == Tag.id)
-                .where(FeedbackEventTag.event_id == event.id)
-                .order_by(Tag.name)
-            ).all()
-            message = payload_v1(
-                delivery_id=identifier,
-                event_id=event.id,
-                event_type=event.event_type,
-                project_id=project.id,
-                project_name=project.name,
-                question=event.question,
-                correction=event.correction,
-                context=event.context,
-                tags=list(tag_names),
-                created_at=event.created_at,
-                group_id=group.id,
-                occurrence_count=group.occurrence_count,
-            )
+            if event is None:
+                message = digest.payload(db, delivery, self.settings.public_url)
+            else:
+                message = self._event_message(db, identifier, event)
             return (
                 attempt.id,
                 {
@@ -1236,6 +1228,34 @@ class Worker:
                 message,
                 delivery.attempt_count,
             )
+
+    def _event_message(self, db: Session, identifier: str, event: FeedbackEvent) -> dict[str, Any]:
+        project = db.get(Project, event.project_id)
+        assert project is not None
+        member = db.get(FeedbackGroupMember, event.id)
+        assert member is not None
+        group = db.get(FeedbackGroup, member.group_id)
+        assert group is not None
+        tag_names = db.scalars(
+            select(Tag.name)
+            .join(FeedbackEventTag, FeedbackEventTag.tag_id == Tag.id)
+            .where(FeedbackEventTag.event_id == event.id)
+            .order_by(Tag.name)
+        ).all()
+        return payload_v1(
+            delivery_id=identifier,
+            event_id=event.id,
+            event_type=event.event_type,
+            project_id=project.id,
+            project_name=project.name,
+            question=event.question,
+            correction=event.correction,
+            context=event.context,
+            tags=list(tag_names),
+            created_at=event.created_at,
+            group_id=group.id,
+            occurrence_count=group.occurrence_count,
+        )
 
     async def _deliver(self, identifier: str, trigger: Literal["auto", "manual"] = "auto") -> None:
         try:

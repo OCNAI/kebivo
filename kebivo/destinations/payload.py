@@ -50,3 +50,18 @@ def test_payload() -> dict[str, Any]:
         created_at=datetime.now(UTC),
         test=True,
     )
+
+
+def digest_lines(message: dict[str, Any]) -> tuple[str, list[str]]:
+    """Plain-text heading and one line per group, shared by Slack and email."""
+    period = message["period"]
+    start, end = period["start"][:10], period["end"][:10]
+    heading = (
+        f"{message['open_group_count']} open groups had new occurrences from {start} to {end}"
+        f" · {message['resolved_count']} resolved · {message['reopened_count']} reopened"
+    )
+    lines = [
+        f"{item['occurrences']}× {item['question']} (last seen {item['last_seen_at'][:10]})"
+        for item in message["top_groups"]
+    ]
+    return heading, lines

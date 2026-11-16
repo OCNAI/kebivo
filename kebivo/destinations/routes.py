@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from kebivo.auth import AdminAuth
 from kebivo.destinations.validation import ConfigError, validate_config
+from kebivo.digest import latest_slot
 from kebivo.errors import error_response
 from kebivo.models import (
     AuditEvent,
@@ -34,6 +35,8 @@ class DestinationBody(BaseModel):
     type: str
     enabled: bool = True
     delivery_mode: str = "new_groups_only"
+    digest_weekday: int | None = None
+    digest_hour: int | None = None
     allow_private_network: bool = False
     config: dict[str, Any]
     secrets: dict[str, Any] = Field(default_factory=dict)
@@ -44,6 +47,8 @@ class DestinationPatch(BaseModel):
     name: str | None = None
     enabled: bool | None = None
     delivery_mode: str | None = None
+    digest_weekday: int | None = None
+    digest_hour: int | None = None
     allow_private_network: bool | None = None
     config: dict[str, Any] | None = None
     secrets: dict[str, Any] | None = None
@@ -99,6 +104,8 @@ def _serialize(row: Destination, request: Request) -> dict[str, Any]:
         "type": row.type,
         "enabled": row.enabled,
         "delivery_mode": row.delivery_mode,
+        "digest_weekday": row.digest_weekday,
+        "digest_hour": row.digest_hour,
         "allow_private_network": row.allow_private_network,
         "is_system": row.is_system,
         "is_sample": row.is_sample,
@@ -117,8 +124,32 @@ def _validate_name(name: str) -> str:
 
 
 def _validate_mode(mode: str) -> None:
-    if mode not in {"new_groups_only", "every_occurrence"}:
+    if mode not in {"new_groups_only", "every_occurrence", "weekly_digest"}:
         raise ConfigError("delivery_mode", "Invalid delivery mode")
+
+
+def _apply_schedule(row: Destination, changes: dict[str, Any]) -> None:
+    """Keep the digest schedule consistent with the mode; restart it when it changes."""
+    if row.delivery_mode != "weekly_digest":
+        if changes.get("digest_weekday") is not None or changes.get("digest_hour") is not None:
+            raise ConfigError("delivery_mode", "Digest schedule needs weekly digest mode")
+        row.digest_weekday = row.digest_hour = row.digest_checked_through = None
+        return
+    if row.type == "inbox":
+        raise ConfigError("delivery_mode", "The inbox cannot send a weekly digest")
+    weekday = changes.get("digest_weekday", row.digest_weekday)
+    hour = changes.get("digest_hour", row.digest_hour)
+    weekday = 0 if weekday is None else weekday
+    hour = 9 if hour is None else hour
+    if isinstance(weekday, bool) or not 0 <= weekday <= 6:
+        raise ConfigError("digest_weekday", "Weekday must be 0 (Monday) to 6 (Sunday)")
+    if isinstance(hour, bool) or not 0 <= hour <= 23:
+        raise ConfigError("digest_hour", "Hour must be 0 to 23")
+    if (weekday, hour) != (row.digest_weekday, row.digest_hour):
+        # Persist the baseline now, so a shutdown before the worker's next tick
+        # cannot cause the first scheduled digest to be skipped on restart.
+        row.digest_checked_through = latest_slot(now_utc(), weekday, hour)
+    row.digest_weekday, row.digest_hour = weekday, hour
 
 
 def _encrypt(row: Destination, request: Request, hidden: dict[str, str]) -> None:
@@ -225,6 +256,12 @@ def install_destination_routes(app: Any) -> None:
             config_json=json.dumps(config, separators=(",", ":")),
             created_by_admin_id=admin.id,
         )
+        try:
+            _apply_schedule(
+                row, {"digest_weekday": body.digest_weekday, "digest_hour": body.digest_hour}
+            )
+        except ConfigError as exc:
+            return _fail(request, 422, "validation_error", "Invalid destination", exc.field)
         db.add(row)
         try:
             db.flush()
@@ -295,6 +332,8 @@ def install_destination_routes(app: Any) -> None:
                 if "delivery_mode" in changes:
                     _validate_mode(changes["delivery_mode"] or "")
                     row.delivery_mode = changes["delivery_mode"]
+                if {"delivery_mode", "digest_weekday", "digest_hour"} & changes.keys():
+                    _apply_schedule(row, changes)
                 if "allow_private_network" in changes:
                     if row.type == "inbox" or changes["allow_private_network"] is None:
                         raise ConfigError("allow_private_network", "Invalid option")

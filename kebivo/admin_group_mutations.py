@@ -35,6 +35,8 @@ class GroupPatch(BaseModel):
 class NoteCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     body: str = Field(min_length=1, max_length=4000)
+    # Marks the note as "what did you change?" for the current resolution.
+    resolution: bool = False
 
 
 class TagPatch(BaseModel):
@@ -211,10 +213,15 @@ def install_admin_group_mutation_routes(app: Any) -> None:
         )
         if count is not None and count >= 500:
             return _error(request, 422, "note_limit", "Group has reached the note limit")
+        if payload.resolution and group.status != "resolved":
+            return _error(request, 409, "not_resolved", "Group is not resolved")
         note = FeedbackGroupNote(group_id=group.id, author_admin_id=auth[0].id, body=payload.body)
         db.add(note)
         db.flush()
-        _trail(db, group, auth[0].id, "note_added", {"group_id": group.id, "note_id": note.id})
+        details: dict[str, Any] = {"group_id": group.id, "note_id": note.id}
+        if payload.resolution:
+            details["resolution"] = True
+        _trail(db, group, auth[0].id, "note_added", details)
         db.commit()
         return {
             "id": note.id,

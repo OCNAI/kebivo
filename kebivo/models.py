@@ -112,6 +112,11 @@ class Destination(Base):
     is_sample: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("0"), nullable=False
     )
+    # Weekly digest schedule in server local time; Monday is 0.
+    digest_weekday: Mapped[int | None] = mapped_column(Integer)
+    digest_hour: Mapped[int | None] = mapped_column(Integer)
+    # Latest scheduled digest slot already handled, sent or empty.
+    digest_checked_through: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by_admin_id: Mapped[str | None] = mapped_column(
         ForeignKey("admin_users.id", ondelete="SET NULL")
     )
@@ -126,8 +131,16 @@ class Destination(Base):
             "length(CAST(config_json AS BLOB)) <= 16384", name="ck_destinations_config_length"
         ),
         CheckConstraint(
-            "delivery_mode IN ('new_groups_only','every_occurrence')",
+            "delivery_mode IN ('new_groups_only','every_occurrence','weekly_digest')",
             name="ck_destinations_delivery_mode",
+        ),
+        CheckConstraint(
+            "digest_weekday IS NULL OR digest_weekday BETWEEN 0 AND 6",
+            name="ck_destinations_digest_weekday",
+        ),
+        CheckConstraint(
+            "digest_hour IS NULL OR digest_hour BETWEEN 0 AND 23",
+            name="ck_destinations_digest_hour",
         ),
         CheckConstraint(
             "(secrets_ciphertext IS NULL) = (secrets_key_id IS NULL)",
@@ -340,7 +353,8 @@ class RoutingMatch(Base):
         CheckConstraint("via IN ('rule','fallback')", name="ck_routing_matches_via"),
         CheckConstraint(
             "outcome IN ('delivery_created','duplicate_destination',"
-            "'destination_disabled','fallback_skipped_disabled','suppressed_duplicate')",
+            "'destination_disabled','fallback_skipped_disabled','suppressed_duplicate',"
+            "'digest_queued')",
             name="ck_routing_matches_outcome",
         ),
         Index("ix_routing_matches_event", "event_id"),
@@ -350,8 +364,9 @@ class RoutingMatch(Base):
 class Delivery(Base):
     __tablename__ = "deliveries"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    event_id: Mapped[str] = mapped_column(
-        ForeignKey("feedback_events.id", ondelete="CASCADE"), nullable=False
+    # NULL for a weekly digest, which is rebuilt from its period at send time.
+    event_id: Mapped[str | None] = mapped_column(
+        ForeignKey("feedback_events.id", ondelete="CASCADE")
     )
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
@@ -379,12 +394,25 @@ class Delivery(Base):
     last_error_message: Mapped[str | None] = mapped_column(String(500))
     last_http_status: Mapped[int | None] = mapped_column(Integer)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    digest_period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    digest_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now_utc, onupdate=now_utc
     )
     __table_args__ = (
         UniqueConstraint("event_id", "destination_id", name="uq_deliveries_event_destination"),
+        UniqueConstraint(
+            "destination_id",
+            "project_id",
+            "digest_period_end",
+            name="uq_deliveries_digest_period",
+        ),
+        CheckConstraint(
+            "(event_id IS NULL) = (digest_period_end IS NOT NULL) AND "
+            "(digest_period_start IS NULL) = (digest_period_end IS NULL)",
+            name="ck_deliveries_kind",
+        ),
         CheckConstraint(
             "status IN ('pending','processing','delivered','retry_scheduled','failed')",
             name="ck_deliveries_status",

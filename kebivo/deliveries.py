@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from kebivo.auth import AdminAuth
 from kebivo.destinations.payload import test_payload
+from kebivo.digest import test_digest_payload
 from kebivo.errors import error_response
 from kebivo.models import (
     AuditEvent,
@@ -60,6 +61,8 @@ def _serial(row: Delivery) -> dict[str, Any]:
             "last_error_message": row.last_error_message,
             "last_http_status": row.last_http_status,
             "delivered_at": row.delivered_at,
+            "digest_period_start": row.digest_period_start,
+            "digest_period_end": row.digest_period_end,
             "created_at": row.created_at,
             "updated_at": row.updated_at,
         }.items()
@@ -257,7 +260,8 @@ def install_test_route(app: Any) -> None:
             "allow_private_network": row.allow_private_network,
         }
         started = time.monotonic()
-        result = await send_destination(destination, test_payload(), request.app.state.settings)
+        message = test_digest_payload() if row.delivery_mode == "weekly_digest" else test_payload()
+        result = await send_destination(destination, message, request.app.state.settings)
         db.add(
             AuditEvent(
                 actor_type="admin",

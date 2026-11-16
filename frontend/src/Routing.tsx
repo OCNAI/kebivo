@@ -39,6 +39,9 @@ const normalize = (value: string) =>
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-|-$/g, "");
+const sent = (outcome: string) =>
+  outcome === "delivery_created" || outcome === "digest_queued";
+
 export function Routing({ project }: { project: Project }) {
   const [rules, setRules] = React.useState<Rule[]>([]),
     [destinations, setDestinations] = React.useState<Destination[]>([]),
@@ -469,18 +472,18 @@ export function Routing({ project }: { project: Project }) {
             <p>
               Destinations:{" "}
               {sim.destinations
-                .filter((d) => d.outcome === "delivery_created")
+                .filter((d) => sent(d.outcome))
                 .map(
                   (d) =>
-                    `${destinations.find((x) => x.id === d.destination_id)?.name ?? d.destination_id} (${d.via})`,
+                    `${destinations.find((x) => x.id === d.destination_id)?.name ?? d.destination_id} (${d.via}${d.outcome === "digest_queued" ? ", weekly digest" : ""})`,
                 )
                 .join(", ") || "None"}
             </p>
-            {sim.destinations.filter((d) => d.outcome !== "delivery_created")
+            {sim.destinations.filter((d) => !sent(d.outcome))
               .length > 0 && (
               <ul aria-label="Skipped destinations">
                 {sim.destinations
-                  .filter((d) => d.outcome !== "delivery_created")
+                  .filter((d) => !sent(d.outcome))
                   .map((d) => (
                     <li key={`${d.destination_id}-${d.via}-${d.outcome}`}>
                       Skipped:{" "}
