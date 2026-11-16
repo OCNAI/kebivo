@@ -303,3 +303,5 @@ button:disabled, button[aria-disabled="true"] { opacity:1; color:#3d4942; backgr
 .group-chips + .follow-up { margin-top:8px; font-size:12px; }
 .status.status-reopened { margin-right:4px; background:#fff1df; color:#6f4200; }
 .resolve-note { display:grid; gap:6px; margin:8px 0 12px; }
+.status-filter-row { display:flex; flex-wrap:wrap; align-items:flex-start; gap:4px; }
+.reopened-toggle { margin-left:6px; }
