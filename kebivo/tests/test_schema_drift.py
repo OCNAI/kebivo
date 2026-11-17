@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from kebivo.admin_groups import STATUSES
 from kebivo.feedback.schemas import CorrectionSubmission, GapSubmission
@@ -64,10 +64,22 @@ def test_write_tool_limits_match_rest_validation(
         assert normalize_tag_v1("t" * tag_limit)
         with pytest.raises(ValueError):
             normalize_tag_v1("t" * (tag_limit + 1))
+        assert spec["items"].get("minLength", 0) == 1
+        with pytest.raises(ValueError):
+            normalize_tag_v1("")
     else:
         limit = spec["maxLength"]
         assert _accepts(tool, field, "x" * limit)
         assert not _accepts(tool, field, "x" * (limit + 1))
+        assert _accepts(tool, field, "") == (spec.get("minLength", 0) == 0)
+
+
+@pytest.mark.parametrize(
+    ("tool", "model"), [(GAP, GapSubmission), (CORRECTION, CorrectionSubmission)]
+)
+def test_write_tool_required_fields_match_rest(tool: str, model: type[BaseModel]) -> None:
+    rest = {name for name, field in model.model_fields.items() if field.is_required()}
+    assert set(TOOLS[tool].input_schema["required"]) == rest - {"event_type"}
 
 
 def test_list_open_gaps_matches_rest_query(tmp_path: Path) -> None:
