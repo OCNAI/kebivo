@@ -19,6 +19,7 @@ let context: BrowserContext;
 let page: Page;
 let problems: PageProblems;
 let token = '';
+let readToken = '';
 
 test.beforeAll(async ({ browser, request }) => {
   context = await browser.newContext();
@@ -35,6 +36,7 @@ test.afterEach(async () => {
 });
 
 test('admin login rejects a wrong password and accepts the right one', async () => {
+  await page.route('**/api/v1/admin/groups/summary', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'unavailable' }) }));
   await signIn(page, 'not-the-password');
   await expect(page.getByRole('alert')).toBeVisible();
   // The 401 for the wrong password is the point of this step, not a defect.
@@ -43,6 +45,9 @@ test('admin login rejects a wrong password and accepts the right one', async () 
   await page.getByLabel('Password').fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Get your first event in' })).toBeVisible();
+  await page.unrouteAll();
+  problems.consoleErrors = problems.consoleErrors.filter(error => !error.includes('/api/v1/admin/groups/summary'));
 });
 
 test('create a project', async () => {
@@ -80,7 +85,14 @@ test('create a routing rule for the "it" tag', async () => {
 
 test('generate a project token, shown once', async () => {
   await page.getByLabel('Token name').fill(`bot ${suffix}`);
+  const gapScope = page.getByRole('checkbox', { name: /feedback:gap/ });
+  await expect(gapScope).toBeChecked();
   await expect(page.getByRole('checkbox', { name: /gaps:read/ })).not.toBeChecked();
+  await gapScope.uncheck();
+  await page.getByRole('button', { name: 'Create token' }).click();
+  await expect(page.getByRole('alert')).toContainText('Choose at least one scope.');
+  await expect(page.getByRole('textbox', { name: 'New token' })).toHaveCount(0);
+  await gapScope.check();
   await page.getByRole('button', { name: 'Create token' }).click();
   const field = page.getByRole('textbox', { name: 'New token' });
   token = await field.inputValue();
@@ -90,8 +102,26 @@ test('generate a project token, shown once', async () => {
   await expect(page.getByText(token)).toHaveCount(0);
 });
 
-test('submit test feedback and see it in the inbox', async ({ request }) => {
+test('create a read-only token and enforce its scope at the API', async ({ request }) => {
+  await page.getByLabel('Token name').fill(`read-only ${suffix}`);
+  await page.getByRole('checkbox', { name: /feedback:gap/ }).uncheck();
+  await page.getByRole('checkbox', { name: /gaps:read/ }).check();
+  await page.getByRole('button', { name: 'Create token' }).click();
+  const field = page.getByRole('textbox', { name: 'New token' });
+  readToken = await field.inputValue();
+  expect(readToken).toMatch(/^kebivo_pt_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+  await page.getByRole('button', { name: 'I have saved it' }).click();
   await submitGap(request, token, question, ['it', 'vpn']);
+  const read = await request.get('/api/v1/groups', { headers: { Authorization: `Bearer ${readToken}` } });
+  expect(read.status(), await read.text()).toBe(200);
+  const denied = await request.post('/api/v1/feedback', {
+    headers: { Authorization: `Bearer ${readToken}` },
+    data: { event_type: 'knowledge_gap', question: `must be denied ${suffix}` },
+  });
+  expect(denied.status(), await denied.text()).toBe(403);
+});
+
+test('submit test feedback and see it in the inbox', async ({ request }) => {
   await submitGap(request, token, question.toUpperCase(), ['it']);
   await submitGap(request, token, billingQuestion, ['billing']);
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Inbox' }).click();
