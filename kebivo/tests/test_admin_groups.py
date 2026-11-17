@@ -119,9 +119,11 @@ def test_group_filters_search_sort_and_cursor(tmp_path: Path) -> None:
     cursor_data = json.loads(base64.urlsafe_b64decode(first + "=" * (-len(first) % 4)))
     timestamp = datetime.fromisoformat(cursor_data["v"][0]).replace(tzinfo=UTC)
     cursor_data["v"][0] = timestamp.astimezone(timezone(timedelta(hours=5))).isoformat()
-    offset_cursor = base64.urlsafe_b64encode(
-        json.dumps(cursor_data, separators=(",", ":")).encode()
-    ).decode().rstrip("=")
+    offset_cursor = (
+        base64.urlsafe_b64encode(json.dumps(cursor_data, separators=(",", ":")).encode())
+        .decode()
+        .rstrip("=")
+    )
     expected_page = client.get(path, params={"limit": 1, "cursor": first})
     offset_page = client.get(path, params={"limit": 1, "cursor": offset_cursor})
     assert offset_page.status_code == 200
@@ -185,7 +187,10 @@ def test_summary_aggregates_counts_and_limits_top_gaps(tmp_path: Path) -> None:
     assert summary["total_groups"] == 9
     assert summary["total_events"] == 45
     assert summary["groups_by_status"] == {
-        "open": 9, "in_progress": 0, "resolved": 0, "dismissed": 0
+        "open": 9,
+        "in_progress": 0,
+        "resolved": 0,
+        "dismissed": 0,
     }
     assert [item["id"] for item in summary["top_open_gaps"]] == [
         ids[index][0] for index in (8, 6, 4, 2, 0)

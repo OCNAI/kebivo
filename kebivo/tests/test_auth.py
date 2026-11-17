@@ -69,9 +69,7 @@ def test_login_session_cookie_csrf_logout_and_session_revocation(tmp_path: Path)
 
 def test_origin_is_required_and_no_signup_endpoint_exists(tmp_path: Path) -> None:
     client, app = make_client(tmp_path)
-    missing = client.post(
-        "/api/v1/auth/login", json={"email": "x@y.test", "password": "anything"}
-    )
+    missing = client.post("/api/v1/auth/login", json={"email": "x@y.test", "password": "anything"})
     assert missing.status_code == 403
     assert ORIGIN in missing.json()["error"]["message"]
     assert client.post("/api/v1/auth/signup", headers={"Origin": ORIGIN}).status_code >= 400

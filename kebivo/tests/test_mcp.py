@@ -52,9 +52,7 @@ def running(tmp_path: Path) -> Generator[tuple[str, Any, dict[str, Any], str, st
         check=True,
         capture_output=True,
     )
-    settings = Settings(
-        "Kebivo", "test", "project-tests-secret-key-000000000000", str(path)
-    )
+    settings = Settings("Kebivo", "test", "project-tests-secret-key-000000000000", str(path))
     app = create_app(settings)
     with app.state.session_factory() as db:
         create_admin(db, "admin@example.test", "long-test-password")

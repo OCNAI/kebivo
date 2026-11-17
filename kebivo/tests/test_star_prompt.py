@@ -12,8 +12,7 @@ from kebivo.tests.test_db import _alembic_config
 from kebivo.tests.test_projects import ORIGIN, make_client, write_headers
 
 PROMPT = (
-    "If Kebivo is useful, a GitHub star helps other people find it: "
-    "https://github.com/OCNAI/kebivo"
+    "If Kebivo is useful, a GitHub star helps other people find it: https://github.com/OCNAI/kebivo"
 )
 PATH = "/api/v1/admin/star-prompt"
 
@@ -105,8 +104,12 @@ def test_startup_log_skips_after_any_admin_dismisses(tmp_path: Path) -> None:
         app.state.engine.dispose()
         records.clear()
         settings = Settings(
-            "Kebivo", "test", "project-tests-secret-key-000000000000", str(path),
-            allowed_origins=(ORIGIN,), worker_enabled=False,
+            "Kebivo",
+            "test",
+            "project-tests-secret-key-000000000000",
+            str(path),
+            allowed_origins=(ORIGIN,),
+            worker_enabled=False,
         )
         restarted = create_app(settings)
         with TestClient(restarted, base_url=ORIGIN):

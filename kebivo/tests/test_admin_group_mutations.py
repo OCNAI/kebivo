@@ -169,11 +169,14 @@ def test_representative_uuid_forms_are_canonical(tmp_path: Path) -> None:
     headers = write_headers(client)
     group_id, first_id, _ = ids[0]
     second_id = ids[2][1]
-    assert client.post(
-        f"/api/v1/admin/groups/{group_id}/merge",
-        json={"source_group_ids": [ids[2][0]]},
-        headers=headers,
-    ).status_code == 200
+    assert (
+        client.post(
+            f"/api/v1/admin/groups/{group_id}/merge",
+            json={"source_group_ids": [ids[2][0]]},
+            headers=headers,
+        ).status_code
+        == 200
+    )
     event_uuid = UUID(second_id)
     variants = (second_id.upper(), event_uuid.hex, f"{{{second_id}}}", event_uuid.urn)
     for variant in variants:
@@ -186,17 +189,22 @@ def test_representative_uuid_forms_are_canonical(tmp_path: Path) -> None:
         assert response.json()["representative_event_id"] == second_id
         with app.state.session_factory() as db:
             trail = db.scalars(
-                select(FeedbackGroupHistory).where(
+                select(FeedbackGroupHistory)
+                .where(
                     FeedbackGroupHistory.group_id == group_id,
                     FeedbackGroupHistory.action == "representative_changed",
-                ).order_by(FeedbackGroupHistory.created_at.desc())
+                )
+                .order_by(FeedbackGroupHistory.created_at.desc())
             ).first()
             assert json.loads(trail.details_json)["to_event_id"] == second_id
-        assert client.patch(
-            f"/api/v1/admin/groups/{group_id}",
-            json={"representative_event_id": first_id},
-            headers=headers,
-        ).status_code == 200
+        assert (
+            client.patch(
+                f"/api/v1/admin/groups/{group_id}",
+                json={"representative_event_id": first_id},
+                headers=headers,
+            ).status_code
+            == 200
+        )
     invalid = client.patch(
         f"/api/v1/admin/groups/{group_id}",
         json={"representative_event_id": "not-a-uuid"},
@@ -341,7 +349,6 @@ def test_tag_edit_member_cap_and_joined_tags(tmp_path: Path, monkeypatch: Any) -
         tag = db.scalar(select(Tag).where(Tag.slug == "ops"))
         assert tag is not None
         assert all(
-            db.get(FeedbackEventTag, (event_id, tag.id))
-            for event_id in (ids[0][1], ids[2][1])
+            db.get(FeedbackEventTag, (event_id, tag.id)) for event_id in (ids[0][1], ids[2][1])
         )
     app.state.engine.dispose()

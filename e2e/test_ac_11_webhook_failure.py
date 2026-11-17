@@ -25,14 +25,18 @@ def test_ac_11_two_500s_then_success_and_manual_recovery(admin: Admin, receiver:
     delivery = admin.delivered(event_id)[0]
     detail = admin.get(f"/deliveries/{delivery['id']}")
     assert [row["result"] for row in detail["attempts"]] == [
-        "retryable_failure", "retryable_failure", "success"]
+        "retryable_failure",
+        "retryable_failure",
+        "success",
+    ]
     hits = receiver.hits(path)
     assert len(hits) == 3
     assert {hit["headers"]["webhook-id"] for hit in hits} == {delivery["id"]}
     for hit in hits:
         assert hmac.compare_digest(
             _signature(hook["signing_secret"], hit["headers"], hit["body"]),
-            hit["headers"]["webhook-signature"])
+            hit["headers"]["webhook-signature"],
+        )
     # DELIVERY_RETRY_SCHEDULE_SECONDS is 1 second per step in the e2e stack.
     gaps = [b["received_at"] - a["received_at"] for a, b in zip(hits, hits[1:], strict=False)]
     assert all(gap >= 0.9 for gap in gaps), gaps

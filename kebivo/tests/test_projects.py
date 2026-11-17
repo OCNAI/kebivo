@@ -68,9 +68,7 @@ def test_admin_test_event_returns_retryable_busy_under_writer_lock(tmp_path: Pat
     with sqlite3.connect(path) as writer:
         writer.execute("BEGIN IMMEDIATE")
         started = time.monotonic()
-        response = client.post(
-            f"/api/v1/projects/{project['id']}/test-event", headers=headers
-        )
+        response = client.post(f"/api/v1/projects/{project['id']}/test-event", headers=headers)
         assert time.monotonic() - started < 5
         assert response.status_code == 503
         assert response.headers["retry-after"] == "1"

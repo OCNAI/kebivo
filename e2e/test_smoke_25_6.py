@@ -30,7 +30,8 @@ def test_smoke_25_6_all_steps_in_order(admin: Admin, receiver: Receiver) -> None
     assert detail["agent_reported"]["question"] == question
     # 9. Confirm routing.
     assert [(m["rule_id"], m["destination_id"]) for m in detail["routing"]["matches"]] == [
-        (rule["id"], hook["id"])]
+        (rule["id"], hook["id"])
+    ]
     # 10. Confirm webhook delivery.
     delivery = admin.delivered(event_id)[0]
     hits = receiver.hits(path)

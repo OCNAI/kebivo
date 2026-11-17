@@ -21,10 +21,19 @@ def test_ac_03_it_tag_reaches_receiver_with_valid_schema_and_signature(admin: Ad
     admin.rule(project["id"], ["it"], [destination["id"]])
     token = admin.token(project["id"])
     receiver = subprocess.Popen(
-        [sys.executable, str(EXAMPLES / "webhook_receiver.py"), "--host", "0.0.0.0",
-         "--port", "9103", "--exit-after", "1"],
+        [
+            sys.executable,
+            str(EXAMPLES / "webhook_receiver.py"),
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "9103",
+            "--exit-after",
+            "1",
+        ],
         env={**os.environ, "WEBHOOK_SECRET": destination["signing_secret"]},
-        stdout=subprocess.PIPE, text=True,
+        stdout=subprocess.PIPE,
+        text=True,
     )
     try:
         assert receiver.stdout is not None
@@ -37,7 +46,10 @@ def test_ac_03_it_tag_reaches_receiver_with_valid_schema_and_signature(admin: Ad
         receiver.kill()
     accepted = json.loads(output.strip().splitlines()[-1])
     assert accepted == {
-        "webhook_id": admin.deliveries(event_id)[0]["id"], "event_id": event_id,
-        "event_type": "knowledge_gap", "question": question,
-        "signature": "valid", "schema": "valid",
+        "webhook_id": admin.deliveries(event_id)[0]["id"],
+        "event_id": event_id,
+        "event_type": "knowledge_gap",
+        "question": question,
+        "signature": "valid",
+        "schema": "valid",
     }

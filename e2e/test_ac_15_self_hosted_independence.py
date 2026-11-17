@@ -17,11 +17,19 @@ def test_ac_15_stores_destination_secrets_for_the_sweep(admin: Admin) -> None:
     record_secret("admin_password", os.environ["E2E_ADMIN_PASSWORD"])
     bearer, header, path = unique("E2E-WEBHOOK-BEARER"), unique("E2E-WEBHOOK-HEADER"), unique("p")
     smtp_password = unique("E2E-SMTP-PASSWORD")
-    for kind, value in (("webhook_bearer", bearer), ("webhook_header", header),
-                        ("smtp_password", smtp_password)):
+    for kind, value in (
+        ("webhook_bearer", bearer),
+        ("webhook_header", header),
+        ("smtp_password", smtp_password),
+    ):
         record_secret(kind, value)
-    admin.webhook(path, config={"auth": {"type": "bearer", "token": bearer},
-                                "custom_headers": {"X-E2E-Canary": header}})
+    admin.webhook(
+        path,
+        config={
+            "auth": {"type": "bearer", "token": bearer},
+            "custom_headers": {"X-E2E-Canary": header},
+        },
+    )
     admin.smtp(tls_mode="starttls", username="e2e-user", password=smtp_password)
 
 

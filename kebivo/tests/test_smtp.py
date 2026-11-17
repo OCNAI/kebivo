@@ -42,16 +42,28 @@ CANARY = "smtp-password-canary"
 
 
 def test_smtp_blocks_metadata_resolution(monkeypatch: Any) -> None:
-    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [
-        (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("169.254.169.254", 587))
-    ])
-    result = asyncio.run(SmtpAdapter().send(
-        make_test_payload(),
-        {"host": "mail.example.test", "port": 587, "tls_mode": "none",
-         "allow_private_network": True,
-         "from": "sender@example.test", "to": ["to@example.test"]},
-        {}, timeout=3,
-    ))
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("169.254.169.254", 587))
+        ],
+    )
+    result = asyncio.run(
+        SmtpAdapter().send(
+            make_test_payload(),
+            {
+                "host": "mail.example.test",
+                "port": 587,
+                "tls_mode": "none",
+                "allow_private_network": True,
+                "from": "sender@example.test",
+                "to": ["to@example.test"],
+            },
+            {},
+            timeout=3,
+        )
+    )
     assert result.outcome == "permanent"
     assert result.category == "blocked_destination"
 
@@ -356,9 +368,7 @@ def test_admin_test_send_creates_no_event(tmp_path: Path) -> None:
             },
         )
         assert created.status_code == 201, created.text
-        response = client.post(
-            f"/api/v1/destinations/{created.json()['id']}/test", headers=headers
-        )
+        response = client.post(f"/api/v1/destinations/{created.json()['id']}/test", headers=headers)
         assert response.status_code == 200 and response.json()["outcome"] == "success"
         with app.state.session_factory() as db:
             assert db.scalar(select(func.count()).select_from(FeedbackEvent)) == 0

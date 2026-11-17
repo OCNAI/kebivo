@@ -106,10 +106,14 @@ def forward(outbound: Outbound, timeout: float) -> tuple[int, dict[str, str]]:
     except urllib.error.HTTPError as error:
         detail = error.read()[:500].decode(errors="replace")
         print(json.dumps({"target_status": error.code, "target_body": detail}), file=sys.stderr)
-        rate_limited = error.code == 403 and outbound.rate_limit_403 and (
-            error.headers.get("X-RateLimit-Remaining") == "0"
-            or error.headers.get("Retry-After", "").isdigit()
-            or "rate limit" in detail.lower()
+        rate_limited = (
+            error.code == 403
+            and outbound.rate_limit_403
+            and (
+                error.headers.get("X-RateLimit-Remaining") == "0"
+                or error.headers.get("Retry-After", "").isdigit()
+                or "rate limit" in detail.lower()
+            )
         )
         if error.code == 429 or rate_limited:
             retry_after = error.headers.get("Retry-After", "")

@@ -373,6 +373,7 @@ def test_hung_provider_does_not_starve_exact_jobs_or_deliveries(
         started = time.monotonic()
         await worker.start()
         try:
+
             async def done() -> None:
                 while True:
                     with app.state.session_factory() as db:
@@ -388,8 +389,10 @@ def test_hung_provider_does_not_starve_exact_jobs_or_deliveries(
             async def semantic_done() -> None:
                 while True:
                     with app.state.session_factory() as db:
-                        if all(db.get(FeedbackEvent, event_id).processing_status == "completed"
-                               for event_id in semantic_ids):
+                        if all(
+                            db.get(FeedbackEvent, event_id).processing_status == "completed"
+                            for event_id in semantic_ids
+                        ):
                             return
                     await asyncio.sleep(0.02)
 
@@ -400,7 +403,8 @@ def test_hung_provider_does_not_starve_exact_jobs_or_deliveries(
     asyncio.run(run())
     with app.state.session_factory() as db:
         unavailable = [
-            event_id for event_id in semantic_ids
+            event_id
+            for event_id in semantic_ids
             if db.get(DedupEvaluation, event_id).outcome == "provider_unavailable"
         ]
         assert unavailable

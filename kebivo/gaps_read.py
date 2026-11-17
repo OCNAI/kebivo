@@ -80,8 +80,10 @@ def list_gaps(
     filters = {"project_id": project_id, "status": statuses, "sort": sort}
     digest = hashlib.sha256(json.dumps(filters, sort_keys=True).encode()).hexdigest()
     order: list[tuple[Any, str]] = (
-        [(FeedbackGroup.occurrence_count, "occurrence_count"),
-         (FeedbackGroup.last_seen_at, "last_seen_at")]
+        [
+            (FeedbackGroup.occurrence_count, "occurrence_count"),
+            (FeedbackGroup.last_seen_at, "last_seen_at"),
+        ]
         if sort == "occurrences"
         else [(FeedbackGroup.last_seen_at, "last_seen_at")]
     )

@@ -41,8 +41,9 @@ def test_ac_14_project_token_is_confined_to_its_project(admin: Admin) -> None:
     admin.processed(event_b)
 
     # The same Idempotency-Key and body under token A creates A's own event.
-    replay = submit(token_a, {"event_type": "knowledge_gap", "question": secret_question,
-                              "tags": []}, key)
+    replay = submit(
+        token_a, {"event_type": "knowledge_gap", "question": secret_question, "tags": []}, key
+    )
     assert replay.status_code == 202 and replay.headers.get("Idempotent-Replayed") is None
     event_a = replay.json()["event_id"]
     assert event_a != event_b
@@ -52,9 +53,15 @@ def test_ac_14_project_token_is_confined_to_its_project(admin: Admin) -> None:
     # that does not exist, so the answer reveals nothing about B.
     missing_project, missing_event = str(uuid.uuid4()), str(uuid.uuid4())
     paths = [
-        "/projects/{p}", "/projects/{p}/tokens", "/projects/{p}/routing-rules",
-        "/admin/projects/{p}/export", "/admin/feedback/{e}", "/admin/feedback?project_id={p}",
-        "/admin/groups?project_id={p}", "/deliveries?project_id={p}", "/admin/settings",
+        "/projects/{p}",
+        "/projects/{p}/tokens",
+        "/projects/{p}/routing-rules",
+        "/admin/projects/{p}/export",
+        "/admin/feedback/{e}",
+        "/admin/feedback?project_id={p}",
+        "/admin/groups?project_id={p}",
+        "/deliveries?project_id={p}",
+        "/admin/settings",
     ]
     bearer = {"Authorization": f"Bearer {token_a}"}
     for template in paths:
@@ -63,8 +70,9 @@ def test_ac_14_project_token_is_confined_to_its_project(admin: Admin) -> None:
         assert real.status_code in {401, 403}, (template, real.status_code)
         assert _envelope(real) == _envelope(fake), template
         assert secret_question not in real.text and project_b["name"] not in real.text
-    write = httpx.post(API + f"/projects/{project_b['id']}/tokens", headers=bearer,
-                       json={"name": "stolen"})
+    write = httpx.post(
+        API + f"/projects/{project_b['id']}/tokens", headers=bearer, json={"name": "stolen"}
+    )
     assert write.status_code in {401, 403}
 
     # MCP with token A only ever writes to A and exposes no read tool.
@@ -72,8 +80,9 @@ def test_ac_14_project_token_is_confined_to_its_project(admin: Admin) -> None:
         async with mcp_session(token_a) as session:
             names = [tool.name for tool in (await session.list_tools()).tools]
             assert names == ["report_knowledge_gap"]
-            result = await session.call_tool("report_knowledge_gap", {
-                "question": secret_question, "idempotency_key": key})
+            result = await session.call_tool(
+                "report_knowledge_gap", {"question": secret_question, "idempotency_key": key}
+            )
             return str((result.structured_content or {})["event_id"])
 
     mcp_event = run(scenario())

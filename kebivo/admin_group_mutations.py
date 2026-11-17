@@ -264,9 +264,9 @@ def install_admin_group_mutation_routes(app: Any) -> None:
         if not add and not remove:
             return {"id": group.id, "added": [], "removed": []}
         member_count = db.scalar(
-            select(func.count()).select_from(FeedbackGroupMember).where(
-                FeedbackGroupMember.group_id == group.id
-            )
+            select(func.count())
+            .select_from(FeedbackGroupMember)
+            .where(FeedbackGroupMember.group_id == group.id)
         )
         if member_count is not None and member_count > MAX_TAG_EDIT_MEMBERS:
             return _error(request, 422, "tag_edit_limit", "Group is too large for a tag edit")

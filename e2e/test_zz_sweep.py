@@ -30,9 +30,18 @@ def test_no_credential_or_feedback_text_in_logs() -> None:
     logs = (STATE / "logs.txt").read_text(errors="replace")
     assert len(logs) > 0
     kinds = {item["kind"] for item in _secrets()}
-    assert {"admin_password", "session_cookie", "csrf_token", "project_token",
-            "webhook_signing_secret", "webhook_bearer", "webhook_header", "smtp_password",
-            "llm_api_key", "llm_header"} <= kinds, kinds
+    assert {
+        "admin_password",
+        "session_cookie",
+        "csrf_token",
+        "project_token",
+        "webhook_signing_secret",
+        "webhook_bearer",
+        "webhook_header",
+        "smtp_password",
+        "llm_api_key",
+        "llm_header",
+    } <= kinds, kinds
     leaked = [item["kind"] for item in _secrets() if item["value"] in logs]
     assert leaked == []
     assert [text for text in _content() if text in logs] == []
@@ -41,9 +50,19 @@ def test_no_credential_or_feedback_text_in_logs() -> None:
 
 @pytest.mark.stage("sweep")
 def test_no_credential_in_api_responses_after_creation(admin: Admin) -> None:
-    bodies = [admin.client.get(path).text for path in (
-        "/destinations", "/admin/llm-providers", "/projects", "/admin/settings",
-        "/deliveries", "/admin/feedback", "/admin/groups", "/auth/session")]
+    bodies = [
+        admin.client.get(path).text
+        for path in (
+            "/destinations",
+            "/admin/llm-providers",
+            "/projects",
+            "/admin/settings",
+            "/deliveries",
+            "/admin/feedback",
+            "/admin/groups",
+            "/auth/session",
+        )
+    ]
     for row in admin.get("/destinations")["items"]:
         bodies.append(admin.client.get(f"/destinations/{row['id']}").text)
     for row in admin.get("/admin/llm-providers")["items"]:

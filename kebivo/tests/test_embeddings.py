@@ -48,9 +48,10 @@ def test_codec_and_validation() -> None:
         assert validate_embeddings(bad, 1) is None
     assert validate_embeddings({"data": [{"embedding": [0] * 8193}]}, 1) is None
     assert validate_embeddings({"data": [{"embedding": [0] * 768}]}, 1) is not None
-    assert validate_embeddings(
-        {"data": [{"embedding": [0] * 768}, {"embedding": [0] * 64}]}, 2
-    ) is None
+    assert (
+        validate_embeddings({"data": [{"embedding": [0] * 768}, {"embedding": [0] * 64}]}, 2)
+        is None
+    )
 
 
 def test_adapter_and_fake_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,9 +66,7 @@ def test_adapter_and_fake_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
         allow_private_network=True,
     )
     try:
-        result = asyncio.run(
-            embed(provider, {}, "fake-64", ["reset password", "forgot passcode"])
-        )
+        result = asyncio.run(embed(provider, {}, "fake-64", ["reset password", "forgot passcode"]))
         assert result.vectors is not None
         assert cosine(result.vectors[0], result.vectors[1]) > 0.9
         assert server.requests[-1]["path"] == "/embeddings"
@@ -88,8 +87,7 @@ def test_adapter_and_fake_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
         provider.provider_type = "local"
         server.scenario = "oversized"
         assert (
-            asyncio.run(embed(provider, {}, "fake-64", ["a"])).error_category
-            == "invalid_response"
+            asyncio.run(embed(provider, {}, "fake-64", ["a"])).error_category == "invalid_response"
         )
     finally:
         server.shutdown()

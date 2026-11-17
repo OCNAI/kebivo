@@ -136,7 +136,13 @@ _GAP_ITEM = {
         "status": {"type": "string"},
     },
     "required": [
-        "id", "question", "occurrence_count", "first_seen_at", "last_seen_at", "tags", "status"
+        "id",
+        "question",
+        "occurrence_count",
+        "first_seen_at",
+        "last_seen_at",
+        "tags",
+        "status",
     ],
     "additionalProperties": False,
 }
@@ -203,7 +209,9 @@ TOOLS = {
             "additionalProperties": False,
         },
         annotations=types.ToolAnnotations(
-            read_only_hint=True, destructive_hint=False, idempotent_hint=True,
+            read_only_hint=True,
+            destructive_hint=False,
+            idempotent_hint=True,
             open_world_hint=False,
         ),
     ),
