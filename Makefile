@@ -13,12 +13,15 @@ db-upgrade:
 migrations:
 	uv run python -c 'import os, subprocess, tempfile; temporary = tempfile.TemporaryDirectory(); os.environ["DATABASE_URL"] = "sqlite:///" + temporary.name + "/migration.sqlite3"; subprocess.run(["alembic", "upgrade", "head"], check=True)'
 
+PY_PATHS = kebivo e2e examples sdk/python
+
 lint:
-	uv run ruff check kebivo e2e examples sdk/python
+	uv run ruff check $(PY_PATHS)
+	uv run ruff format --check $(PY_PATHS)
 	cd frontend && npm run lint
 
 format:
-	uv run ruff format kebivo
+	uv run ruff format $(PY_PATHS)
 	cd frontend && npm run format
 
 type:

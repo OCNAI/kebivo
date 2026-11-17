@@ -44,7 +44,7 @@ uv run python -m kebivo.cli bootstrap --email admin@example.org
 | Command | What it does |
 | --- | --- |
 | `make check` | Everything a change must pass: `lint`, `type`, `test` and `migrations`. Run it before every commit. |
-| `make lint` | `ruff check` for Python and ESLint for the frontend. |
+| `make lint` | `ruff check` and `ruff format --check` for Python, and ESLint for the frontend. |
 | `make format` | `ruff format` and Prettier. |
 | `make type` | mypy (strict) and `tsc`. |
 | `make test` | pytest and Vitest. |
