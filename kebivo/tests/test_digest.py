@@ -300,9 +300,10 @@ def test_outage_over_two_slots_sends_one_digest_for_the_whole_span(tmp_path: Pat
     with world.factory() as db:
         message = digest.payload(db, row, None)
     assert [group["question"] for group in message["top_groups"]] == ["Asked during the outage"]
-    assert message["period"]["start"] == (world.slot - timedelta(days=14)).replace(
-        tzinfo=UTC
-    ).isoformat()
+    assert (
+        message["period"]["start"]
+        == (world.slot - timedelta(days=14)).replace(tzinfo=UTC).isoformat()
+    )
 
 
 def test_catch_up_is_capped_at_four_weeks(tmp_path: Path) -> None:
@@ -323,6 +324,23 @@ def test_catch_up_is_capped_at_four_weeks(tmp_path: Path) -> None:
     with world.factory() as db:
         message = digest.payload(db, row, None)
     assert [group["question"] for group in message["top_groups"]] == ["Recent enough"]
+
+
+def test_status_change_alone_sends_a_digest(tmp_path: Path) -> None:
+    world = World(tmp_path / "digest.db")
+    project = world.project("Bot")
+    group = world.group(project, "Routed weeks ago", 3, timedelta(days=20))
+    world.route_all()
+    world.status(group, "open", "resolved", timedelta(hours=1))
+    with world.factory() as db:
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        assert digest.queue_due(db) == 1
+        db.commit()
+    [row] = world.digests()
+    with world.factory() as db:
+        message = digest.payload(db, row, None)
+    assert message["top_groups"] == []
+    assert message["resolved_count"] == 1
 
 
 def test_slack_and_email_render_digest(monkeypatch: Any) -> None:

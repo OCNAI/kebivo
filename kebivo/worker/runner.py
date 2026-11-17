@@ -332,6 +332,9 @@ class Worker:
         | None
     ):
         with self.factory() as db:
+            # Hold the write lock so a settings change can't reset a job between the
+            # staleness check and its delete.
+            db.connection().exec_driver_sql("BEGIN IMMEDIATE")
             jobs = db.scalars(
                 select(EmbeddingBackfill).order_by(EmbeddingBackfill.project_id)
             ).all()

@@ -114,13 +114,21 @@ def queue_due(db: Session, now: datetime | None = None) -> int:
             continue
         # Normally the previous slot; after a longer outage the whole missed span.
         start = max(_naive(checked), period_start(slot, MAX_CATCH_UP))
+        # Projects with routed events in the period, plus projects whose groups only changed
+        # status in it; _summary drops groups that were never routed to this destination.
         projects = db.execute(
-            text("""SELECT DISTINCT p.id FROM routing_matches m
+            text("""SELECT p.id FROM routing_matches m
                 JOIN feedback_events e ON e.id=m.event_id
                 JOIN projects p ON p.id=e.project_id
                 WHERE m.destination_id=:destination AND m.outcome='digest_queued'
                   AND e.created_at >= :start AND e.created_at < :end
-                  AND p.is_sample=0 ORDER BY p.id"""),
+                  AND p.is_sample=0
+                UNION
+                SELECT p.id FROM projects p JOIN feedback_groups g ON g.project_id=p.id
+                WHERE p.is_sample=0 AND EXISTS (SELECT 1 FROM feedback_group_history h
+                    WHERE h.group_id=g.id AND h.action='status_changed'
+                      AND h.created_at >= :start AND h.created_at < :end)
+                ORDER BY 1"""),
             {
                 "destination": destination.id,
                 "start": start.isoformat(sep=" "),
