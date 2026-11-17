@@ -332,35 +332,52 @@ class Worker:
         | None
     ):
         with self.factory() as db:
+            # Hold the write lock so a settings change can't reset a job between the
+            # staleness check and its delete.
+            db.connection().exec_driver_sql("BEGIN IMMEDIATE")
             jobs = db.scalars(
                 select(EmbeddingBackfill).order_by(EmbeddingBackfill.project_id)
             ).all()
-            selected = next(
-                (
-                    (candidate, configured, source)
-                    for candidate in jobs
-                    if (configured := db.get(Project, candidate.project_id)) is not None
-                    and not configured.is_sample
-                    and (source := db.get(LlmProviderConfig, candidate.provider_id)) is not None
-                    and source.enabled
-                    and self.provider_failures.get(source.id, (0, 0.0))[1] <= time.monotonic()
-                    and self.backfill_retry_at.get(candidate.project_id, 0.0) <= time.monotonic()
-                ),
-                None,
-            )
+            selected = None
+            for candidate in jobs:
+                project = db.get(Project, candidate.project_id)
+                provider = db.get(LlmProviderConfig, candidate.provider_id)
+                if (
+                    project is None
+                    or project.is_sample
+                    or provider is None
+                    or not provider.enabled
+                    or self.provider_failures.get(provider.id, (0, 0.0))[1] > time.monotonic()
+                    or self.backfill_retry_at.get(candidate.project_id, 0.0) > time.monotonic()
+                ):
+                    continue
+                dedup = json.loads(project.settings_json).get("deduplication", {})
+                semantic = dedup.get("semantic", {})
+                if (
+                    dedup.get("mode") == "semantic"
+                    and semantic.get("method") == "embeddings"
+                    and semantic.get("embedding_model") == candidate.model
+                    and semantic.get("provider_id") == candidate.provider_id
+                    and provider.embedding_revision == candidate.embedding_revision
+                ):
+                    selected = candidate, project, provider
+                    break
+                # Obsolete: the settings or provider moved on. Remove it and try the next
+                # project; matching the identity keeps a job that was just reset.
+                db.execute(
+                    delete(EmbeddingBackfill).where(
+                        EmbeddingBackfill.project_id == candidate.project_id,
+                        EmbeddingBackfill.provider_id == candidate.provider_id,
+                        EmbeddingBackfill.model == candidate.model,
+                        EmbeddingBackfill.embedding_revision.is_not_distinct_from(
+                            candidate.embedding_revision
+                        ),
+                    )
+                )
+            db.commit()
             if selected is None:
                 return None
             job, project, provider = selected
-            dedup = json.loads(project.settings_json).get("deduplication", {})
-            semantic = dedup.get("semantic", {})
-            if (
-                dedup.get("mode") != "semantic"
-                or semantic.get("method") != "embeddings"
-                or semantic.get("embedding_model") != job.model
-                or semantic.get("provider_id") != job.provider_id
-                or provider.embedding_revision != job.embedding_revision
-            ):
-                return None
             secrets = (
                 SecretBox.from_settings(self.settings).decrypt(
                     provider.id, provider.secrets_ciphertext, purpose="llm-provider-secrets"
