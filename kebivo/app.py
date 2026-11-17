@@ -188,11 +188,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             "If you mapped another host port, change 8000 in the setup URL.",
                             flush=True,
                         )
-                if db.scalar(
-                    select(AdminUser.id)
-                    .where(AdminUser.star_prompt_dismissed_at.is_not(None))
-                    .limit(1)
-                ) is None:
+                if (
+                    db.scalar(
+                        select(AdminUser.id)
+                        .where(AdminUser.star_prompt_dismissed_at.is_not(None))
+                        .limit(1)
+                    )
+                    is None
+                ):
                     _configure_logging().info(
                         "If Kebivo is useful, a GitHub star helps other people find it: "
                         "https://github.com/OCNAI/kebivo"

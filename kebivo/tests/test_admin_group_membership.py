@@ -423,9 +423,7 @@ def test_delete_removes_feedback_text_from_database_and_wal(tmp_path: Path) -> N
         for candidate in (path, Path(f"{path}-wal"))
         if candidate.exists()
     )
-    response = client.delete(
-        f"/api/v1/admin/feedback/{event_id}", headers=write_headers(client)
-    )
+    response = client.delete(f"/api/v1/admin/feedback/{event_id}", headers=write_headers(client))
     assert response.status_code == 200, response.text
     assert marker.encode() not in path.read_bytes()
     wal = Path(f"{path}-wal")

@@ -55,11 +55,7 @@ def app_with_feedback(tmp_path: Path, *, ip_limit: int = 300, token_limit: int =
     # Newer FastAPI includes routers as nested entries. Insert before the
     # first included router so this test handler shadows production feedback.
     shadow_route = next(
-        (
-            i
-            for i, route in enumerate(app.router.routes)
-            if getattr(route, "path", None) is None
-        ),
+        (i for i, route in enumerate(app.router.routes) if getattr(route, "path", None) is None),
         len(app.router.routes) - 3,
     )
     new_routes = app.router.routes[-3:]

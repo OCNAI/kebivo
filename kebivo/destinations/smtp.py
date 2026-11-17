@@ -172,8 +172,7 @@ class SmtpAdapter:
                     dict.fromkeys(str(item[4][0]).split("%", 1)[0] for item in results)
                 )
                 if not addresses or any(
-                    not allowed_address(ipaddress.ip_address(value), private)
-                    for value in addresses
+                    not allowed_address(ipaddress.ip_address(value), private) for value in addresses
                 ):
                     return failure("permanent", "blocked_destination")
                 mail = _mail(message, config)

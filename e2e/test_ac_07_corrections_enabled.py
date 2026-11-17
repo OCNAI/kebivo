@@ -17,8 +17,10 @@ def test_ac_07_unverified_correction_reaches_only_configured_destination(
     admin: Admin, receiver: Receiver, mail: Mail, llm: FakeLlm
 ) -> None:
     project = admin.project()
-    admin.patch(f"/projects/{project['id']}", {"settings": {
-        "corrections": {"enabled": True}, "deduplication": {"mode": "exact"}}})
+    admin.patch(
+        f"/projects/{project['id']}",
+        {"settings": {"corrections": {"enabled": True}, "deduplication": {"mode": "exact"}}},
+    )
     admin.put(f"/projects/{project['id']}/default-tags", {"tags": ["kb"]})
     path = unique("ac07")
     hook = admin.webhook(path)
@@ -40,8 +42,14 @@ def test_ac_07_unverified_correction_reaches_only_configured_destination(
 
     via_mcp = run(scenario())
     assert via_mcp["verification_status"] == "unverified"
-    via_rest = submit(token, {"event_type": "knowledge_correction", "question": question + " REST",
-                              "correction": answer})
+    via_rest = submit(
+        token,
+        {
+            "event_type": "knowledge_correction",
+            "question": question + " REST",
+            "correction": answer,
+        },
+    )
     assert via_rest.status_code == 202, via_rest.text
 
     for event_id in (str(via_mcp["event_id"]), via_rest.json()["event_id"]):

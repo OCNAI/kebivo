@@ -414,9 +414,7 @@ def test_sample_project_never_reaches_embedding_provider(
             select(FeedbackEvent.id).where(FeedbackEvent.project_id == project.id).limit(1)
         )
         assert event_id is not None
-        job = ProcessingJob(
-            event_id=event_id, status="processing", lease_owner=worker.boot_id
-        )
+        job = ProcessingJob(event_id=event_id, status="processing", lease_owner=worker.boot_id)
         db.add(job)
         db.commit()
         job_id = job.id

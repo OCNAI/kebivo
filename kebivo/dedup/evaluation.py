@@ -146,9 +146,5 @@ def evaluate_project(db: Session, settings: Settings, project_id: str, use_corpu
     pairs = corpus() if use_corpus else project_pairs(db, project_id)
     if not pairs:
         raise ValueError("No labelled pairs available")
-    scores = asyncio.run(
-        score_pairs(
-            provider, secrets, semantic["embedding_model"], pairs
-        )
-    )
+    scores = asyncio.run(score_pairs(provider, secrets, semantic["embedding_model"], pairs))
     return f"pairs={len(pairs)} model={semantic['embedding_model']}\n{table(scores)}"

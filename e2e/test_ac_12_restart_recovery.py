@@ -20,8 +20,9 @@ def _queue(admin: Admin, receiver: Receiver, name: str) -> None:
     admin.rule(project["id"], ["restart"], [hook["id"]])
     token = admin.token(project["id"])
     receiver.reset(hold_seconds=60)
-    events = [gap(token, record_content(unique(f"{name} {index}")), ["restart"])
-              for index in range(6)]
+    events = [
+        gap(token, record_content(unique(f"{name} {index}")), ["restart"]) for index in range(6)
+    ]
     wait_for(lambda: receiver.hits(path), what="a delivery in flight")
     save_state(name, {"path": path, "events": events})
 

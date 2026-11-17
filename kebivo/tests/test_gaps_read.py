@@ -89,9 +89,9 @@ def test_scope_is_opt_in_and_read_only_tokens_are_allowed(tmp_path: Path) -> Non
     default = issue_token(client, project["id"], "default").json()
     assert default["scopes"] == [GAP_SCOPE]
     assert issue_token(client, project["id"], "bad", [CORRECTION_SCOPE]).status_code == 422
-    assert issue_token(
-        client, project["id"], "all", [GAP_SCOPE, GAPS_READ_SCOPE]
-    ).json()["scopes"] == [GAP_SCOPE, GAPS_READ_SCOPE]
+    assert issue_token(client, project["id"], "all", [GAP_SCOPE, GAPS_READ_SCOPE]).json()[
+        "scopes"
+    ] == [GAP_SCOPE, GAPS_READ_SCOPE]
     anonymous = TestClient(app)
     assert anonymous.get("/api/v1/groups").status_code == 401
     assert anonymous.get("/api/v1/groups", headers=bearer("kebivo_pt_x.y")).status_code == 401

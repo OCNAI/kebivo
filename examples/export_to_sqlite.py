@@ -8,10 +8,26 @@ from pathlib import Path
 from typing import TextIO
 
 COLUMNS = (
-    "id", "project_id", "event_type", "submitted_via", "question", "correction",
-    "previous_answer", "context", "source_reference", "agent_id", "conversation_id",
-    "source_event_id", "user_reference", "metadata", "processing_status",
-    "created_at", "updated_at", "tags", "group", "deliveries",
+    "id",
+    "project_id",
+    "event_type",
+    "submitted_via",
+    "question",
+    "correction",
+    "previous_answer",
+    "context",
+    "source_reference",
+    "agent_id",
+    "conversation_id",
+    "source_event_id",
+    "user_reference",
+    "metadata",
+    "processing_status",
+    "created_at",
+    "updated_at",
+    "tags",
+    "group",
+    "deliveries",
 )
 JSON_COLUMNS = {"metadata", "tags", "group", "deliveries"}
 
@@ -23,7 +39,7 @@ def load_export(source: TextIO, connection: sqlite3.Connection) -> None:
     placeholders = ", ".join("?" for _ in COLUMNS)
     updates = ", ".join(f'"{column}" = excluded."{column}"' for column in COLUMNS if column != "id")
     statement = (
-        f'INSERT INTO feedback ({names}) VALUES ({placeholders}) '
+        f"INSERT INTO feedback ({names}) VALUES ({placeholders}) "
         f'ON CONFLICT("id") DO UPDATE SET {updates}'
     )
     with connection:

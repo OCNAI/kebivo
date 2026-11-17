@@ -20,7 +20,11 @@ SAMPLE_QUESTION = "How do I reset my corporate VPN?"
 
 def _run(command: list[str], token: str, url: str = APP, **env: str) -> dict[str, Any]:
     result = subprocess.run(
-        command, capture_output=True, text=True, timeout=90, check=False,
+        command,
+        capture_output=True,
+        text=True,
+        timeout=90,
+        check=False,
         env={**os.environ, "KEBIVO_URL": url, "KEBIVO_TOKEN": token, **env},
     )
     assert result.returncode == 0, (command, result.stdout, result.stderr)
@@ -98,8 +102,11 @@ def test_rest_examples_retry_429_and_5xx_with_the_same_key() -> None:
 
 def test_rest_python_example_stops_on_permanent_errors() -> None:
     result = subprocess.run(
-        [sys.executable, str(EXAMPLES / "rest_python.py")], capture_output=True, text=True,
-        env={**os.environ, "KEBIVO_URL": APP, "KEBIVO_TOKEN": "kebivo_invalid"}, timeout=30,
+        [sys.executable, str(EXAMPLES / "rest_python.py")],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "KEBIVO_URL": APP, "KEBIVO_TOKEN": "kebivo_invalid"},
+        timeout=30,
     )
     assert result.returncode == 1
     assert json.loads(result.stdout)["http_status"] == 401
@@ -110,7 +117,10 @@ def test_mcp_python_example_and_client_config(admin: Admin) -> None:
     question = record_content(unique("Example MCP question"))
     result = subprocess.run(
         [sys.executable, str(EXAMPLES / "mcp_client.py"), "--url", APP, "--question", question],
-        capture_output=True, text=True, timeout=60, env={**os.environ, "PROJECT_TOKEN": token},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "PROJECT_TOKEN": token},
     )
     assert result.returncode == 0, result.stderr
     lines = [json.loads(line) for line in result.stdout.splitlines()]
@@ -142,22 +152,33 @@ def test_webhook_receiver_example_rejects_bad_signature_and_schema() -> None:
     secret = "whsec_" + base64.b64encode(b"k" * 32).decode()
     body = b'{"ok":true}'
     stamp = str(int(time.time()))
-    signature = "v1," + base64.b64encode(hmac.new(
-        b"k" * 32, f"msg_1.{stamp}.".encode() + body, hashlib.sha256).digest()).decode()
+    signature = (
+        "v1,"
+        + base64.b64encode(
+            hmac.new(b"k" * 32, f"msg_1.{stamp}.".encode() + body, hashlib.sha256).digest()
+        ).decode()
+    )
     headers = {"webhook-id": "msg_1", "webhook-timestamp": stamp, "webhook-signature": signature}
     assert verify_signature(headers, body, secret)
     assert not verify_signature({**headers, "webhook-signature": "v1,AAAA"}, body, secret)
     assert not verify_signature(headers, body + b" ", secret)
-    assert not verify_signature({**headers, "webhook-timestamp": str(int(stamp) - 600)},
-                                body, secret)
+    assert not verify_signature(
+        {**headers, "webhook-timestamp": str(int(stamp) - 600)}, body, secret
+    )
     schema = json.loads((ROOT / "docs" / "webhook-payload.schema.json").read_text())
     assert schema_errors({"schema_version": "1.0"}, schema)
 
 
 def test_agent_instructions_cover_the_rest_contract() -> None:
     text = (EXAMPLES / "agent-instructions.md").read_text()
-    for needle in ("/api/v1/feedback", "Idempotency-Key", '"event_type": "knowledge_gap"',
-                   "knowledge_correction", "unverified", "report_knowledge_gap"):
+    for needle in (
+        "/api/v1/feedback",
+        "Idempotency-Key",
+        '"event_type": "knowledge_gap"',
+        "knowledge_correction",
+        "unverified",
+        "report_knowledge_gap",
+    ):
         assert needle in text, needle
     assert "guarantee" in text
 
@@ -168,15 +189,22 @@ def _ui_snippets(kind: str) -> dict[str, str]:
         f"console.log(JSON.stringify({{...m.restSnippets({json.dumps(APP)}, {json.dumps(kind)}),"
         f"MCP: m.mcpConfig({json.dumps(APP)}), sample: m.SAMPLE_QUESTION}}));"
     )
-    output = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True,
-                            text=True, check=True, timeout=30).stdout
+    output = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    ).stdout
     return dict(json.loads(output))
 
 
 def test_ui_snippets_run_and_match_the_examples(admin: Admin, tmp_path: Path) -> None:
     project = admin.project()
-    admin.patch(f"/projects/{project['id']}", {"settings": {
-        "corrections": {"enabled": True}, "deduplication": {"mode": "exact"}}})
+    admin.patch(
+        f"/projects/{project['id']}",
+        {"settings": {"corrections": {"enabled": True}, "deduplication": {"mode": "exact"}}},
+    )
     env = {**os.environ, "KEBIVO_URL": APP}
     for kind in ("knowledge_gap", "knowledge_correction"):
         snippets = _ui_snippets(kind)
@@ -194,11 +222,23 @@ def test_ui_snippets_run_and_match_the_examples(admin: Admin, tmp_path: Path) ->
             # A fresh token per snippet keeps the shared sample Idempotency-Key apart.
             other = admin.project()
             if kind == "knowledge_correction":
-                admin.patch(f"/projects/{other['id']}", {"settings": {
-                    "corrections": {"enabled": True}, "deduplication": {"mode": "exact"}}})
+                admin.patch(
+                    f"/projects/{other['id']}",
+                    {
+                        "settings": {
+                            "corrections": {"enabled": True},
+                            "deduplication": {"mode": "exact"},
+                        }
+                    },
+                )
             token = admin.token(other["id"], ["feedback:gap", "feedback:correction"])
-            result = subprocess.run(command, capture_output=True, text=True, timeout=60,
-                                    env={**env, "KEBIVO_TOKEN": token})
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env={**env, "KEBIVO_TOKEN": token},
+            )
             assert result.returncode == 0, (name, result.stderr)
             assert "202" in result.stdout, (kind, name, result.stdout)
             listed = admin.get(f"/admin/feedback?project_id={other['id']}")["items"]

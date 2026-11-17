@@ -151,27 +151,64 @@ class Admin:
         config.update(extra.pop("config", {}))
         destination = self.post(
             "/destinations",
-            {"name": unique("e2e webhook"), "type": "webhook", "allow_private_network": True,
-             "config": config, **extra},
+            {
+                "name": unique("e2e webhook"),
+                "type": "webhook",
+                "allow_private_network": True,
+                "config": config,
+                **extra,
+            },
         )
         if destination.get("signing_secret"):
             record_secret("webhook_signing_secret", destination["signing_secret"])
         return dict(destination)
 
     def smtp(self, **config: Any) -> dict[str, Any]:
-        body = {"host": RUNNER, "port": 2525, "tls_mode": "none",
-                "from": "kebivo@example.invalid", "to": ["team@example.invalid"], **config}
-        return dict(self.post("/destinations", {"name": unique("e2e smtp"), "type": "smtp",
-                                                "allow_private_network": True, "config": body}))
+        body = {
+            "host": RUNNER,
+            "port": 2525,
+            "tls_mode": "none",
+            "from": "kebivo@example.invalid",
+            "to": ["team@example.invalid"],
+            **config,
+        }
+        return dict(
+            self.post(
+                "/destinations",
+                {
+                    "name": unique("e2e smtp"),
+                    "type": "smtp",
+                    "allow_private_network": True,
+                    "config": body,
+                },
+            )
+        )
 
-    def rule(self, project_id: str, tags: list[str], destinations: list[str], *,
-             priority: int = 10, behavior: str = "stop", event_types: list[str] | None = None,
-             match_mode: str = "any") -> dict[str, Any]:
-        return dict(self.post(f"/projects/{project_id}/routing-rules", {
-            "name": unique("e2e rule"), "event_types": event_types or ["knowledge_gap"],
-            "match_mode": match_mode, "tags": tags, "priority": priority,
-            "destination_ids": destinations, "match_behavior": behavior,
-        }))
+    def rule(
+        self,
+        project_id: str,
+        tags: list[str],
+        destinations: list[str],
+        *,
+        priority: int = 10,
+        behavior: str = "stop",
+        event_types: list[str] | None = None,
+        match_mode: str = "any",
+    ) -> dict[str, Any]:
+        return dict(
+            self.post(
+                f"/projects/{project_id}/routing-rules",
+                {
+                    "name": unique("e2e rule"),
+                    "event_types": event_types or ["knowledge_gap"],
+                    "match_mode": match_mode,
+                    "tags": tags,
+                    "priority": priority,
+                    "destination_ids": destinations,
+                    "match_behavior": behavior,
+                },
+            )
+        )
 
     def event(self, event_id: str) -> dict[str, Any]:
         return dict(self.get(f"/admin/feedback/{event_id}"))
@@ -186,8 +223,9 @@ class Admin:
     def deliveries(self, event_id: str) -> list[dict[str, Any]]:
         return list(self.get(f"/deliveries?event_id={event_id}")["items"])
 
-    def delivered(self, event_id: str, *, count: int = 1, status: str = "delivered",
-                  timeout: float = 40) -> list[dict[str, Any]]:
+    def delivered(
+        self, event_id: str, *, count: int = 1, status: str = "delivered", timeout: float = 40
+    ) -> list[dict[str, Any]]:
         def probe() -> list[dict[str, Any]] | None:
             rows = self.deliveries(event_id)
             return rows if len(rows) == count and all(r["status"] == status for r in rows) else None
@@ -216,8 +254,9 @@ def submit(token: str, body: dict[str, Any], key: str | None = None) -> httpx.Re
 
 
 def gap(token: str, question: str, tags: list[str] | None = None, key: str | None = None) -> str:
-    response = submit(token, {"event_type": "knowledge_gap", "question": question,
-                              "tags": tags or []}, key)
+    response = submit(
+        token, {"event_type": "knowledge_gap", "question": question, "tags": tags or []}, key
+    )
     assert response.status_code == 202, response.text
     return str(response.json()["event_id"])
 
@@ -227,8 +266,12 @@ def gap(token: str, question: str, tags: list[str] | None = None, key: str | Non
 
 class Receiver:
     def reset(self, fail_first: int = 0, hold_seconds: float = 0) -> None:
-        httpx.request("DELETE", RECEIVER + "/", headers={
-            "X-Fail-First": str(fail_first), "X-Hold-Seconds": str(hold_seconds)}, timeout=5)
+        httpx.request(
+            "DELETE",
+            RECEIVER + "/",
+            headers={"X-Fail-First": str(fail_first), "X-Hold-Seconds": str(hold_seconds)},
+            timeout=5,
+        )
 
     def hits(self, path: str | None = None) -> list[dict[str, Any]]:
         rows = httpx.get(RECEIVER + "/", timeout=5).json()

@@ -269,8 +269,13 @@ def install_token_routes(app: Any) -> None:
         db: Session = request.state.db
         project = project_or_404(db, project_id)
         row, token = mint_project_token(
-            db, request.app.state.settings, project, admin.id,
-            name=body.name, scopes=body.scopes, expires_at=body.expires_at,
+            db,
+            request.app.state.settings,
+            project,
+            admin.id,
+            name=body.name,
+            scopes=body.scopes,
+            expires_at=body.expires_at,
         )
         try:
             db.commit()
