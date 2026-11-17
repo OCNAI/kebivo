@@ -46,7 +46,9 @@ WRITE_FIELDS = [
 ]
 
 
-@pytest.mark.parametrize(("tool", "field", "spec"), WRITE_FIELDS, ids=lambda v: str(v)[:30])
+@pytest.mark.parametrize(
+    ("tool", "field", "spec"), WRITE_FIELDS, ids=[f"{tool}-{field}" for tool, field, _ in WRITE_FIELDS]
+)
 def test_write_tool_limits_match_rest_validation(tool: str, field: str, spec: dict[str, Any]) -> None:
     if spec["type"] == "array":
         limit = spec["maxItems"]

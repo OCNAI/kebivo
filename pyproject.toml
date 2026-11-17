@@ -12,6 +12,8 @@ dependencies = [
   "fastapi==0.143.3",
   "httpx==0.28.1",
   "mcp==2.3.0",
+  # Floor for GHSA-mf5v-w3w3-f6cg; mcp and fastapi pull it in unpinned.
+  "opentelemetry-api>=1.45.2",
   "sqlalchemy==2.0.41",
   "starlette==1.8.0",
   "uvicorn[standard]==0.34.2",
