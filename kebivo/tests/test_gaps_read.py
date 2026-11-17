@@ -165,8 +165,13 @@ def test_status_sort_and_cursor_paging(tmp_path: Path) -> None:
     first = api.get("/api/v1/groups?limit=1", headers=bearer(reader)).json()["next_cursor"]
     wrong_sort = api.get(f"/api/v1/groups?sort=last_seen&cursor={first}", headers=bearer(reader))
     assert wrong_sort.status_code == 400
-    for query in ("status=closed", "sort=random", "limit=0", "limit=51"):
-        assert api.get(f"/api/v1/groups?{query}", headers=bearer(reader)).status_code == 422
+    # Every invalid filter returns the same 422 shape, naming the field.
+    for query in ("status=closed", "sort=random", "limit=0", "limit=51", "cursor=" + "a" * 1025):
+        invalid = api.get(f"/api/v1/groups?{query}", headers=bearer(reader))
+        assert invalid.status_code == 422
+        error = invalid.json()["error"]
+        assert error["code"] == "validation_error"
+        assert [item["field"] for item in error["details"]["fields"]] == [query.split("=")[0]]
     assert api.get("/api/v1/groups?cursor=bad", headers=bearer(reader)).status_code == 400
     app.state.engine.dispose()
 
