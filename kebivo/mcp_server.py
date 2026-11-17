@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
+from kebivo.admin_groups import STATUSES
 from kebivo.auth import _peer_ip
 from kebivo.errors import error_response
 from kebivo.feedback.ingest import (
@@ -32,7 +33,6 @@ from kebivo.gaps_read import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
     SORTS,
-    STATUSES,
     GapsQueryError,
     check_gaps_read_rate_limit,
     list_gaps,
@@ -218,17 +218,16 @@ def _result(content: dict[str, Any], *, error: bool = False) -> types.CallToolRe
     )
 
 
+_MESSAGES = {"extra_forbidden": "Unknown field"}
+
+
 def _validation_error(fields: list[tuple[str | None, str]]) -> types.CallToolResult:
     return _result(
         {
             "error": {
                 "code": "validation_error",
                 "fields": [
-                    {
-                        "field": field,
-                        "code": code,
-                        "message": "Unknown field" if code == "extra_forbidden" else "Invalid value",
-                    }
+                    {"field": field, "code": code, "message": _MESSAGES.get(code, "Invalid value")}
                     for field, code in fields
                 ],
             }

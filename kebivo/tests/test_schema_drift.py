@@ -7,10 +7,11 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from kebivo.admin_groups import STATUSES
 from kebivo.feedback.schemas import CorrectionSubmission, GapSubmission
 from kebivo.feedback.service import validate_idempotency_key
 from kebivo.feedback.tags import normalize_tag_v1
-from kebivo.gaps_read import MAX_LIMIT, SORTS, STATUSES
+from kebivo.gaps_read import MAX_LIMIT, SORTS
 from kebivo.mcp_server import _TOOL_SCOPES, CORRECTION, GAP, LIST_GAPS, TOOLS
 from kebivo.tests.test_projects import make_client
 from kebivo.tokens import VALID_SCOPES, TokenCreate
@@ -47,9 +48,13 @@ WRITE_FIELDS = [
 
 
 @pytest.mark.parametrize(
-    ("tool", "field", "spec"), WRITE_FIELDS, ids=[f"{tool}-{field}" for tool, field, _ in WRITE_FIELDS]
+    ("tool", "field", "spec"),
+    WRITE_FIELDS,
+    ids=[f"{tool}-{field}" for tool, field, _ in WRITE_FIELDS],
 )
-def test_write_tool_limits_match_rest_validation(tool: str, field: str, spec: dict[str, Any]) -> None:
+def test_write_tool_limits_match_rest_validation(
+    tool: str, field: str, spec: dict[str, Any]
+) -> None:
     if spec["type"] == "array":
         limit = spec["maxItems"]
         tags = [f"tag-{index}" for index in range(limit + 1)]
