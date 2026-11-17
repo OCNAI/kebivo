@@ -30,6 +30,7 @@
       }
     },
     "period": {
+      "description": "What the digest covers: usually the seven days before the scheduled time; after an outage, everything since the last digest, up to 28 days.",
       "type": "object",
       "additionalProperties": false,
       "required": ["start", "end"],

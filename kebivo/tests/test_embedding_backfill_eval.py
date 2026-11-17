@@ -127,6 +127,31 @@ def test_backfill_and_event_embedding_same_vector_complete(tmp_path: Path, fake:
         assert db.scalar(select(func.count()).select_from(DedupEvaluation)) == 1
 
 
+def test_stale_backfill_is_removed_and_next_project_proceeds(tmp_path: Path, fake: Any) -> None:
+    client, app, project, token = setup_semantic(tmp_path, fake)
+    enable_embeddings(client, app, project)
+    post(client, token, {"event_type": "knowledge_gap", "question": "Reset VPN access now"})
+    with app.state.session_factory() as db:
+        stale = Project(id="0" * 36, name="Before", slug="before")
+        db.add(stale)
+        db.flush()
+        db.add(
+            EmbeddingBackfill(
+                project_id=stale.id,
+                provider_id=db.scalar(select(LlmProviderConfig.id)),
+                embedding_revision="old-revision",
+                model="old-model",
+                remaining=10,
+            )
+        )
+        db.commit()
+    asyncio.run(Worker(app.state.session_factory, app.state.settings)._backfill())
+    with app.state.session_factory() as db:
+        assert db.scalars(select(EmbeddingBackfill.project_id)).all() == [project["id"]]
+        assert db.scalar(select(func.count()).select_from(QuestionEmbedding)) == 1
+    assert len(fake.requests) == 1
+
+
 def test_inflight_backfill_does_not_write_after_provider_edit(tmp_path: Path, fake: Any) -> None:
     client, app, project, token = setup_semantic(tmp_path, fake)
     semantic = enable_embeddings(client, app, project)

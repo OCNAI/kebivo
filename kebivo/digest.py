@@ -2,7 +2,9 @@
 
 The worker checks once a minute. Each digest destination stores the latest slot it has
 handled; a slot is handled in one write transaction that also inserts its delivery rows,
-so a missed slot is sent once on the next start and never twice.
+so a missed slot is sent once on the next start and never twice. After an outage that
+spans several slots, one digest covers everything since the last handled slot, capped
+at MAX_CATCH_UP, instead of one digest per missed week.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -15,6 +17,7 @@ from sqlalchemy.orm import Session
 from kebivo.models import Delivery, Destination, Project, now_utc
 
 PERIOD = timedelta(days=7)
+MAX_CATCH_UP = timedelta(days=28)
 TOP_GROUPS = 5
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
@@ -35,8 +38,8 @@ def latest_slot(now: datetime, weekday: int, hour: int) -> datetime:
     return _naive(slot.astimezone())
 
 
-def period_start(slot: datetime) -> datetime:
-    local = slot.replace(tzinfo=UTC).astimezone().replace(tzinfo=None) - PERIOD
+def period_start(slot: datetime, span: timedelta = PERIOD) -> datetime:
+    local = slot.replace(tzinfo=UTC).astimezone().replace(tzinfo=None) - span
     return _naive(local.astimezone())
 
 
@@ -68,14 +71,19 @@ def _summary(
             GROUP BY g.id ORDER BY occurrences DESC, g.last_seen_at DESC, g.id"""),
         params,
     ).all()
+    # Starts from the project's groups so the period bounds the work, not routing history.
     changes = db.execute(
-        text(f"""SELECT
+        text("""SELECT
                 COUNT(DISTINCT CASE WHEN h.to_status='resolved' THEN h.group_id END),
                 COUNT(DISTINCT CASE WHEN h.from_status='resolved'
                     AND h.to_status IN ('open','in_progress') THEN h.group_id END)
-            FROM feedback_group_history h
-            WHERE h.action='status_changed' AND h.created_at >= :start AND h.created_at < :end
-              AND h.group_id IN (SELECT group_id FROM ({routed}))"""),
+            FROM feedback_groups g JOIN feedback_group_history h ON h.group_id=g.id
+            WHERE g.project_id=:project AND h.action='status_changed'
+              AND h.created_at >= :start AND h.created_at < :end
+              AND EXISTS (SELECT 1 FROM feedback_group_members gm
+                  JOIN routing_matches m ON m.event_id=gm.event_id
+                  WHERE gm.group_id=g.id AND m.destination_id=:destination
+                    AND m.outcome='digest_queued')"""),
         params,
     ).one()
     return {"groups": groups, "resolved": changes[0] or 0, "reopened": changes[1] or 0}
@@ -104,14 +112,20 @@ def queue_due(db: Session, now: datetime | None = None) -> int:
         if checked is None:
             # Switching to digest mode starts the schedule; the first digest is the next slot.
             continue
-        start = period_start(slot)
+        # Normally the previous slot; after a longer outage the whole missed span.
+        start = max(_naive(checked), period_start(slot, MAX_CATCH_UP))
         projects = db.execute(
             text("""SELECT DISTINCT p.id FROM routing_matches m
                 JOIN feedback_events e ON e.id=m.event_id
                 JOIN projects p ON p.id=e.project_id
                 WHERE m.destination_id=:destination AND m.outcome='digest_queued'
+                  AND e.created_at >= :start AND e.created_at < :end
                   AND p.is_sample=0 ORDER BY p.id"""),
-            {"destination": destination.id},
+            {
+                "destination": destination.id,
+                "start": start.isoformat(sep=" "),
+                "end": slot.isoformat(sep=" "),
+            },
         ).scalars()
         for project_id in projects:
             if _empty(_summary(db, destination.id, project_id, start, slot)):

@@ -9,7 +9,7 @@
 
 ## Unreleased
 
-- New delivery mode: a weekly digest. A webhook, Slack or email destination can send one message a week, on a day and hour you choose, with the top five open groups by occurrences, each with a link, plus how many groups were resolved and reopened. A week with nothing to report sends nothing, and a digest missed while Kebivo was down is sent once on the next start. It uses the same retries, signing and delivery log as other deliveries. See [weekly digest](docs/destinations.md#weekly-digest).
+- New delivery mode: a weekly digest. A webhook, Slack or email destination can send one message a week, on a day and hour you choose, with the top five open groups by occurrences, each with a link, plus how many groups were resolved and reopened. A week with nothing to report sends nothing, and a digest missed while Kebivo was down is sent once on the next start. After an outage that spans several weeks, one digest covers the whole missed period, up to 28 days. It uses the same retries, signing and delivery log as other deliveries. See [weekly digest](docs/destinations.md#weekly-digest).
 - A fresh `docker run` with a named volume now generates keys in `/data/kebivo-secrets.env` and prints a one-time administrator setup link. Setup can load labelled, removable sample data. Database-only backups exclude the key file; save the matching keys separately before a restore. See [key custody](docs/self-hosting.md#secrets-and-what-to-protect).
 
 ### Upgrade

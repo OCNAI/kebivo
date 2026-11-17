@@ -274,6 +274,57 @@ def test_missed_slot_sends_once_on_start_and_never_twice(tmp_path: Path) -> None
     assert sent[0]["delivery_id"] == row.id
 
 
+def test_outage_over_two_slots_sends_one_digest_for_the_whole_span(tmp_path: Path) -> None:
+    world = World(tmp_path / "digest.db")
+    project = world.project("Bot")
+    world.group(project, "Asked during the outage", 1, timedelta(days=10))
+    world.route_all()
+    with world.factory() as db:
+        destination = db.get(Destination, world.destination.id)
+        assert destination is not None
+        destination.digest_checked_through = world.slot - timedelta(days=14)
+        db.commit()
+    with world.factory() as db:
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        assert digest.queue_due(db) == 1
+        db.commit()
+    with world.factory() as db:
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        assert digest.queue_due(db) == 0
+        db.commit()
+        destination = db.get(Destination, world.destination.id)
+        assert destination is not None and destination.digest_checked_through == world.slot
+    [row] = world.digests()
+    assert row.digest_period_start == world.slot - timedelta(days=14)
+    assert row.digest_period_end == world.slot
+    with world.factory() as db:
+        message = digest.payload(db, row, None)
+    assert [group["question"] for group in message["top_groups"]] == ["Asked during the outage"]
+    assert message["period"]["start"] == (world.slot - timedelta(days=14)).replace(
+        tzinfo=UTC
+    ).isoformat()
+
+
+def test_catch_up_is_capped_at_four_weeks(tmp_path: Path) -> None:
+    world = World(tmp_path / "digest.db")
+    project = world.project("Bot")
+    world.group(project, "Too old", 1, timedelta(days=30))
+    world.group(project, "Recent enough", 1, timedelta(days=20))
+    world.route_all()
+    with world.factory() as db:
+        destination = db.get(Destination, world.destination.id)
+        assert destination is not None
+        destination.digest_checked_through = world.slot - timedelta(days=42)
+        db.commit()
+        assert digest.queue_due(db) == 1
+        db.commit()
+    [row] = world.digests()
+    assert row.digest_period_start == digest.period_start(world.slot, digest.MAX_CATCH_UP)
+    with world.factory() as db:
+        message = digest.payload(db, row, None)
+    assert [group["question"] for group in message["top_groups"]] == ["Recent enough"]
+
+
 def test_slack_and_email_render_digest(monkeypatch: Any) -> None:
     message = digest.test_digest_payload()
     message["top_groups"][0]["url"] = "https://kebivo.example/inbox/groups/g"
