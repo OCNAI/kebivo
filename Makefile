@@ -22,7 +22,6 @@ lint:
 
 format:
 	uv run ruff format $(PY_PATHS)
-	cd frontend && npm run format
 
 type:
 	uv run mypy kebivo
