@@ -21,7 +21,7 @@ from kebivo.models import ApiToken, AuditEvent, Project, now_utc
 GAP_SCOPE = "feedback:gap"
 CORRECTION_SCOPE = "feedback:correction"
 GAPS_READ_SCOPE = "gaps:read"
-VALID_SCOPES = {GAP_SCOPE, CORRECTION_SCOPE, GAPS_READ_SCOPE}
+VALID_SCOPES = frozenset({GAP_SCOPE, CORRECTION_SCOPE, GAPS_READ_SCOPE})
 MISSING_TOKEN_MESSAGE = (
     "Authentication required: send the header Authorization: Bearer <project token>"
 )
@@ -163,7 +163,9 @@ class TokenCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=120)
-    scopes: list[str] = Field(default_factory=lambda: [GAP_SCOPE], min_length=1, max_length=3)
+    scopes: list[str] = Field(
+        default_factory=lambda: [GAP_SCOPE], min_length=1, max_length=len(VALID_SCOPES)
+    )
     expires_at: datetime | None = None
 
     @field_validator("name")

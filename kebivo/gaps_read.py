@@ -26,15 +26,17 @@ from kebivo.tokens import (
 SORTS = ("occurrences", "last_seen")
 MAX_LIMIT = 50
 DEFAULT_LIMIT = 20
+CURSOR_CHARS = 1024
 QUESTION_CHARS = 1000
 STATUS_QUERY = Query(default=[])
 
 
 class GapsQueryError(Exception):
-    def __init__(self, code: str, status: int) -> None:
+    def __init__(self, code: str, status: int, field: str | None = None) -> None:
         super().__init__(code)
         self.code = code
         self.status = status
+        self.field = field
 
 
 def check_gaps_read_rate_limit(app: Any, token_id: str | None) -> None:
@@ -67,17 +69,14 @@ def list_gaps(
     cursor: str | None = None,
 ) -> dict[str, Any]:
     if any(not isinstance(item, str) or item not in STATUSES for item in status or []):
-        raise GapsQueryError("validation_error", 422)
+        raise GapsQueryError("validation_error", 422, "status")
     statuses = sorted(set(status or ["open"]))
-    if (
-        not isinstance(sort, str)
-        or sort not in SORTS
-        or isinstance(limit, bool)
-        or not isinstance(limit, int)
-        or not 1 <= limit <= MAX_LIMIT
-        or (cursor is not None and not isinstance(cursor, str))
-    ):
-        raise GapsQueryError("validation_error", 422)
+    if not isinstance(sort, str) or sort not in SORTS:
+        raise GapsQueryError("validation_error", 422, "sort")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIMIT:
+        raise GapsQueryError("validation_error", 422, "limit")
+    if cursor is not None and (not isinstance(cursor, str) or len(cursor) > CURSOR_CHARS):
+        raise GapsQueryError("validation_error", 422, "cursor")
     filters = {"project_id": project_id, "status": statuses, "sort": sort}
     digest = hashlib.sha256(json.dumps(filters, sort_keys=True).encode()).hexdigest()
     order: list[tuple[Any, str]] = (
@@ -181,7 +180,7 @@ def install_gaps_read_routes(app: Any) -> None:
         status: list[str] = STATUS_QUERY,
         sort: str = "occurrences",
         limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
-        cursor: str | None = None,
+        cursor: str | None = Query(None, max_length=CURSOR_CHARS),
     ) -> Any:
         request.app.state.feedback_limiter.check(
             "ip", _peer_ip(request), request.app.state.settings.feedback_rate_limit_per_ip
@@ -200,8 +199,13 @@ def install_gaps_read_routes(app: Any) -> None:
                 db, principal.project_id, status=status, sort=sort, limit=limit, cursor=cursor
             )
         except GapsQueryError as exc:
+            fields = [{"field": exc.field, "code": "invalid", "message": "Invalid value"}]
             return error_response(
-                exc.status, exc.code, "Invalid gaps query", request.state.request_id
+                exc.status,
+                exc.code,
+                "Invalid gaps query",
+                request.state.request_id,
+                {"fields": fields} if exc.field else None,
             )
         record_gaps_read(
             db,

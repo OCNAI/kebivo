@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
+from kebivo.admin_groups import STATUSES
 from kebivo.auth import _peer_ip
 from kebivo.errors import error_response
 from kebivo.feedback.ingest import (
@@ -28,6 +29,7 @@ from kebivo.feedback.ingest import (
 )
 from kebivo.feedback.service import IdempotencyConflict
 from kebivo.gaps_read import (
+    CURSOR_CHARS,
     DEFAULT_LIMIT,
     MAX_LIMIT,
     SORTS,
@@ -51,6 +53,7 @@ from kebivo.tokens import (
 GAP = "report_knowledge_gap"
 CORRECTION = "submit_knowledge_correction"
 LIST_GAPS = "list_open_gaps"
+_TOOL_SCOPES = {GAP: GAP_SCOPE, CORRECTION: CORRECTION_SCOPE, LIST_GAPS: GAPS_READ_SCOPE}
 _LIST_FIELDS = ("status", "sort", "limit", "cursor")
 _FIELDS = {
     "question": 10000,
@@ -175,11 +178,8 @@ TOOLS = {
             "properties": {
                 "status": {
                     "type": "array",
-                    "maxItems": 4,
-                    "items": {
-                        "type": "string",
-                        "enum": ["open", "in_progress", "resolved", "dismissed"],
-                    },
+                    "maxItems": len(STATUSES),
+                    "items": {"type": "string", "enum": list(STATUSES)},
                     "description": "Group statuses to include. Default: open.",
                 },
                 "sort": {"type": "string", "enum": list(SORTS), "default": "occurrences"},
@@ -189,7 +189,7 @@ TOOLS = {
                     "maximum": MAX_LIMIT,
                     "default": DEFAULT_LIMIT,
                 },
-                "cursor": {"type": "string", "maxLength": 1024},
+                "cursor": {"type": "string", "maxLength": CURSOR_CHARS},
             },
             "additionalProperties": False,
         },
@@ -218,6 +218,24 @@ def _result(content: dict[str, Any], *, error: bool = False) -> types.CallToolRe
     )
 
 
+_MESSAGES = {"extra_forbidden": "Unknown field"}
+
+
+def _validation_error(fields: list[tuple[str | None, str]]) -> types.CallToolResult:
+    return _result(
+        {
+            "error": {
+                "code": "validation_error",
+                "fields": [
+                    {"field": field, "code": code, "message": _MESSAGES.get(code, "Invalid value")}
+                    for field, code in fields
+                ],
+            }
+        },
+        error=True,
+    )
+
+
 def _permissions(app: Any, principal: ProjectTokenPrincipal) -> Callable[[], set[str]]:
     def read() -> set[str]:
         with app.state.session_factory() as db:
@@ -235,11 +253,9 @@ def _permissions(app: Any, principal: ProjectTokenPrincipal) -> Callable[[], set
                 scopes = set(json.loads(token.scopes_json))
             except (TypeError, ValueError):
                 return set()
-            visible = {GAP} if GAP_SCOPE in scopes else set()
-            if CORRECTION_SCOPE in scopes and _corrections_enabled(project):
-                visible.add(CORRECTION)
-            if GAPS_READ_SCOPE in scopes:
-                visible.add(LIST_GAPS)
+            visible = {tool for tool, scope in _TOOL_SCOPES.items() if scope in scopes}
+            if not _corrections_enabled(project):
+                visible.discard(CORRECTION)
             return visible
 
     return read
@@ -297,18 +313,7 @@ def install_mcp_route(app: Any) -> Server[Any] | None:
     ) -> types.CallToolResult:
         extra = sorted(set(arguments) - set(_LIST_FIELDS))
         if extra:
-            return _result(
-                {
-                    "error": {
-                        "code": "validation_error",
-                        "fields": [
-                            {"field": field, "code": "extra_forbidden", "message": "Unknown field"}
-                            for field in extra
-                        ],
-                    }
-                },
-                error=True,
-            )
+            return _validation_error([(field, "extra_forbidden") for field in extra])
         try:
             check_gaps_read_rate_limit(app, principal.token_id)
         except HTTPException as exc:
@@ -319,6 +324,8 @@ def install_mcp_route(app: Any) -> Server[Any] | None:
         try:
             return _result(await run_in_threadpool(run_read, principal, arguments))
         except GapsQueryError as exc:
+            if exc.field:
+                return _validation_error([(exc.field, "invalid")])
             return _result({"error": {"code": exc.code}}, error=True)
         except Exception as exc:
             logging.getLogger("kebivo.mcp").error("mcp_tool_failed: %s", type(exc).__name__)
@@ -344,39 +351,14 @@ def install_mcp_route(app: Any) -> Server[Any] | None:
         permitted = _GAP_FIELDS if name == GAP else _CORRECTION_FIELDS
         extra = sorted(set(arguments) - set(permitted))
         if extra:
-            return _result(
-                {
-                    "error": {
-                        "code": "validation_error",
-                        "fields": [
-                            {"field": field, "code": "extra_forbidden", "message": "Unknown field"}
-                            for field in extra
-                        ],
-                    }
-                },
-                error=True,
-            )
+            return _validation_error([(field, "extra_forbidden") for field in extra])
         payload = {
             **arguments,
             "event_type": "knowledge_gap" if name == GAP else "knowledge_correction",
         }
         key = payload.pop("idempotency_key", None)
         if key is not None and not isinstance(key, str):
-            return _result(
-                {
-                    "error": {
-                        "code": "validation_error",
-                        "fields": [
-                            {
-                                "field": "idempotency_key",
-                                "code": "invalid",
-                                "message": "Invalid value",
-                            }
-                        ],
-                    }
-                },
-                error=True,
-            )
+            return _validation_error([("idempotency_key", "invalid")])
         try:
             result = await ingest(
                 app.state.session_factory,
@@ -389,31 +371,17 @@ def install_mcp_route(app: Any) -> Server[Any] | None:
                 client_ip=ctx.request.client.host if ctx.request.client else "unknown",
             )
         except InvalidSubmission as exc:
-            fields = [
-                {
-                    "field": str(item["loc"][0]) if item.get("loc") else None,
-                    "code": str(item.get("type", "invalid")),
-                    "message": "Invalid value",
-                }
-                for item in exc.fields
-            ]
-            return _result({"error": {"code": "validation_error", "fields": fields}}, error=True)
-        except InvalidIdempotencyKey:
-            return _result(
-                {
-                    "error": {
-                        "code": "validation_error",
-                        "fields": [
-                            {
-                                "field": "idempotency_key",
-                                "code": "invalid",
-                                "message": "Invalid value",
-                            }
-                        ],
-                    }
-                },
-                error=True,
+            return _validation_error(
+                [
+                    (
+                        str(item["loc"][0]) if item.get("loc") else None,
+                        str(item.get("type", "invalid")),
+                    )
+                    for item in exc.fields
+                ]
             )
+        except InvalidIdempotencyKey:
+            return _validation_error([("idempotency_key", "invalid")])
         except NotAuthorized:
             raise MCPError(code=-32602, message=f"Unknown tool: {name}") from None
         except IdempotencyConflict:

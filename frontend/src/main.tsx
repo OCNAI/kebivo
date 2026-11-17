@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import projectConfig from '../../config/project.json';
 import { ApiError, apiRequest, setCsrfToken } from './api';
+import { TOKEN_SCOPES } from './scopes';
 import './style.css';
 import { Inbox } from './Inbox';
 import { Destinations } from './Destinations';
@@ -172,10 +173,10 @@ export function App() {
   async function createToken(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!selected) return;
     const data = new FormData(event.currentTarget);
-    const scopes = [...(data.get('gap-scope') === 'on' ? ['feedback:gap'] : []), ...(data.get('correction-scope') === 'on' ? ['feedback:correction'] : []), ...(data.get('read-scope') === 'on' ? ['gaps:read'] : [])];
+    const scopes: string[] = [...(data.get('gap-scope') === 'on' ? [TOKEN_SCOPES.gap] : []), ...(data.get('correction-scope') === 'on' ? [TOKEN_SCOPES.correction] : []), ...(data.get('read-scope') === 'on' ? [TOKEN_SCOPES.gapsRead] : [])];
     setError(''); setNotice(''); setTokenFormError('');
     if (!scopes.length) { setTokenFormError('Choose at least one scope.'); return; }
-    if (scopes.includes('feedback:correction') && !scopes.includes('feedback:gap')) { setTokenFormError('feedback:correction needs feedback:gap.'); return; }
+    if (scopes.includes(TOKEN_SCOPES.correction) && !scopes.includes(TOKEN_SCOPES.gap)) { setTokenFormError(`${TOKEN_SCOPES.correction} needs ${TOKEN_SCOPES.gap}.`); return; }
     const form = event.currentTarget;
     await run(() => apiRequest<CreatedToken>(`projects/${selected.id}/tokens`, { method: 'POST', body: JSON.stringify({ name: data.get('token-name'), scopes }) }), async (token) => {
       setCreatedToken(token); setNotice('Token created. Copy it now; it cannot be shown again.');
@@ -239,9 +240,9 @@ export function App() {
               {createdToken && <div className="secret-reveal" role="alert"><strong>Copy this token now</strong><p>This secret is shown once. Store it securely; it cannot be retrieved later.</p><label htmlFor="new-token">New token</label><div className="copy-row"><input id="new-token" readOnly value={createdToken.token} onFocus={(e) => e.currentTarget.select()} /><button type="button" className="quiet-button" onClick={() => void navigator.clipboard?.writeText(createdToken.token).then(() => setNotice('Token copied to clipboard.')).catch(() => setNotice('Select and copy the token manually.'))}>Copy token</button></div><button className="quiet-button dismiss-button" onClick={() => setCreatedToken(null)}>I have saved it</button></div>}
               {!selected.archived_at && <form className="token-form" onSubmit={createToken}>
                 <div className="form-row"><div><label htmlFor="token-name">Token name</label><input id="token-name" name="token-name" maxLength={120} placeholder="Production integration" required /></div><button disabled={busy}>Create token</button></div>
-                <label className="checkbox-row"><input name="gap-scope" type="checkbox" defaultChecked onChange={(event) => setShowGapReadWarning(hasGapReadScopes(event.currentTarget.form))} /> Grant <code>feedback:gap</code><span className="subtle"> (report gaps; turn off for a read-only token)</span></label>
-                <label className="checkbox-row"><input name="correction-scope" type="checkbox" disabled={!selected.settings.corrections?.enabled} /> Grant <code>feedback:correction</code>{!selected.settings.corrections?.enabled && <span className="subtle"> (enable project correction policy first)</span>}</label>
-                <label className="checkbox-row"><input name="read-scope" type="checkbox" onChange={(event) => setShowGapReadWarning(hasGapReadScopes(event.currentTarget.form))} /> Grant <code>gaps:read</code><span className="subtle"> (lets this token read the project's gap questions, counts, dates, tags and status; keep it off tokens your assistant uses)</span></label>
+                <label className="checkbox-row"><input name="gap-scope" type="checkbox" defaultChecked onChange={(event) => setShowGapReadWarning(hasGapReadScopes(event.currentTarget.form))} /> Grant <code>{TOKEN_SCOPES.gap}</code><span className="subtle"> (report gaps; turn off for a read-only token)</span></label>
+                <label className="checkbox-row"><input name="correction-scope" type="checkbox" disabled={!selected.settings.corrections?.enabled} /> Grant <code>{TOKEN_SCOPES.correction}</code>{!selected.settings.corrections?.enabled && <span className="subtle"> (enable project correction policy first)</span>}</label>
+                <label className="checkbox-row"><input name="read-scope" type="checkbox" onChange={(event) => setShowGapReadWarning(hasGapReadScopes(event.currentTarget.form))} /> Grant <code>{TOKEN_SCOPES.gapsRead}</code><span className="subtle"> (lets this token read the project's gap questions, counts, dates, tags and status; keep it off tokens your assistant uses)</span></label>
                 {showGapReadWarning && <p className="inline-note" role="status">This token can report and read gaps. Use separate tokens.</p>}
                 {tokenFormError && <p className="error-message" role="alert">{tokenFormError}</p>}
               </form>}
