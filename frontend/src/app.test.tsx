@@ -279,15 +279,43 @@ describe('authenticated dashboard', () => {
     await submit();
     expect(created).toEqual([{ name: 'Nightly report', scopes: ['gaps:read'] }]);
   });
+  it('warns only while both gap reporting and gap reading are selected', async () => {
+    await renderTokenForm();
+    const gap = container.querySelector<HTMLInputElement>('input[name="gap-scope"]')!;
+    const read = container.querySelector<HTMLInputElement>('input[name="read-scope"]')!;
+    const warning = () => container.querySelector('.token-form [role="status"]');
+    expect(warning()).toBeNull();
+    await act(async () => { read.click(); });
+    expect(warning()?.textContent).toBe('This token can report and read gaps. Use separate tokens.');
+    await act(async () => { gap.click(); });
+    expect(warning()).toBeNull();
+    await act(async () => { gap.click(); });
+    expect(warning()).not.toBeNull();
+    await act(async () => { read.click(); });
+    expect(warning()).toBeNull();
+  });
   it('blocks token creation without a scope or with feedback:correction alone', async () => {
     const { created, check, submit } = await renderTokenForm();
     check('gap-scope', false);
     await submit();
     expect(container.textContent).toContain('Choose at least one scope.');
+    expect(container.querySelector('.token-form [role="alert"]')?.textContent).toBe('Choose at least one scope.');
+    expect(container.querySelector('.dashboard > [role="alert"]')).toBeNull();
     check('correction-scope', true);
     await submit();
     expect(container.textContent).toContain('feedback:correction needs feedback:gap.');
+    expect(container.querySelector('.token-form [role="alert"]')?.textContent).toBe('feedback:correction needs feedback:gap.');
     expect(created).toEqual([]);
+  });
+  it('clears the created notice when a token scope guard error appears', async () => {
+    const { check, submit } = await renderTokenForm();
+    await submit();
+    expect(container.querySelector('.notice')?.textContent).toContain('Token created.');
+    check('gap-scope', false);
+    check('read-scope', false);
+    await submit();
+    expect(container.querySelector('.notice')?.textContent).toBe('');
+    expect(container.querySelector('.token-form [role="alert"]')?.textContent).toBe('Choose at least one scope.');
   });
   it('preserves semantic deduplication when editing project details', async () => {
     const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null, settings: { corrections: { enabled: false }, deduplication: { mode: 'semantic' as const, privacy_acknowledged: true, semantic: { method: 'judge' as const, provider_id: 'provider-1', model: 'gpt-test', candidate_count: 4 } } }, tags: [], created_at: '', updated_at: '' };

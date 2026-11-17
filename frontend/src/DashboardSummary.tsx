@@ -4,7 +4,36 @@ import { GroupTable } from './Inbox';
 import { SampleBadge } from './FirstRun';
 
 type Summary = { total_groups: number; total_events: number; groups_by_status: Record<string, number>; failed_deliveries_last_24h: number; last_7d_from?: string; resolved_last_7d?: number; reopened_last_7d?: number; top_open_gaps: React.ComponentProps<typeof GroupTable>['items'] };
-export function FirstRunChecklist({projects,navigate}:{projects:{id:string;name:string}[];navigate:(url:string)=>void}){const [hasEvents,setHasEvents]=React.useState<boolean|null>(null);const [hasToken,setHasToken]=React.useState(false);React.useEffect(()=>{let active=true;apiRequest<Summary>('admin/groups/summary').then(s=>{if(active)setHasEvents(s.total_events>0)}).catch(()=>{if(active)setHasEvents(false)});if(projects[0])apiRequest<{items:unknown[]}>(`projects/${projects[0].id}/tokens`).then(r=>{if(active)setHasToken(r.items.length>0)}).catch(()=>{});return()=>{active=false}},[projects]);if(hasEvents!==false)return null;return <section className="panel first-run" aria-labelledby="first-run-title"><div className="eyebrow">FIRST RUN</div><h2 id="first-run-title">Get your first event in</h2><p>Four steps, about two minutes.</p><ol><li><span className="sr-only">{projects.length?'Done: ':'To do: '}</span>{projects.length?'Create a project':'Create a project'}{!projects.length&&<button className="text-button" onClick={()=>document.querySelector<HTMLButtonElement>('.project-panel .panel-heading button')?.click()}>Create project</button>}</li><li><span className="sr-only">{hasToken?'Done: ':'To do: '}</span>Create a token{!hasToken&&projects[0]&&<button className="text-button" onClick={()=>navigate(`/?project=${encodeURIComponent(projects[0].id)}`)}>Open project settings</button>}</li><li><span className="sr-only">To do: </span>Send a test event — <button className="text-button" onClick={()=>navigate(`/?project=${encodeURIComponent(projects[0]?.id??'')}`)}>Copy the REST example from the project page</button></li><li><span className="sr-only">To do: </span>See it in the inbox — <button className="text-button" onClick={()=>navigate('/inbox')}>Open group inbox</button></li></ol></section>}
+export function FirstRunChecklist({ projects, navigate }: { projects: { id: string; name: string }[]; navigate: (url: string) => void }) {
+  const [hasEvents, setHasEvents] = React.useState<boolean | null>(null);
+  const [hasToken, setHasToken] = React.useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+    apiRequest<Summary>('admin/groups/summary')
+      .then(summary => { if (active) setHasEvents(summary.total_events > 0); })
+      .catch(() => { if (active) setHasEvents(false); });
+    if (projects[0]) {
+      apiRequest<{ items: unknown[] }>(`projects/${projects[0].id}/tokens`)
+        .then(result => { if (active) setHasToken(result.items.length > 0); })
+        .catch(() => {});
+    }
+    return () => { active = false; };
+  }, [projects]);
+
+  if (hasEvents !== false) return null;
+  return <section className="panel first-run" aria-labelledby="first-run-title">
+    <div className="eyebrow">FIRST RUN</div>
+    <h2 id="first-run-title">Get your first event in</h2>
+    <p>Four steps, about two minutes.</p>
+    <ol>
+      <li><span className="sr-only">{projects.length ? 'Done: ' : 'To do: '}</span>Create a project{!projects.length && <button className="text-button" onClick={() => document.querySelector<HTMLButtonElement>('.project-panel .panel-heading button')?.click()}>Create project</button>}</li>
+      <li><span className="sr-only">{hasToken ? 'Done: ' : 'To do: '}</span>Create a token{!hasToken && projects[0] && <button className="text-button" onClick={() => navigate(`/?project=${encodeURIComponent(projects[0].id)}`)}>Open project settings</button>}</li>
+      <li><span className="sr-only">To do: </span>Send a test event — <button className="text-button" onClick={() => navigate(`/?project=${encodeURIComponent(projects[0]?.id ?? '')}`)}>Copy the REST example from the project page</button></li>
+      <li><span className="sr-only">To do: </span>See it in the inbox — <button className="text-button" onClick={() => navigate('/inbox')}>Open group inbox</button></li>
+    </ol>
+  </section>;
+}
 export function DashboardSummary({ navigate }: { navigate: (url: string) => void }) {
   const [summary, setSummary] = React.useState<Summary | null>(null);
   const [error, setError] = React.useState('');

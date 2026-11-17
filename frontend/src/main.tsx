@@ -36,6 +36,12 @@ function apiErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 }
 
+function hasGapReadScopes(form: HTMLFormElement | null) {
+  const reads = form?.elements.namedItem('read-scope') as HTMLInputElement | null;
+  const reports = form?.elements.namedItem('gap-scope') as HTMLInputElement | null;
+  return Boolean(reads?.checked && reports?.checked);
+}
+
 function LegacyEventLink({ eventId, navigate }: { eventId: string; navigate: (url: string) => void }) {
   React.useEffect(() => { let active = true; apiRequest<{ group: { id: string } | null }>(`admin/feedback/${encodeURIComponent(eventId)}`).then(event => { if (active && event.group) navigate(`/inbox/groups/${event.group.id}?highlight=${encodeURIComponent(eventId)}`); }).catch(() => { if (active) navigate('/inbox'); }); return () => { active = false; }; }, [eventId, navigate]);
   return <main className="center"><p role="status">Opening feedback group…</p></main>;
@@ -57,6 +63,8 @@ export function App() {
   const setSelectedProject = React.useCallback((project: Project | null) => { selectedRef.current = project; setSelected(project); }, []);
   const [tokens, setTokens] = React.useState<Token[]>([]);
   const [createdToken, setCreatedToken] = React.useState<CreatedToken | null>(null);
+  const [tokenFormError, setTokenFormError] = React.useState('');
+  const [showGapReadWarning, setShowGapReadWarning] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
   const [notice, setNotice] = React.useState('');
@@ -84,7 +92,7 @@ export function App() {
   }, [setSelectedProject]);
   React.useEffect(() => { const refresh = () => { void refreshProjects(showArchived).catch((e: unknown) => setError(apiErrorMessage(e))); }; addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshProjects, showArchived]);
   const selectProject = React.useCallback(async (project: Project) => {
-    setError(''); setNotice(''); setCreatedToken(null); setEditing(false);
+    setError(''); setNotice(''); setCreatedToken(null); setTokenFormError(''); setShowGapReadWarning(false); setEditing(false);
     setSelectedProject(project);
     try {
       const fresh = await apiRequest<Project>(`projects/${project.id}`);
@@ -165,13 +173,14 @@ export function App() {
     event.preventDefault(); if (!selected) return;
     const data = new FormData(event.currentTarget);
     const scopes = [...(data.get('gap-scope') === 'on' ? ['feedback:gap'] : []), ...(data.get('correction-scope') === 'on' ? ['feedback:correction'] : []), ...(data.get('read-scope') === 'on' ? ['gaps:read'] : [])];
-    if (!scopes.length) { setError('Choose at least one scope.'); return; }
-    if (scopes.includes('feedback:correction') && !scopes.includes('feedback:gap')) { setError('feedback:correction needs feedback:gap.'); return; }
+    setError(''); setNotice(''); setTokenFormError('');
+    if (!scopes.length) { setTokenFormError('Choose at least one scope.'); return; }
+    if (scopes.includes('feedback:correction') && !scopes.includes('feedback:gap')) { setTokenFormError('feedback:correction needs feedback:gap.'); return; }
     const form = event.currentTarget;
     await run(() => apiRequest<CreatedToken>(`projects/${selected.id}/tokens`, { method: 'POST', body: JSON.stringify({ name: data.get('token-name'), scopes }) }), async (token) => {
       setCreatedToken(token); setNotice('Token created. Copy it now; it cannot be shown again.');
       const result = await apiRequest<{ items: Token[] }>(`projects/${selected.id}/tokens`); setTokens(result.items);
-      form.reset();
+      form.reset(); setShowGapReadWarning(false);
     });
   }
 
@@ -228,7 +237,14 @@ export function App() {
             </section>
             {selected.is_sample ? <section className="panel"><p>Sample projects can't have tokens or receive events. Create your own project to connect an app.</p><button onClick={() => { setSelectedProject(null); setEditing(true); }}>Create a project</button></section> : <><section className="panel" aria-labelledby="tokens-title"><div className="panel-heading"><div><div className="eyebrow">CREDENTIALS</div><h2 id="tokens-title">Project tokens</h2></div></div>
               {createdToken && <div className="secret-reveal" role="alert"><strong>Copy this token now</strong><p>This secret is shown once. Store it securely; it cannot be retrieved later.</p><label htmlFor="new-token">New token</label><div className="copy-row"><input id="new-token" readOnly value={createdToken.token} onFocus={(e) => e.currentTarget.select()} /><button type="button" className="quiet-button" onClick={() => void navigator.clipboard?.writeText(createdToken.token).then(() => setNotice('Token copied to clipboard.')).catch(() => setNotice('Select and copy the token manually.'))}>Copy token</button></div><button className="quiet-button dismiss-button" onClick={() => setCreatedToken(null)}>I have saved it</button></div>}
-              {!selected.archived_at && <form className="token-form" onSubmit={createToken}><div className="form-row"><div><label htmlFor="token-name">Token name</label><input id="token-name" name="token-name" maxLength={120} placeholder="Production integration" required /></div><button disabled={busy}>Create token</button></div><label className="checkbox-row"><input name="gap-scope" type="checkbox" defaultChecked /> Grant <code>feedback:gap</code><span className="subtle"> (report gaps; turn off for a read-only token)</span></label><label className="checkbox-row"><input name="correction-scope" type="checkbox" disabled={!selected.settings.corrections?.enabled} /> Grant <code>feedback:correction</code>{!selected.settings.corrections?.enabled && <span className="subtle"> (enable project correction policy first)</span>}</label><label className="checkbox-row"><input name="read-scope" type="checkbox" /> Grant <code>gaps:read</code><span className="subtle"> (lets this token read the project's gap questions, counts, dates, tags and status; keep it off tokens your assistant uses)</span></label></form>}
+              {!selected.archived_at && <form className="token-form" onSubmit={createToken}>
+                <div className="form-row"><div><label htmlFor="token-name">Token name</label><input id="token-name" name="token-name" maxLength={120} placeholder="Production integration" required /></div><button disabled={busy}>Create token</button></div>
+                <label className="checkbox-row"><input name="gap-scope" type="checkbox" defaultChecked onChange={(event) => setShowGapReadWarning(hasGapReadScopes(event.currentTarget.form))} /> Grant <code>feedback:gap</code><span className="subtle"> (report gaps; turn off for a read-only token)</span></label>
+                <label className="checkbox-row"><input name="correction-scope" type="checkbox" disabled={!selected.settings.corrections?.enabled} /> Grant <code>feedback:correction</code>{!selected.settings.corrections?.enabled && <span className="subtle"> (enable project correction policy first)</span>}</label>
+                <label className="checkbox-row"><input name="read-scope" type="checkbox" onChange={(event) => setShowGapReadWarning(hasGapReadScopes(event.currentTarget.form))} /> Grant <code>gaps:read</code><span className="subtle"> (lets this token read the project's gap questions, counts, dates, tags and status; keep it off tokens your assistant uses)</span></label>
+                {showGapReadWarning && <p className="inline-note" role="status">This token can report and read gaps. Use separate tokens.</p>}
+                {tokenFormError && <p className="error-message" role="alert">{tokenFormError}</p>}
+              </form>}
               {tokens.length === 0 ? <div className="empty-inline">No tokens have been issued for this project.</div> : <div className="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Scopes</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{tokens.map((token) => <tr key={token.id} className={token.revoked_at ? 'revoked-row' : ''}><th scope="row">{token.name}<small>{token.prefix}… {token.revoked_at ? ' · Revoked' : ''}</small></th><td>{token.scopes.map((scope) => <code className="scope-chip" key={scope}>{scope}</code>)}</td><td>{date(token.created_at)}</td><td>{date(token.last_used_at)}</td><td>{!token.revoked_at && <button className="text-button" disabled={busy || Boolean(selected.archived_at)} onClick={() => void revokeToken(token)}>Revoke</button>}</td></tr>)}</tbody></table></div>}
             </section>
               <ConnectPanel correctionsEnabled={Boolean(selected.settings.corrections?.enabled)} archived={Boolean(selected.archived_at)} projectId={selected.id} /></>}
