@@ -21,6 +21,7 @@ from kebivo.models import (
     Tag,
 )
 from kebivo.tests.test_feedback_submission import setup
+from kebivo.tests.test_tokens import create_project, issue_token
 
 
 def seeded(
@@ -189,6 +190,30 @@ def test_summary_aggregates_counts_and_limits_top_gaps(tmp_path: Path) -> None:
     assert [item["id"] for item in summary["top_open_gaps"]] == [
         ids[index][0] for index in (8, 6, 4, 2, 0)
     ]
+    app.state.engine.dispose()
+
+
+def test_unscoped_summary_includes_other_projects(tmp_path: Path) -> None:
+    client, app, project, _ = seeded(tmp_path)
+    other = create_project(client, "another-project")
+    token = issue_token(client, other["id"], "other-project-token").json()["token"]
+    accepted = client.post(
+        "/api/v1/feedback",
+        json={"event_type": "knowledge_gap", "question": "A question in another project"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert accepted.status_code == 202, accepted.text
+
+    all_projects = client.get("/api/v1/admin/groups/summary").json()
+    first_project = client.get(
+        "/api/v1/admin/groups/summary", params={"project_id": project["id"]}
+    ).json()
+    other_project = client.get(
+        "/api/v1/admin/groups/summary", params={"project_id": other["id"]}
+    ).json()
+    assert (all_projects["total_groups"], all_projects["total_events"]) == (10, 10)
+    assert (first_project["total_groups"], first_project["total_events"]) == (9, 9)
+    assert (other_project["total_groups"], other_project["total_events"]) == (1, 1)
     app.state.engine.dispose()
 
 
