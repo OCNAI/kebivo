@@ -253,6 +253,42 @@ describe('authenticated dashboard', () => {
     expect(container.textContent).toContain('feedback:correction');
     expect(container.textContent).toContain('project policy above controls');
   });
+  async function renderTokenForm() {
+    const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null, settings: { corrections: { enabled: true }, deduplication: { mode: 'exact' as const } }, tags: [], created_at: '', updated_at: '' };
+    const created: { scopes: string[] }[] = [];
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const path = String(input);
+      if (path.endsWith('/tokens') && init?.method === 'POST') { created.push(JSON.parse(String(init.body))); return new Response(JSON.stringify({ id: 't1', token: 'kebivo_pt_x', scopes: ['gaps:read'] }), { status: 201 }); }
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }), { status: 200 });
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [project], next_cursor: null }), { status: 200 });
+      if (path.endsWith('/projects/p1')) return new Response(JSON.stringify(project), { status: 200 });
+      if (path.endsWith('/tokens')) return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      return new Response('{}', { status: 200 });
+    }) as typeof fetch;
+    await act(async () => { root.render(<App />); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.project-choice')?.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    container.querySelector<HTMLInputElement>('#token-name')!.value = 'Nightly report';
+    const check = (name: string, checked: boolean) => { container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!.checked = checked; };
+    const submit = () => act(async () => { container.querySelector<HTMLFormElement>('.token-form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    return { created, check, submit };
+  }
+  it('creates a gaps:read-only token when feedback:gap is turned off', async () => {
+    const { created, check, submit } = await renderTokenForm();
+    expect(container.querySelector<HTMLInputElement>('input[name="gap-scope"]')!.checked).toBe(true);
+    check('gap-scope', false); check('read-scope', true);
+    await submit();
+    expect(created).toEqual([{ name: 'Nightly report', scopes: ['gaps:read'] }]);
+  });
+  it('blocks token creation without a scope or with feedback:correction alone', async () => {
+    const { created, check, submit } = await renderTokenForm();
+    check('gap-scope', false);
+    await submit();
+    expect(container.textContent).toContain('Choose at least one scope.');
+    check('correction-scope', true);
+    await submit();
+    expect(container.textContent).toContain('feedback:correction needs feedback:gap.');
+    expect(created).toEqual([]);
+  });
   it('preserves semantic deduplication when editing project details', async () => {
     const project = { id: 'p1', name: 'Support', slug: 'support', description: null, is_active: true, archived_at: null, settings: { corrections: { enabled: false }, deduplication: { mode: 'semantic' as const, privacy_acknowledged: true, semantic: { method: 'judge' as const, provider_id: 'provider-1', model: 'gpt-test', candidate_count: 4 } } }, tags: [], created_at: '', updated_at: '' };
     const writes: Record<string, unknown>[] = [];

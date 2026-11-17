@@ -157,7 +157,7 @@ Each item has only the fields shown: the group's representative question (up to 
 
 The questions are text your end users typed, and can include names, email addresses or other personal details. Treat a `gaps:read` token like a database read credential:
 
-- Create a separate token for reading. Never grant `gaps:read` to the token your assistant or app uses to report gaps. The API accepts a token with only `gaps:read`; the admin UI adds it to a `feedback:gap` token.
+- Create a separate token for reading. Never grant `gaps:read` to the token your assistant or app uses to report gaps. In the admin UI, turn off `feedback:gap` and turn on `gaps:read`.
 - Keep it in a secret store and out of public CI logs.
 - Revoke it as soon as it is no longer needed. Revocation takes effect on the next request.
 

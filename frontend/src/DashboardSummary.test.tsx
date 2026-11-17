@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { DashboardSummary } from './DashboardSummary';
+import { DashboardSummary, FirstRunChecklist } from './DashboardSummary';
 import { FirstRunEmpty, FirstRunProvider } from './FirstRun';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -85,5 +85,21 @@ describe('Dashboard delivery failure link', () => {
     expect(container.textContent).toContain('Load sample data');
     await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Connect your own app')!.click(); });
     expect(navigate).toHaveBeenCalledWith('/?project=p1');
+  });
+  it('labels the summary as covering all projects and requests it unscoped', async () => {
+    await act(async () => {
+      root.render(<DashboardSummary navigate={() => {}} />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toBe('/api/v1/admin/groups/summary');
+    expect(container.textContent).toContain('Across all projects.');
+  });
+  it('keeps the first-run checklist when the summary request fails', async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ detail: 'unavailable' }), { status: 503 })) as typeof fetch;
+    await act(async () => {
+      root.render(<FirstRunChecklist projects={[]} navigate={() => {}} />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(container.textContent).toContain('Get your first event in');
   });
 });
