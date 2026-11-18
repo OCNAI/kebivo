@@ -6,15 +6,17 @@
 - After you resolve a group, the inbox and group page show "Resolved 3 days ago, no new occurrences since". If the question comes back, the group shows a **Reopened** chip with how many new occurrences arrived since you resolved it. The inbox has a **Reopened** filter, and the dashboard counts groups resolved and reopened in the last 7 days, each linking to the filtered inbox.
 - Choosing **Resolved** on a group offers an optional "What did you change?" note, shown beside the resolved or reopened chip. Skipping it still resolves the group.
 - The grouping hint and the "Report from your own app" guide now say that only identical wording is grouped by default, and that connecting your bot's model as the LLM judge groups paraphrases.
-
-## Unreleased
-
 - New delivery mode: a weekly digest. A webhook, Slack or email destination can send one message a week, on a day and hour you choose, with the top five open groups by occurrences, each with a link, plus how many groups were resolved and reopened. A week with nothing to report sends nothing, and a digest missed while Kebivo was down is sent once on the next start. After an outage that spans several weeks, one digest covers the whole missed period, up to 28 days. It uses the same retries, signing and delivery log as other deliveries. See [weekly digest](docs/destinations.md#weekly-digest).
-- A fresh `docker run` with a named volume now generates keys in `/data/kebivo-secrets.env` and prints a one-time administrator setup link. Setup can load labelled, removable sample data. Database-only backups exclude the key file; save the matching keys separately before a restore. See [key custody](docs/self-hosting.md#secrets-and-what-to-protect).
 
 ### Upgrade
 
 On start, migration `0019` rebuilds the `destinations`, `routing_matches` and `deliveries` tables to allow the new mode. Existing rows are kept. Back up first; an older image will not start on a database that has this migration.
+
+## Unreleased
+
+- A fresh `docker run` with a named volume now generates keys in `/data/kebivo-secrets.env` and prints a one-time administrator setup link. Setup can load labelled, removable sample data. Database-only backups exclude the key file; save the matching keys separately before a restore. See [key custody](docs/self-hosting.md#secrets-and-what-to-protect).
+
+### Upgrade
 
 If `ALLOWED_ORIGINS` is empty, an existing installation now accepts browser login from an HTTP loopback origin when its host and port match the request `Host`. Previously, empty refused all browser login. A valid administrator password is still required. Set `ALLOWED_ORIGINS` for proxy or public access; other origins remain refused. With it empty, the origin check stops other websites, not other hosts, so keep the port bound to `127.0.0.1`.
 
