@@ -37,7 +37,7 @@ audit:
 	uv export --locked --no-dev --no-emit-project --format requirements-txt --output-file /tmp/kebivo-python-requirements.txt
 	uv run --with pip-audit==2.9.0 pip-audit --disable-pip -r /tmp/kebivo-python-requirements.txt
 	cd frontend && npm audit --omit=dev --audit-level=high
-	cd frontend && npm audit --audit-level=critical
+	cd frontend && npm audit --json | uv run python ../scripts/npm-audit-gate.py
 
 smoke:
 	bash scripts/container-smoke.sh
