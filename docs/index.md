@@ -1,5 +1,5 @@
 ---
-title: Documentation
+title: "Kebivo docs: self-hosted inbox for questions your chatbot couldn't answer"
 description: "Your chatbot app reports each question it couldn't answer over REST or MCP. Kebivo groups repeats and routes them to whoever fixes the docs. Self-hosted, no signup."
 ---
 

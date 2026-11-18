@@ -1,11 +1,13 @@
 ---
-title: Collect AI knowledge gaps with the REST API
-description: Send AI agent knowledge gaps and proposed corrections to Kebivo over REST. Learn project token authentication, idempotency, retries and response codes.
+title: Report unanswered chatbot questions with the REST API
+description: From your chatbot's no-answer branch, send missed questions to Kebivo over REST. Learn project tokens, idempotency, retries and response codes.
 ---
 
 # REST integration guide
 
 Send knowledge gaps and corrections with `POST /api/v1/feedback`. Your application decides when to report, so REST can collect every gap you choose to record. For reports initiated by an agent, see the [MCP guide](mcp.md).
+
+For a small fallback you can adapt to your chatbot, see [Report from your own app](report-from-your-app.md).
 
 The examples below assume Kebivo runs at `http://127.0.0.1:8000` (see the [quickstart](../README.md#quickstart)). Use your HTTPS URL in production.
 
