@@ -47,6 +47,8 @@ curl -i http://127.0.0.1:8000/api/v1/feedback \
 
 Both responses are `202 Accepted` with distinct `event_id` values. Open <http://127.0.0.1:8000/>, sign in, and find **Do you ship to Canada?** in the Inbox with **2 occurrences**. Use exactly `127.0.0.1`: `localhost` is a different origin, and sign-in names the allowed origin if you use the wrong one. You can also create projects and tokens in the UI.
 
+To report unanswered questions from your own chatbot, see [Report from your own app](report-from-your-app.md).
+
 **4. Route shipping questions to a signed local webhook.** This stands in for the person who owns the shipping docs. Run steps 4 and 5 in the same terminal as step 2: they ask for the administrator password again and reuse `KEBIVO_PROJECT_ID` and `KEBIVO_TOKEN`. The destination returns its signing secret once; keep it private. `allow_private_network: true` lets this destination reach private addresses, so use it only for a trusted receiver.
 
 ```sh
