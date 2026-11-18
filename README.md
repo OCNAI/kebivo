@@ -7,7 +7,7 @@
 
 # Kebivo: the inbox for questions your AI couldn't answer
 
-Your AI app reports each question it couldn't answer; Kebivo groups the repeats and routes them to whoever can fix the docs.
+For developers who built their own support or docs chatbot. Your app reports each question the bot couldn't answer, over REST or MCP. Kebivo groups the repeats and routes them to whoever can fix the docs. It runs in one container on your own server, with no signup.
 
 ![Demo: a customer asks a shop's AI support chatbot, "Do you ship to Canada?" The bot cannot answer. The app reports the question to Kebivo over MCP; a configured webhook route delivers it. A second report joins one inbox group with 2 occurrences. Product frames use sample data from a real Kebivo container.](docs/assets/demo.gif)
 
@@ -37,11 +37,12 @@ Continue with the [Quickstart](#quickstart) to report a question. The full docum
 
 ## Why
 
-When an assistant cannot answer, the documentation owner may never see the question. The same question can fail again, and corrections offered in chat may never reach the people who maintain the content. Kebivo collects those knowledge gaps in one place, where owners can triage and route them to the tools they use.
+When an assistant cannot answer, the documentation owner may never see the question. The same question can fail again, and corrections offered in chat may never reach the people who maintain the content. Kebivo collects those knowledge gaps in one place, where owners can triage and route them to the tools they use. When you fix the docs and resolve the group, Kebivo shows whether the question stayed quiet or came back.
 
 ## When to use Kebivo
 
 - Your assistant, chatbot or RAG app can identify an unanswered question and report it over REST or MCP.
+- You want to know whether a docs fix worked: a resolved question that comes back reopens, with a count of the new occurrences.
 - The same questions recur, and content owners need a grouped count and inbox to prioritize them.
 - Different teams own different topics, so you need to route reports by project or tags to Slack, email or signed webhooks.
 - Users suggest corrections (an opt-in setting, off by default), and a person must review them before anyone changes the knowledge source.
@@ -55,6 +56,9 @@ When an assistant cannot answer, the documentation owner may never see the quest
 - Deliver to signed webhooks with a versioned JSON payload, Slack incoming webhooks, SMTP email, or the built-in inbox. Deliveries have durable retries with backoff, restart recovery, a delivery log and manual retry.
 - Questions that match exactly, ignoring case, extra whitespace, quote and dash styles, and trailing `?`, `!` or `.`, are grouped automatically. Per project, you can opt in to an LLM judge that groups paraphrases (OpenAI-compatible, Azure OpenAI or local providers such as Ollama and LM Studio) or to embeddings that group near-identical rewordings (Ollama or an OpenAI-compatible `/embeddings` endpoint). Both are off by default.
 - Triage reports in the inbox with search, filters, statuses, notes, tags, merge, split and deletion. Each group has a full history.
+- After you resolve a group, the inbox shows whether it stayed quiet or came back (**Reopened**, with the occurrences since). An optional note records what you changed, and the dashboard counts groups resolved and reopened in the last 7 days.
+- Any webhook, Slack or email destination can send a weekly digest instead of separate messages: the top five open groups and how many were resolved and reopened. A week with nothing to report sends nothing.
+- A separate read-only `gaps:read` token can list open gaps over REST (`GET /api/v1/groups`) or the MCP tool `list_open_gaps`. It returns only the question, count, dates, tags and status.
 - Run one container with one SQLite file. Startup migrations, online backup and checked restore, retention (on by default), JSON Lines export, and health checks are included.
 
 ## Screenshots
@@ -104,6 +108,8 @@ curl -i http://127.0.0.1:8000/api/v1/feedback \
 
 Both responses are `202 Accepted` with distinct `event_id` values. Find **Do you ship to Canada?** from your **Shop assistant** project in the Inbox with **2 occurrences**. The row with 7 occurrences is labelled **Sample** and stays separate.
 
+To report misses from your own chatbot, follow [Report from your own app](docs/report-from-your-app.md).
+
 **If this fails:** A `401` means the project token is missing or invalid; create a new token in **Projects** and retry. If Docker says port 8000 is already allocated, change the first `8000` in `-p 127.0.0.1:8000:8000` to an unused host port and use that port in the URLs. For Compose, set `APP_PORT` in `.env` (see [network and access](docs/self-hosting.md#network-and-access)). If the setup link has expired and no administrator exists yet, restart the container and open the new link printed in its log.
 
 If this was useful, a [GitHub star](https://github.com/OCNAI/kebivo) helps other people find Kebivo.
@@ -135,9 +141,9 @@ curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/he
 
 To stop the published image from another terminal: `docker stop kebivo` (data stays in the volume). To stop a Compose build: `docker compose down` (data is kept). `docker compose down --volumes` **deletes all data**. For production (TLS, backups, upgrades, every setting), read the [self-hosting guide](docs/self-hosting.md).
 
-## Collect AI agent feedback with REST
+## Report from your chatbot with REST
 
-Send `POST /api/v1/feedback` with a project token. A `202` means the report is stored durably; routing and delivery happen in the background. Send an `Idempotency-Key` and reuse it on retries. Retry `429` and `5xx` responses with backoff; do not retry other `4xx` errors.
+Send `POST /api/v1/feedback` with a project token. A `202` means the report is stored durably; routing and delivery happen in the background. Send an `Idempotency-Key` and reuse it on retries. Retry `429` and `5xx` responses with backoff; do not retry other `4xx` errors. To add the call to your chatbot's no-answer branch, follow [Report from your own app](docs/report-from-your-app.md).
 
 For Python applications, install the `kebivo-client` distribution from the [standalone Python SDK](sdk/python/README.md) directly from GitHub with `pip install "git+https://github.com/OCNAI/kebivo#subdirectory=sdk/python"` (not published to PyPI):
 
@@ -169,13 +175,14 @@ Tokens with `feedback:gap` see `report_knowledge_gap`; `submit_knowledge_correct
 | --- | --- |
 | Built-in inbox | Always available; every event is in the admin inbox. |
 | Webhook | HTTPS `POST` with a [versioned JSON payload](docs/webhook-payload.schema.json), Standard Webhooks signatures, optional bearer or custom headers. A [receiver example](examples/webhook_receiver.py) verifies both. |
+| Slack | A Block Kit message to a Slack incoming webhook with the question, project, tags, occurrence count and, when `PUBLIC_URL` is set, a link to the group. |
 | SMTP email | A message (plain text with an escaped HTML alternative) to 1–20 recipients over STARTTLS, implicit TLS, or an unauthenticated local relay. |
 
-Each project has ordered rules: a rule matches ANY or ALL of its tags and sends to one or more destinations, optionally stopping evaluation. Unmatched events go to the fallback destinations. For example, `it` → IT email, `customer-service` → the support webhook. Each destination delivers either for new groups only or for every occurrence. See [routing](docs/routing.md) and [destinations](docs/destinations.md).
+Each project has ordered rules: a rule matches ANY or ALL of its tags and sends to one or more destinations, optionally stopping evaluation. Unmatched events go to the fallback destinations. For example, `it` → IT email, `customer-service` → the support webhook. Each destination sends for new groups only, for every occurrence, or as a [weekly digest](docs/destinations.md#weekly-digest). See [routing](docs/routing.md) and [destinations](docs/destinations.md).
 
 ## Optional AI
 
-No model is called by default. To group questions that are worded differently, configure an LLM provider (**LLM settings** in the UI) and switch a project to semantic deduplication after acknowledging that question text will be sent to that provider. The embeddings method is precision-first: at its default threshold it grouped about 3 in 100 paraphrases in calibration, so use the LLM judge when you need paraphrase grouping and [tune embeddings](docs/deduplication.md#embeddings-method) on your own data. If the provider fails, the event keeps its own group and is still routed and delivered. See [deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md).
+No model is called by default. To group questions that are worded differently, configure an LLM provider (**Settings → LLM providers** in the UI) and switch a project to semantic deduplication after acknowledging that question text will be sent to that provider. The embeddings method is precision-first: at its default threshold it grouped about 3 in 100 paraphrases in calibration, so use the LLM judge when you need paraphrase grouping and [tune embeddings](docs/deduplication.md#embeddings-method) on your own data. If the provider fails, the event keeps its own group and is still routed and delivered. See [deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md).
 
 ## Security
 
