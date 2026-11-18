@@ -7,7 +7,7 @@
 
 # Kebivo: the inbox for questions your AI couldn't answer
 
-Your AI app reports each question it couldn't answer; Kebivo groups the repeats and routes them to whoever can fix the docs.
+For developers who built their own support or docs chatbot. Your app reports each question the bot couldn't answer, over REST or MCP. Kebivo groups the repeats and routes them to whoever can fix the docs. It runs in one container on your own server, with no signup.
 
 ![Demo: a customer asks a shop's AI support chatbot, "Do you ship to Canada?" The bot cannot answer. The app reports the question to Kebivo over MCP; a configured webhook route delivers it. A second report joins one inbox group with 2 occurrences. Product frames use sample data from a real Kebivo container.](docs/assets/demo.gif)
 
@@ -141,9 +141,9 @@ curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/he
 
 To stop the published image from another terminal: `docker stop kebivo` (data stays in the volume). To stop a Compose build: `docker compose down` (data is kept). `docker compose down --volumes` **deletes all data**. For production (TLS, backups, upgrades, every setting), read the [self-hosting guide](docs/self-hosting.md).
 
-## Collect AI agent feedback with REST
+## Report from your chatbot with REST
 
-Send `POST /api/v1/feedback` with a project token. A `202` means the report is stored durably; routing and delivery happen in the background. Send an `Idempotency-Key` and reuse it on retries. Retry `429` and `5xx` responses with backoff; do not retry other `4xx` errors.
+Send `POST /api/v1/feedback` with a project token. A `202` means the report is stored durably; routing and delivery happen in the background. Send an `Idempotency-Key` and reuse it on retries. Retry `429` and `5xx` responses with backoff; do not retry other `4xx` errors. To add the call to your chatbot's no-answer branch, follow [Report from your own app](docs/report-from-your-app.md).
 
 For Python applications, install the `kebivo-client` distribution from the [standalone Python SDK](sdk/python/README.md) directly from GitHub with `pip install "git+https://github.com/OCNAI/kebivo#subdirectory=sdk/python"` (not published to PyPI):
 
@@ -175,13 +175,14 @@ Tokens with `feedback:gap` see `report_knowledge_gap`; `submit_knowledge_correct
 | --- | --- |
 | Built-in inbox | Always available; every event is in the admin inbox. |
 | Webhook | HTTPS `POST` with a [versioned JSON payload](docs/webhook-payload.schema.json), Standard Webhooks signatures, optional bearer or custom headers. A [receiver example](examples/webhook_receiver.py) verifies both. |
+| Slack | A Block Kit message to a Slack incoming webhook with the question, project, tags, occurrence count and, when `PUBLIC_URL` is set, a link to the group. |
 | SMTP email | A message (plain text with an escaped HTML alternative) to 1–20 recipients over STARTTLS, implicit TLS, or an unauthenticated local relay. |
 
 Each project has ordered rules: a rule matches ANY or ALL of its tags and sends to one or more destinations, optionally stopping evaluation. Unmatched events go to the fallback destinations. For example, `it` → IT email, `customer-service` → the support webhook. Each destination sends for new groups only, for every occurrence, or as a [weekly digest](docs/destinations.md#weekly-digest). See [routing](docs/routing.md) and [destinations](docs/destinations.md).
 
 ## Optional AI
 
-No model is called by default. To group questions that are worded differently, configure an LLM provider (**LLM settings** in the UI) and switch a project to semantic deduplication after acknowledging that question text will be sent to that provider. The embeddings method is precision-first: at its default threshold it grouped about 3 in 100 paraphrases in calibration, so use the LLM judge when you need paraphrase grouping and [tune embeddings](docs/deduplication.md#embeddings-method) on your own data. If the provider fails, the event keeps its own group and is still routed and delivered. See [deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md).
+No model is called by default. To group questions that are worded differently, configure an LLM provider (**Settings → LLM providers** in the UI) and switch a project to semantic deduplication after acknowledging that question text will be sent to that provider. The embeddings method is precision-first: at its default threshold it grouped about 3 in 100 paraphrases in calibration, so use the LLM judge when you need paraphrase grouping and [tune embeddings](docs/deduplication.md#embeddings-method) on your own data. If the provider fails, the event keeps its own group and is still routed and delivered. See [deduplication](docs/deduplication.md) and [LLM providers](docs/llm-providers.md).
 
 ## Security
 
