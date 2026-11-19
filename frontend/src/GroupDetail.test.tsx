@@ -1,3 +1,4 @@
+Paperclip: GitHub capability_rejected; continuing without managed credentials.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -237,16 +238,17 @@ describe("group detail safety and sections", () => {
     const same = (id: string, at: string) => ({ id, event_type: "knowledge_gap", agent_reported: { question: "Do you ship to Canada?" }, system: { received_at: at }, tags: [] });
     globalThis.fetch = vi.fn(async (input, init) => {
       const url = String(input); requests.push({ url, init });
-      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [same("e1", "2026-11-01T00:00:00Z"), same("e2", "2026-11-04T00:00:00Z"), { id: "e3", event_type: "knowledge_gap", agent_reported: { question: "Ship to Canada?" }, system: {}, tags: [] }, same("e4", "2026-11-03T00:00:00Z"), { ...same("e5", "2026-11-05T00:00:00Z"), match: { method: "exact", triggered_reopen: true } }], next_cursor: "next" }));
+      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [same("e1", "2026-11-01T00:00:00Z"), same("e2", "2026-11-04T00:00:00Z"), { id: "e3", event_type: "knowledge_gap", agent_reported: { question: "Ship to Canada?" }, system: {}, tags: [] }, same("e4", "2026-11-03T00:00:00Z"), { ...same("e5", "2026-11-05T00:00:00Z"), match: { method: "exact", triggered_reopen: true } }, { ...same("e6", "2026-11-06T00:00:00Z"), match: { method: "exact", triggered_reopen: true } }], next_cursor: "next" }));
       if (url.endsWith("/admin/groups/g1/history")) return new Response(JSON.stringify({ items: [] }));
       if (url.includes("/deliveries?group_id=")) return new Response(JSON.stringify({ items: [] }));
       if (url.endsWith("/admin/groups/g1/split")) return new Response(JSON.stringify({ group_id: "g2" }));
-      return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: 5, representative: { event_id: "e2", question: "Do you ship to Canada?" }, project: { id: "p1", name: "Shop" }, event_type: "knowledge_gap", notes: [], tags: [] }));
+      return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: 6, representative: { event_id: "e2", question: "Do you ship to Canada?" }, project: { id: "p1", name: "Shop" }, event_type: "knowledge_gap", notes: [], tags: [] }));
     }) as typeof fetch;
     await act(async () => { root.render(<GroupDetail groupId="g1" navigate={() => {}} />); await new Promise(resolve => setTimeout(resolve, 0)); });
     const cards = () => Array.from(container.querySelectorAll("article[id^='event-']")).map(card => card.id);
-    expect(cards()).toEqual(["event-e2", "event-e3", "event-e5"]);
+    expect(cards()).toEqual(["event-e2", "event-e3", "event-e5", "event-e6"]);
     expect(container.querySelector("#event-e5")!.textContent).toContain("Reopened this group");
+    expect(container.querySelector("#event-e6")!.textContent).toContain("Reopened this group");
     const summary = container.querySelector(".identical-reports")!;
     expect(summary.textContent).toMatch(/^2 more loaded reports with identical text, last /);
     expect(summary.querySelector("time")?.getAttribute("dateTime")).toBe("2026-11-04T00:00:00Z");

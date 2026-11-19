@@ -1,3 +1,4 @@
+Paperclip: GitHub capability_rejected; continuing without managed credentials.
 import React from "react";
 import { apiRequest, ApiError } from "./api";
 import { SampleBadge } from "./FirstRun";
@@ -45,7 +46,7 @@ const stringify = (value: unknown) =>
 // Occurrences with the same reported text collapse into one card; the rest sit behind a toggle.
 // A report that reopened the group keeps its own card so the reopen stays visible.
 const sameText = (ev: Event) =>
-  JSON.stringify([ev.event_type, ev.agent_reported.question, ev.agent_reported.previous_answer, ev.agent_reported.context, ev.agent_reported.correction ?? ev.submitted_correction, ev.match?.triggered_reopen ?? false, Object.values(ev.agent_reported).some(Boolean) || ev.submitted_correction ? "reported" : ev.id]);
+  JSON.stringify([ev.event_type, ev.agent_reported.question, ev.agent_reported.previous_answer, ev.agent_reported.context, ev.agent_reported.correction ?? ev.submitted_correction, ev.match?.triggered_reopen ? ev.id : false, Object.values(ev.agent_reported).some(Boolean) || ev.submitted_correction ? "reported" : ev.id]);
 const safe = (value: unknown) => (
   <pre className="safe-pre safe-text" dir="auto">
     {stringify(value)}
