@@ -232,36 +232,49 @@ describe("group detail safety and sections", () => {
     expect(requests.filter(request => request.url.endsWith("/admin/groups/g1/events"))).toHaveLength(2);
   });
 
-  it("shows identical reports once, keeps a reopening report apart, and splits from the expanded list", async () => {
+  it("shows identical reports once, keeps a reopening report apart, and splits a collapsed cluster in one step", async () => {
     const requests: { url: string; init?: RequestInit }[] = [];
     const same = (id: string, at: string) => ({ id, event_type: "knowledge_gap", agent_reported: { question: "Do you ship to Canada?" }, system: { received_at: at }, tags: [] });
     globalThis.fetch = vi.fn(async (input, init) => {
       const url = String(input); requests.push({ url, init });
-      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [same("e1", "2026-11-01T00:00:00Z"), same("e2", "2026-11-04T00:00:00Z"), { id: "e3", event_type: "knowledge_gap", agent_reported: { question: "Ship to Canada?" }, system: {}, tags: [] }, same("e4", "2026-11-03T00:00:00Z"), { ...same("e5", "2026-11-05T00:00:00Z"), match: { method: "exact", triggered_reopen: true } }], next_cursor: null }));
+      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [same("e1", "2026-11-01T00:00:00Z"), same("e2", "2026-11-04T00:00:00Z"), { id: "e3", event_type: "knowledge_gap", agent_reported: { question: "Ship to Canada?" }, system: {}, tags: [] }, same("e4", "2026-11-03T00:00:00Z"), { ...same("e5", "2026-11-05T00:00:00Z"), match: { method: "exact", triggered_reopen: true } }, { ...same("e6", "2026-11-06T00:00:00Z"), match: { method: "exact", triggered_reopen: true } }], next_cursor: "next" }));
       if (url.endsWith("/admin/groups/g1/history")) return new Response(JSON.stringify({ items: [] }));
       if (url.includes("/deliveries?group_id=")) return new Response(JSON.stringify({ items: [] }));
       if (url.endsWith("/admin/groups/g1/split")) return new Response(JSON.stringify({ group_id: "g2" }));
-      return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: 5, representative: { event_id: "e2", question: "Do you ship to Canada?" }, project: { id: "p1", name: "Shop" }, event_type: "knowledge_gap", notes: [], tags: [] }));
+      return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: 6, representative: { event_id: "e2", question: "Do you ship to Canada?" }, project: { id: "p1", name: "Shop" }, event_type: "knowledge_gap", notes: [], tags: [] }));
     }) as typeof fetch;
     await act(async () => { root.render(<GroupDetail groupId="g1" navigate={() => {}} />); await new Promise(resolve => setTimeout(resolve, 0)); });
     const cards = () => Array.from(container.querySelectorAll("article[id^='event-']")).map(card => card.id);
-    expect(cards()).toEqual(["event-e2", "event-e3", "event-e5"]);
+    expect(cards()).toEqual(["event-e2", "event-e3", "event-e5", "event-e6"]);
     expect(container.querySelector("#event-e5")!.textContent).toContain("Reopened this group");
+    expect(container.querySelector("#event-e6")!.textContent).toContain("Reopened this group");
     const summary = container.querySelector(".identical-reports")!;
-    expect(summary.textContent).toMatch(/^2 more reports with identical text, last /);
+    expect(summary.textContent).toMatch(/^2 more loaded reports with identical text, last /);
     expect(summary.querySelector("time")?.getAttribute("dateTime")).toBe("2026-11-04T00:00:00Z");
-    const toggle = summary.querySelector("button")!;
+    const toggle = summary.querySelector("button[aria-expanded]")!;
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(toggle.textContent).toBe("Show all 3");
-    expect(container.querySelector<HTMLDetailsElement>(".triage-more")!.open).toBe(false);
-    await act(async () => { toggle.click(); });
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(cards()).toEqual(["event-e2", "event-e1", "event-e4", "event-e3", "event-e5"]);
-    await act(async () => { (container.querySelector('[aria-label="Select occurrence e4 for split"]') as HTMLInputElement).click(); });
+    expect(toggle.textContent).toBe("Show all 3 loaded");
+    expect(summary.textContent).toContain("More occurrences may follow.");
+    await act(async () => { Array.from(summary.querySelectorAll("button")).find(button => button.textContent === "Select all 3 for split")!.click(); });
+    expect(summary.textContent).toContain("3 selected for split");
+    expect(container.querySelector('[aria-label="Select occurrence e1 for split"]')).toBeNull();
     expect(container.querySelector<HTMLDetailsElement>(".triage-more")!.open).toBe(true);
-    await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Split selected occurrences (1)")!.click(); });
+    await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Split selected occurrences (3)")!.click(); });
     await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Confirm split")!.click(); });
-    expect(JSON.parse(String(requests.find(request => request.url.endsWith("/admin/groups/g1/split"))!.init?.body))).toEqual({ event_ids: ["e4"] });
+    expect(JSON.parse(String(requests.find(request => request.url.endsWith("/admin/groups/g1/split"))!.init?.body))).toEqual({ event_ids: ["e1", "e2", "e4"] });
+  });
+
+  it("keeps empty reports separate because missing text does not prove they are identical", async () => {
+    globalThis.fetch = vi.fn(async input => {
+      const url = String(input);
+      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: ["e1", "e2"].map(id => ({ id, event_type: "knowledge_gap", agent_reported: {}, system: {}, tags: [] })), next_cursor: null }));
+      if (url.endsWith("/admin/groups/g1/history")) return new Response(JSON.stringify({ items: [] }));
+      if (url.includes("/deliveries?group_id=")) return new Response(JSON.stringify({ items: [] }));
+      return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: 2, representative: { event_id: "e1", question: "q" }, project: { id: "p1", name: "Support" }, event_type: "knowledge_gap", notes: [], tags: [] }));
+    }) as typeof fetch;
+    await act(async () => { root.render(<GroupDetail groupId="g1" navigate={() => {}} />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(Array.from(container.querySelectorAll("article[id^='event-']")).map(card => card.id)).toEqual(["event-e1", "event-e2"]);
+    expect(container.querySelector(".identical-reports")).toBeNull();
   });
 
   it("clears split selection when navigation changes the group", async () => {

@@ -45,7 +45,7 @@ const stringify = (value: unknown) =>
 // Occurrences with the same reported text collapse into one card; the rest sit behind a toggle.
 // A report that reopened the group keeps its own card so the reopen stays visible.
 const sameText = (ev: Event) =>
-  JSON.stringify([ev.event_type, ev.agent_reported.question, ev.agent_reported.previous_answer, ev.agent_reported.context, ev.agent_reported.correction ?? ev.submitted_correction, ev.match?.triggered_reopen ?? false]);
+  JSON.stringify([ev.event_type, ev.agent_reported.question, ev.agent_reported.previous_answer, ev.agent_reported.context, ev.agent_reported.correction ?? ev.submitted_correction, ev.match?.triggered_reopen ? ev.id : false, Object.values(ev.agent_reported).some(Boolean) || ev.submitted_correction ? "reported" : ev.id]);
 const safe = (value: unknown) => (
   <pre className="safe-pre safe-text" dir="auto">
     {stringify(value)}
@@ -413,17 +413,21 @@ export function GroupDetail({
             const key = sameText(copies[0]);
             const first = copies.find((ev) => ev.id === group.representative.event_id) ?? copies[0];
             const rest = copies.filter((ev) => ev !== first);
+            const selectedInCluster = selectedEvents.filter((id) => copies.some((ev) => ev.id === id)).length;
             const open = shownCopies[key] ?? rest.some((ev) => ev.id === highlight);
             const latest = copies.reduce((last, ev) => (ev.system.received_at > last ? ev.system.received_at : last), "");
             return (
               <React.Fragment key={first.id}>
                 {occurrence(first, rest.length > 0 && (
                   <p className="identical-reports">
-                    {rest.length} more {rest.length === 1 ? "report" : "reports"} with identical text
+                    {rest.length} more loaded {rest.length === 1 ? "report" : "reports"} with identical text
                     {latest && <>, last <time dateTime={latest} title={exactDate(latest)}>{relativeDate(latest)}</time></>}
+                    {selectedInCluster > 0 && <span>{selectedInCluster} selected for split</span>}
+                    <button type="button" className="text-button" aria-describedby="split-hint" disabled={copies.length >= group.occurrence_count} onClick={() => { setMoreActions(true); setSelectedEvents(current => [...new Set([...current, ...copies.map(ev => ev.id)])]); }}>Select all {copies.length} for split</button>
                     <button type="button" className="text-button" aria-expanded={open} onClick={() => setShownCopies((current) => ({ ...current, [key]: !open }))}>
-                      {open ? "Hide identical reports" : `Show all ${copies.length}`}
+                      {open ? "Hide identical reports" : `Show all ${copies.length} loaded`}
                     </button>
+                    {more && <span>More occurrences may follow.</span>}
                   </p>
                 ))}
                 {open && rest.map((ev) => occurrence(ev))}
