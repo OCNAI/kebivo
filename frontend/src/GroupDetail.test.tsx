@@ -232,30 +232,31 @@ describe("group detail safety and sections", () => {
     expect(requests.filter(request => request.url.endsWith("/admin/groups/g1/events"))).toHaveLength(2);
   });
 
-  it("shows identical reports once and splits from the expanded list", async () => {
+  it("shows identical reports once, keeps a reopening report apart, and splits from the expanded list", async () => {
     const requests: { url: string; init?: RequestInit }[] = [];
     const same = (id: string, at: string) => ({ id, event_type: "knowledge_gap", agent_reported: { question: "Do you ship to Canada?" }, system: { received_at: at }, tags: [] });
     globalThis.fetch = vi.fn(async (input, init) => {
       const url = String(input); requests.push({ url, init });
-      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [same("e1", "2026-11-01T00:00:00Z"), same("e2", "2026-11-02T00:00:00Z"), { id: "e3", event_type: "knowledge_gap", agent_reported: { question: "Ship to Canada?" }, system: {}, tags: [] }, same("e4", "2026-11-03T00:00:00Z")], next_cursor: null }));
+      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [same("e1", "2026-11-01T00:00:00Z"), same("e2", "2026-11-04T00:00:00Z"), { id: "e3", event_type: "knowledge_gap", agent_reported: { question: "Ship to Canada?" }, system: {}, tags: [] }, same("e4", "2026-11-03T00:00:00Z"), { ...same("e5", "2026-11-05T00:00:00Z"), match: { method: "exact", triggered_reopen: true } }], next_cursor: null }));
       if (url.endsWith("/admin/groups/g1/history")) return new Response(JSON.stringify({ items: [] }));
       if (url.includes("/deliveries?group_id=")) return new Response(JSON.stringify({ items: [] }));
       if (url.endsWith("/admin/groups/g1/split")) return new Response(JSON.stringify({ group_id: "g2" }));
-      return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: 4, representative: { event_id: "e2", question: "Do you ship to Canada?" }, project: { id: "p1", name: "Shop" }, event_type: "knowledge_gap", notes: [], tags: [] }));
+      return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: 5, representative: { event_id: "e2", question: "Do you ship to Canada?" }, project: { id: "p1", name: "Shop" }, event_type: "knowledge_gap", notes: [], tags: [] }));
     }) as typeof fetch;
     await act(async () => { root.render(<GroupDetail groupId="g1" navigate={() => {}} />); await new Promise(resolve => setTimeout(resolve, 0)); });
     const cards = () => Array.from(container.querySelectorAll("article[id^='event-']")).map(card => card.id);
-    expect(cards()).toEqual(["event-e2", "event-e3"]);
+    expect(cards()).toEqual(["event-e2", "event-e3", "event-e5"]);
+    expect(container.querySelector("#event-e5")!.textContent).toContain("Reopened this group");
     const summary = container.querySelector(".identical-reports")!;
-    expect(summary.textContent).toMatch(/^2 more identical reports, last /);
-    expect(summary.querySelector("time")?.getAttribute("dateTime")).toBe("2026-11-03T00:00:00Z");
+    expect(summary.textContent).toMatch(/^2 more reports with identical text, last /);
+    expect(summary.querySelector("time")?.getAttribute("dateTime")).toBe("2026-11-04T00:00:00Z");
     const toggle = summary.querySelector("button")!;
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(toggle.textContent).toBe("Show all 3");
     expect(container.querySelector<HTMLDetailsElement>(".triage-more")!.open).toBe(false);
     await act(async () => { toggle.click(); });
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(cards()).toEqual(["event-e2", "event-e1", "event-e4", "event-e3"]);
+    expect(cards()).toEqual(["event-e2", "event-e1", "event-e4", "event-e3", "event-e5"]);
     await act(async () => { (container.querySelector('[aria-label="Select occurrence e4 for split"]') as HTMLInputElement).click(); });
     expect(container.querySelector<HTMLDetailsElement>(".triage-more")!.open).toBe(true);
     await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Split selected occurrences (1)")!.click(); });

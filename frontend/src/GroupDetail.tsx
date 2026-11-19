@@ -43,8 +43,9 @@ const matchLabels: Record<string, string> = { initial: "Initial", exact: "Exact 
 const stringify = (value: unknown) =>
   typeof value === "string" ? value : JSON.stringify(value, null, 2);
 // Occurrences with the same reported text collapse into one card; the rest sit behind a toggle.
+// A report that reopened the group keeps its own card so the reopen stays visible.
 const sameText = (ev: Event) =>
-  JSON.stringify([ev.event_type, ev.agent_reported.question, ev.agent_reported.previous_answer, ev.agent_reported.context, ev.agent_reported.correction ?? ev.submitted_correction]);
+  JSON.stringify([ev.event_type, ev.agent_reported.question, ev.agent_reported.previous_answer, ev.agent_reported.context, ev.agent_reported.correction ?? ev.submitted_correction, ev.match?.triggered_reopen ?? false]);
 const safe = (value: unknown) => (
   <pre className="safe-pre safe-text" dir="auto">
     {stringify(value)}
@@ -413,12 +414,12 @@ export function GroupDetail({
             const first = copies.find((ev) => ev.id === group.representative.event_id) ?? copies[0];
             const rest = copies.filter((ev) => ev !== first);
             const open = shownCopies[key] ?? rest.some((ev) => ev.id === highlight);
-            const latest = rest.reduce((last, ev) => (ev.system.received_at > last ? ev.system.received_at : last), "");
+            const latest = copies.reduce((last, ev) => (ev.system.received_at > last ? ev.system.received_at : last), "");
             return (
               <React.Fragment key={first.id}>
                 {occurrence(first, rest.length > 0 && (
                   <p className="identical-reports">
-                    {rest.length} more identical {rest.length === 1 ? "report" : "reports"}
+                    {rest.length} more {rest.length === 1 ? "report" : "reports"} with identical text
                     {latest && <>, last <time dateTime={latest} title={exactDate(latest)}>{relativeDate(latest)}</time></>}
                     <button type="button" className="text-button" aria-expanded={open} onClick={() => setShownCopies((current) => ({ ...current, [key]: !open }))}>
                       {open ? "Hide identical reports" : `Show all ${copies.length}`}
