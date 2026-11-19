@@ -71,6 +71,7 @@ export function App() {
   const [notice, setNotice] = React.useState('');
   const [showArchived, setShowArchived] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
+  const [checklistShown, setChecklistShown] = React.useState<boolean | null>(null);
   const [setupRequired, setSetupRequired] = React.useState(false);
   const [setupCheckDone, setSetupCheckDone] = React.useState(false);
   React.useEffect(() => { const pop = () => setRoute(location.pathname + location.search); const expired = () => { setAdmin(null); setSelectedProject(null); setCsrfToken(null); }; addEventListener('popstate', pop); addEventListener('session-expired', expired); return () => { removeEventListener('popstate', pop); removeEventListener('session-expired', expired); }; }, [setSelectedProject]);
@@ -218,7 +219,7 @@ export function App() {
       <div className="dashboard-heading"><div><div className="eyebrow">KEBIVO</div><h1 id="dashboard-title" tabIndex={-1}>Dashboard</h1><p className="subtle">Feedback activity and project settings.</p></div></div>
       <ErrorMessage message={error} /><div role="status" className="notice">{notice}</div>
       {!selected && !editing && !createFromBanner && <FirstRunEmpty dashboard navigate={navigate} projectId={projects.find(project=>!project.archived_at&&!project.is_sample)?.id} />}
-      {!selected && !editing && !createFromBanner && <FirstRunChecklist projects={projects.filter(project=>!project.archived_at)} navigate={navigate} />}
+      {!selected && !editing && !createFromBanner && <FirstRunChecklist projects={projects.filter(project=>!project.archived_at)} navigate={navigate} onShownChange={setChecklistShown} />}
       {!selected && !editing && !createFromBanner && <DashboardSummary navigate={navigate} />}
       <div className="dashboard-grid">
         <section className="panel project-panel" aria-labelledby="projects-title">
@@ -231,7 +232,7 @@ export function App() {
           {showArchived && <ArchivedProjects projects={projects} onRestore={(p) => void changeProjectState(p, 'restore')} />}
         </section>
         <section className="detail-column" aria-live="polite">
-          {editing || createFromBanner ? <ProjectForm project={selected} busy={busy} onCancel={() => { setEditing(false); if (createFromBanner) navigate('/'); }} onSubmit={saveProject} /> : selected ? <>
+          {editing || createFromBanner ? <ProjectForm key={selected?.id ?? 'new'} project={selected} busy={busy} onCancel={() => { setEditing(false); if (createFromBanner) navigate('/'); }} onSubmit={saveProject} /> : selected ? <>
             <section className="panel detail-panel" aria-labelledby="project-detail-title">
               <div className="panel-heading"><div><div className="eyebrow">PROJECT SETTINGS</div><h2 id="project-detail-title">{selected.name} {selected.is_sample && <SampleBadge />}</h2><p className="subtle">{selected.description || 'No description'}</p></div><div className="button-row"><a className="text-button" href={`/settings?project=${encodeURIComponent(selected.id)}#export`} onClick={event=>{event.preventDefault();navigate(`/settings?project=${encodeURIComponent(selected.id)}#export`)}}>Export feedback</a><button className="quiet-button" onClick={() => setEditing(true)}>Edit</button>{selected.archived_at ? <button className="quiet-button" onClick={() => void changeProjectState(selected, 'restore')}>Restore</button> : <button className="danger-button" onClick={() => window.confirm(`Archive “${selected.name}”? This disables its tokens but keeps settings and history.`) && void changeProjectState(selected, 'archive')}>Archive</button>}</div></div>
               <dl className="settings-summary"><div><dt>Slug</dt><dd>{selected.slug}</dd></div><div><dt>Status</dt><dd>{selected.archived_at ? 'Archived' : selected.is_active ? 'Active' : 'Disabled'}</dd></div><div><dt>Corrections policy</dt><dd>{selected.settings.corrections?.enabled ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Deduplication</dt><dd>{selected.settings.deduplication?.mode ?? (selected.settings.deduplication?.enabled === false ? 'Disabled' : 'Exact')}</dd></div></dl>
@@ -246,7 +247,7 @@ export function App() {
                 {showGapReadWarning && <p className="inline-note" role="status">This token can report and read gaps. Use separate tokens.</p>}
                 {tokenFormError && <p className="error-message" role="alert">{tokenFormError}</p>}
               </form>}
-              {tokens.length === 0 ? <div className="empty-inline">No tokens have been issued for this project.</div> : <div className="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Scopes</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{tokens.map((token) => <tr key={token.id} className={token.revoked_at ? 'revoked-row' : ''}><th scope="row">{token.name}<small>{token.prefix}… {token.revoked_at ? ' · Revoked' : ''}</small></th><td>{token.scopes.map((scope) => <code className="scope-chip" key={scope}>{scope}</code>)}</td><td>{date(token.created_at)}</td><td>{date(token.last_used_at)}</td><td>{!token.revoked_at && <button className="text-button" disabled={busy || Boolean(selected.archived_at)} onClick={() => void revokeToken(token)}>Revoke</button>}</td></tr>)}</tbody></table></div>}
+              {tokens.length === 0 ? <div className="empty-inline">No tokens have been issued for this project.</div> : <div className="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Scopes</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col">Actions</th></tr></thead><tbody>{tokens.map((token) => <tr key={token.id} className={token.revoked_at ? 'revoked-row' : ''}><th scope="row">{token.name}<small>{token.prefix}… {token.revoked_at ? ' · Revoked' : ''}</small></th><td>{token.scopes.map((scope) => <code className="scope-chip" key={scope}>{scope}</code>)}</td><td>{date(token.created_at)}</td><td>{date(token.last_used_at)}</td><td>{!token.revoked_at && <button className="text-button" disabled={busy || Boolean(selected.archived_at)} onClick={() => void revokeToken(token)}>Revoke</button>}</td></tr>)}</tbody></table></div>}
             </section>
               <ConnectPanel correctionsEnabled={Boolean(selected.settings.corrections?.enabled)} archived={Boolean(selected.archived_at)} projectId={selected.id} /></>}
             <section className="panel project-configuration" aria-label="Project configuration">
@@ -256,7 +257,7 @@ export function App() {
               <p className="scope-note"><strong>Correction access uses two gates.</strong> The project policy above controls whether corrections are accepted. Each token must also include the <code>feedback:correction</code> scope.</p>
               {selected.archived_at && <p className="inline-note">Archived {date(selected.archived_at)}. Restore this project before issuing credentials.</p>}
             </section>
-          </> : <div className="empty-card"><div className="empty-icon" aria-hidden="true">✦</div><h2>Select a project</h2><p>Choose a project to manage its settings and credentials, or create a new one.</p></div>}
+          </> : checklistShown === false && <div className="empty-card"><div className="empty-icon" aria-hidden="true">✦</div><h2>Select a project</h2><p>Choose a project to manage its settings and credentials, or create a new one.</p></div>}
         </section>
       </div>
     </section>
@@ -399,12 +400,17 @@ function ArchivedProjects({ projects, onRestore }: { projects: Project[]; onRest
   const archived = projects.filter((p) => p.archived_at);
   return <div className="archived-list"><h3>Archived</h3>{archived.length === 0 ? <p className="subtle">No archived projects.</p> : archived.map((project) => <div className="archived-item" key={project.id}><span>{project.name}</span><button className="text-button" onClick={() => onRestore(project)}>Restore</button></div>)}</div>;
 }
+function slugFromName(name: string) {
+  return name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100).replace(/-+$/, '');
+}
 function ProjectForm({ project, busy, onCancel, onSubmit }: { project: Project | null; busy: boolean; onCancel: () => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
   const firstRun = useFirstRun();
+  const [slug, setSlug] = React.useState(project?.slug ?? '');
+  const [slugEdited, setSlugEdited] = React.useState(Boolean(project));
   return <section className="panel" aria-labelledby="project-form-title"><div className="panel-heading"><div><div className="eyebrow">{project ? 'EDIT PROJECT' : 'NEW PROJECT'}</div><h2 id="project-form-title">{project ? 'Project settings' : 'Create a project'}</h2></div></div>
     {firstRun?.sample?.present && !firstRun.sample.has_real_projects && !project && <p className="scope-note">Create a project for your app. It gets its own token; the sample projects can't have one.</p>}
-    <form className="project-form" onSubmit={onSubmit}><label htmlFor="project-name">Name</label><input id="project-name" name="name" autoFocus={!project} defaultValue={project?.name ?? ''} maxLength={200} required />
-      <label htmlFor="project-slug">Slug</label><input id="project-slug" name="slug" defaultValue={project?.slug ?? ''} pattern="[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,98}[a-zA-Z0-9])?" aria-describedby="slug-help" required /><small id="slug-help" className="subtle">Lowercase letters, numbers, and internal hyphens.</small>
+    <form className="project-form" onSubmit={onSubmit}><label htmlFor="project-name">Name</label><input id="project-name" name="name" autoFocus={!project} defaultValue={project?.name ?? ''} maxLength={200} required onChange={event => { if (!slugEdited) setSlug(slugFromName(event.target.value)); }} />
+      <label htmlFor="project-slug">Slug</label><input id="project-slug" name="slug" value={slug} onChange={event => { setSlugEdited(true); setSlug(event.target.value); }} pattern="[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,98}[a-zA-Z0-9])?" aria-describedby="slug-help" required /><small id="slug-help" className="subtle">Lowercase letters, numbers, and internal hyphens.{!slugEdited && slug && <> From the name: <code>{slug}</code></>}</small>
       <label htmlFor="project-description">Description <span className="subtle">(optional)</span></label><textarea id="project-description" name="description" defaultValue={project?.description ?? ''} maxLength={5000} rows={3} />
       <fieldset><legend>Project policies</legend><label className="checkbox-row"><input type="checkbox" name="corrections" defaultChecked={project?.settings.corrections?.enabled ?? false} /> Enable correction feedback</label><p className="help-text">Tokens also need the correction scope before an integration can submit corrections.</p><label htmlFor="deduplication-mode">Deduplication mode</label><select id="deduplication-mode" name="deduplication_mode" defaultValue={project?.settings.deduplication?.mode ?? (project?.settings.deduplication?.enabled === false ? 'disabled' : 'exact')}><option value="disabled">Disabled</option><option value="exact">Exact</option><option value="semantic" disabled>Semantic (Configure an LLM provider first)</option></select><p className="help-text">{exactHelp}</p><p className="help-text">Add an LLM provider under LLM providers first to enable Semantic.</p></fieldset>
       {project && <><label className="checkbox-row"><input type="checkbox" name="is_active" defaultChecked={project.is_active} /> Project is active</label></>}

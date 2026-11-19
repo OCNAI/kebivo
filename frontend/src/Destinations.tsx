@@ -105,6 +105,7 @@ export function Destinations() {
   const [pendingPrivate, setPendingPrivate] = React.useState(false);
   const [tlsNone, setTlsNone] = React.useState(false);
   const [mode, setMode] = React.useState("new_groups_only");
+  const [auth, setAuth] = React.useState("none");
   const formRef = React.useRef<HTMLFormElement>(null);
   const previousFocus = React.useRef<HTMLElement | null>(null);
   const dialogRef = React.useRef<HTMLElement>(null);
@@ -136,6 +137,7 @@ export function Destinations() {
     setKind(type);
     setTlsNone(false);
     setMode("new_groups_only");
+    setAuth("none");
     setFields({});
     setError("");
     setNotice("");
@@ -151,6 +153,7 @@ export function Destinations() {
       setCreating(true);
       setKind(fresh.type as DestinationKind);
       setTlsNone(fresh.config.tls_mode === "none");
+      setAuth(fresh.config.auth?.type ?? "none");
       setMode(fresh.delivery_mode);
       setNotice("");
       setOnceSecret("");
@@ -464,7 +467,10 @@ export function Destinations() {
         <p role="status" className="notice">
           {notice}
         </p>
-        <section className="panel destination-list" aria-label="Destinations">
+        <section
+          className="panel destination-list"
+          aria-label="Configured destinations"
+        >
           <span id="sample-destination-row-help" className="sr-only">Sample destinations never send requests, even if you change the URL.</span>
           <div className="table-wrap">
             <table>
@@ -759,41 +765,49 @@ export function Destinations() {
                   <select
                     id="auth"
                     name="auth"
-                    defaultValue={selected?.config.auth?.type ?? "none"}
+                    value={auth}
+                    onChange={(e) => setAuth(e.target.value)}
                   >
                     <option value="none">None</option>
                     <option value="bearer">Bearer token</option>
                     <option value="header">Custom header</option>
                   </select>
-                  {(selected?.config.auth?.token?.set ||
-                    selected?.config.auth?.value?.set) && (
+                  {((auth === "bearer" && selected?.config.auth?.token?.set) ||
+                    (auth === "header" &&
+                      selected?.config.auth?.value?.set)) && (
                     <p className="secret-controls">Saved · Replace · Clear</p>
                   )}
-                  <Field
-                    name="token"
-                    label="Bearer token"
-                    type="password"
-                    error={fields.token}
-                  />
-                  <Field
-                    name="header_name"
-                    label="Custom header name"
-                    initial={selected?.config.auth?.name}
-                    error={fields["auth.name"]}
-                  />
-                  <Field
-                    name="header_value"
-                    label="Custom header value"
-                    type="password"
-                    error={fields["auth.value"]}
-                  />
-                  {selected?.config.auth?.token?.set && (
+                  {auth === "bearer" && (
+                    <Field
+                      name="token"
+                      label="Bearer token"
+                      type="password"
+                      error={fields.token}
+                    />
+                  )}
+                  {auth === "header" && (
+                    <>
+                      <Field
+                        name="header_name"
+                        label="Custom header name"
+                        initial={selected?.config.auth?.name}
+                        error={fields["auth.name"]}
+                      />
+                      <Field
+                        name="header_value"
+                        label="Custom header value"
+                        type="password"
+                        error={fields["auth.value"]}
+                      />
+                    </>
+                  )}
+                  {auth === "bearer" && selected?.config.auth?.token?.set && (
                     <label className="checkbox-row">
                       <input name="clear_token" type="checkbox" /> Clear bearer
                       token
                     </label>
                   )}
-                  {selected?.config.auth?.value?.set && (
+                  {auth === "header" && selected?.config.auth?.value?.set && (
                     <label className="checkbox-row">
                       <input name="clear_header_value" type="checkbox" /> Clear
                       header value
