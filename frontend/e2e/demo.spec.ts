@@ -130,6 +130,7 @@ test('record demo frames', async ({ browser, baseURL }) => {
   // Scene 3: merge the earlier duplicate into the new group.
   await row.getByRole('link', { name: GAP_QUESTION }).click();
   await expect(page.getByRole('heading', { name: 'Occurrences' })).toBeVisible();
+  await page.locator('.triage-more summary').click();
   await page.getByRole('button', { name: 'Merge groups' }).click();
   await page.getByLabel('Search compatible groups').fill('VPN');
   const source = page.getByLabel(new RegExp(EARLIER_QUESTION.replace('?', '\\?')));

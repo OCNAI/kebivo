@@ -9,8 +9,8 @@ type GroupSummary = { total_groups: number; groups_by_status: Record<string, num
 const statuses = ['open', 'in_progress', 'resolved', 'dismissed'];
 const sorts = [['last_activity_desc', 'Last seen (newest)'], ['last_activity_asc', 'Last seen (oldest)'], ['occurrences_desc', 'Most occurrences'], ['occurrences_asc', 'Fewest occurrences'], ['status', 'Status'], ['first_reported_desc', 'First seen (newest)']] as const;
 const statusLabels: Record<string, string> = { open: 'Open', in_progress: 'In progress', resolved: 'Resolved', dismissed: 'Dismissed' };
-const exactDate = (value: string) => new Date(value).toLocaleString();
-function relativeDate(value: string) {
+export const exactDate = (value: string) => new Date(value).toLocaleString();
+export function relativeDate(value: string) {
   const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000);
   const units: [number, Intl.RelativeTimeFormatUnit][] = [[31536000, 'year'], [2592000, 'month'], [86400, 'day'], [3600, 'hour'], [60, 'minute']];
   const unit = units.find(([size]) => Math.abs(seconds) >= size);

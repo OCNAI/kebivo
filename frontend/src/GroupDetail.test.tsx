@@ -104,7 +104,7 @@ describe("group detail safety and sections", () => {
     const methods = ["initial", "exact", "semantic", "manual_merge", "manual_split"] as const;
     globalThis.fetch = vi.fn(async (input) => {
       const url = String(input);
-      if (url.includes("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: methods.map((method, index) => ({ id: `e${index}`, event_type: "knowledge_gap", match: { method, triggered_reopen: false }, agent_reported: {}, system: {}, tags: [] })), next_cursor: null }));
+      if (url.includes("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: methods.map((method, index) => ({ id: `e${index}`, event_type: "knowledge_gap", match: { method, triggered_reopen: false }, agent_reported: { question: `Question ${index}` }, system: {}, tags: [] })), next_cursor: null }));
       if (url.includes("/admin/groups/g1/history")) return new Response(JSON.stringify({ items: [] }));
       if (url.includes("/deliveries?group_id=")) return new Response(JSON.stringify({ items: [] }));
       return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: methods.length, representative: { event_id: "e0", question: "Question" }, project: { id: "p1", name: "Support" }, event_type: "knowledge_gap", notes: [], tags: [] }));
@@ -137,8 +137,8 @@ describe("group detail safety and sections", () => {
       return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: 1, representative: { event_id: "e1", question: "How do I reset it?" }, project: { id: "p1", name: "Support" }, event_type: "knowledge_gap", notes: [{ id: "n1", body: "Private note", created_at: "2026-01-01T00:00:00Z" }], tags: [] }));
     }) as typeof fetch;
     await act(async () => { root.render(<GroupDetail groupId="g1" navigate={() => {}} />); await new Promise(resolve => setTimeout(resolve, 0)); });
-    const status = container.querySelector('[aria-label="Group status"]') as HTMLSelectElement;
-    await act(async () => { status.value = "resolved"; status.dispatchEvent(new Event("change", { bubbles: true })); await new Promise(resolve => setTimeout(resolve, 0)); });
+    const resolved = Array.from(container.querySelectorAll<HTMLButtonElement>(".group-status button")).find(button => button.textContent === "Resolved")!;
+    await act(async () => { resolved.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(container.querySelector('[role="status"]')?.textContent).toMatch(/Changes saved/);
     expect(requests.some(request => request.url.endsWith("/admin/groups/g1") && request.init?.method === "PATCH" && request.init.body?.toString().includes('"resolved"'))).toBe(true);
     const noteField = container.querySelector("#group-note") as HTMLTextAreaElement;
@@ -187,7 +187,7 @@ describe("group detail safety and sections", () => {
     const navigate = vi.fn();
     globalThis.fetch = vi.fn(async (input, init) => {
       const url = String(input); requests.push({ url, init });
-      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [{ id: "e1", event_type: "knowledge_gap", agent_reported: {}, system: {}, tags: [] }, { id: "e2", event_type: "knowledge_gap", agent_reported: {}, system: {}, tags: [] }], next_cursor: null }));
+      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [{ id: "e1", event_type: "knowledge_gap", agent_reported: { question: "e1" }, system: {}, tags: [] }, { id: "e2", event_type: "knowledge_gap", agent_reported: { question: "e2" }, system: {}, tags: [] }], next_cursor: null }));
       if (url.endsWith("/admin/groups/g1/history")) return new Response(JSON.stringify({ items: [] }));
       if (url.includes("/deliveries?group_id=")) return new Response(JSON.stringify({ items: [] }));
       if (url.endsWith("/admin/groups/g1/split")) return new Response(JSON.stringify({ group_id: "g2" }));
@@ -214,7 +214,7 @@ describe("group detail safety and sections", () => {
       const url = String(input); requests.push({ url, init });
       if (url.endsWith("/admin/groups/g1/merge")) { merged = true; return new Response(JSON.stringify({})); }
       if (url.includes("/admin/groups?")) return new Response(JSON.stringify({ items: [{ id: "g2", occurrence_count: 1, representative: { question_excerpt: "Another question" } }] }));
-      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: merged ? [{ id: "e1", event_type: "knowledge_gap", agent_reported: {}, system: {}, tags: [] }, { id: "e2", event_type: "knowledge_gap", agent_reported: {}, system: {}, tags: [] }, { id: "e3", event_type: "knowledge_gap", agent_reported: {}, system: {}, tags: [] }] : [], next_cursor: null }));
+      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: merged ? [{ id: "e1", event_type: "knowledge_gap", agent_reported: { question: "e1" }, system: {}, tags: [] }, { id: "e2", event_type: "knowledge_gap", agent_reported: { question: "e2" }, system: {}, tags: [] }, { id: "e3", event_type: "knowledge_gap", agent_reported: { question: "e3" }, system: {}, tags: [] }] : [], next_cursor: null }));
       if (url.endsWith("/admin/groups/g1/history")) return new Response(JSON.stringify({ items: [] }));
       if (url.includes("/deliveries?group_id=")) return new Response(JSON.stringify({ items: [] }));
       return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: merged ? 3 : 2, representative: { event_id: "e1", question: "q" }, project: { id: "p1", name: "Support" }, event_type: "knowledge_gap", notes: [], tags: [] }));
@@ -232,10 +232,41 @@ describe("group detail safety and sections", () => {
     expect(requests.filter(request => request.url.endsWith("/admin/groups/g1/events"))).toHaveLength(2);
   });
 
+  it("shows identical reports once and splits from the expanded list", async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const same = (id: string, at: string) => ({ id, event_type: "knowledge_gap", agent_reported: { question: "Do you ship to Canada?" }, system: { received_at: at }, tags: [] });
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input); requests.push({ url, init });
+      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [same("e1", "2026-11-01T00:00:00Z"), same("e2", "2026-11-02T00:00:00Z"), { id: "e3", event_type: "knowledge_gap", agent_reported: { question: "Ship to Canada?" }, system: {}, tags: [] }, same("e4", "2026-11-03T00:00:00Z")], next_cursor: null }));
+      if (url.endsWith("/admin/groups/g1/history")) return new Response(JSON.stringify({ items: [] }));
+      if (url.includes("/deliveries?group_id=")) return new Response(JSON.stringify({ items: [] }));
+      if (url.endsWith("/admin/groups/g1/split")) return new Response(JSON.stringify({ group_id: "g2" }));
+      return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: 4, representative: { event_id: "e2", question: "Do you ship to Canada?" }, project: { id: "p1", name: "Shop" }, event_type: "knowledge_gap", notes: [], tags: [] }));
+    }) as typeof fetch;
+    await act(async () => { root.render(<GroupDetail groupId="g1" navigate={() => {}} />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    const cards = () => Array.from(container.querySelectorAll("article[id^='event-']")).map(card => card.id);
+    expect(cards()).toEqual(["event-e2", "event-e3"]);
+    const summary = container.querySelector(".identical-reports")!;
+    expect(summary.textContent).toMatch(/^2 more identical reports, last /);
+    expect(summary.querySelector("time")?.getAttribute("dateTime")).toBe("2026-11-03T00:00:00Z");
+    const toggle = summary.querySelector("button")!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.textContent).toBe("Show all 3");
+    expect(container.querySelector<HTMLDetailsElement>(".triage-more")!.open).toBe(false);
+    await act(async () => { toggle.click(); });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(cards()).toEqual(["event-e2", "event-e1", "event-e4", "event-e3"]);
+    await act(async () => { (container.querySelector('[aria-label="Select occurrence e4 for split"]') as HTMLInputElement).click(); });
+    expect(container.querySelector<HTMLDetailsElement>(".triage-more")!.open).toBe(true);
+    await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Split selected occurrences (1)")!.click(); });
+    await act(async () => { Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Confirm split")!.click(); });
+    expect(JSON.parse(String(requests.find(request => request.url.endsWith("/admin/groups/g1/split"))!.init?.body))).toEqual({ event_ids: ["e4"] });
+  });
+
   it("clears split selection when navigation changes the group", async () => {
     globalThis.fetch = vi.fn(async input => {
       const url = String(input);
-      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [{ id: "e1", event_type: "knowledge_gap", agent_reported: {}, system: {}, tags: [] }, { id: "e2", event_type: "knowledge_gap", agent_reported: {}, system: {}, tags: [] }], next_cursor: null }));
+      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: [{ id: "e1", event_type: "knowledge_gap", agent_reported: { question: "e1" }, system: {}, tags: [] }, { id: "e2", event_type: "knowledge_gap", agent_reported: { question: "e2" }, system: {}, tags: [] }], next_cursor: null }));
       if (url.endsWith("/admin/groups/g2/events")) return new Response(JSON.stringify({ items: [{ id: "e2", event_type: "knowledge_gap", agent_reported: {}, system: {}, tags: [] }], next_cursor: null }));
       if (url.endsWith("/admin/groups/g1/history") || url.endsWith("/admin/groups/g2/history")) return new Response(JSON.stringify({ items: [] }));
       if (url.includes("/deliveries?group_id=")) return new Response(JSON.stringify({ items: [] }));
