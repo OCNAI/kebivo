@@ -1,7 +1,7 @@
 import React from "react";
 import { apiRequest, ApiError } from "./api";
 import { SampleBadge } from "./FirstRun";
-import { FollowUp } from "./Inbox";
+import { exactDate, FollowUp, relativeDate } from "./Inbox";
 
 type Event = {
   id: string;
@@ -38,9 +38,14 @@ type Delivery = {
 };
 type DeliveryPage = { items: Delivery[]; next_cursor: string | null };
 const statusLabels: Record<string, string> = { open: "Open", in_progress: "In progress", resolved: "Resolved", dismissed: "Dismissed" };
+const statuses = ["open", "in_progress", "resolved", "dismissed"];
 const matchLabels: Record<string, string> = { initial: "Initial", exact: "Exact match", semantic: "Semantic match", manual_merge: "Merged", manual_split: "Split" };
 const stringify = (value: unknown) =>
   typeof value === "string" ? value : JSON.stringify(value, null, 2);
+// Occurrences with the same reported text collapse into one card; the rest sit behind a toggle.
+// A report that reopened the group keeps its own card so the reopen stays visible.
+const sameText = (ev: Event) =>
+  JSON.stringify([ev.event_type, ev.agent_reported.question, ev.agent_reported.previous_answer, ev.agent_reported.context, ev.agent_reported.correction ?? ev.submitted_correction, ev.match?.triggered_reopen ?? false]);
 const safe = (value: unknown) => (
   <pre className="safe-pre safe-text" dir="auto">
     {stringify(value)}
@@ -94,6 +99,9 @@ export function GroupDetail({
   const [splitRepresentative, setSplitRepresentative] = React.useState("");
   const [deleteEventId, setDeleteEventId] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [moreActions, setMoreActions] = React.useState(false);
+  const [shownCopies, setShownCopies] = React.useState<Record<string, boolean>>({});
+  const resolveChangeRef = React.useRef<HTMLInputElement | null>(null);
   const [similar, setSimilar] = React.useState<{ group_id:string; question_excerpt:string; score:number }[] | null>(null);
   const triggerRef = React.useRef<HTMLElement | null>(null);
   const dialogRef = React.useRef<HTMLElement | null>(null);
@@ -162,12 +170,17 @@ export function GroupDetail({
     };
   }, [reload]);
   React.useEffect(() => {
-    const id = new URLSearchParams(location.search).get("highlight");
+    // Focusing the field scrolls it into view and announces its label.
+    if (askChange) resolveChangeRef.current?.focus();
+  }, [askChange]);
+  const highlight = new URLSearchParams(location.search).get("highlight");
+  React.useEffect(() => {
+    const id = highlight;
     if (id && !loading)
       document
         .getElementById(`event-${id}`)
         ?.scrollIntoView({ block: "center" });
-  }, [loading, events]);
+  }, [highlight, loading, events]);
   async function mutate(path: string, method: string, body: unknown) {
     setNotice("");
     try {
@@ -232,6 +245,29 @@ export function GroupDetail({
         </button>
       </main>
     );
+  const clusters = [...events.reduce((map, ev) => map.set(sameText(ev), [...(map.get(sameText(ev)) ?? []), ev]), new Map<string, Event[]>()).values()];
+  const occurrence = (ev: Event, copies?: React.ReactNode) => (
+    <article className="panel" id={`event-${ev.id}`} key={ev.id}>
+      <h3>Occurrence <code>{ev.id}</code></h3>
+      {ev.match && <p className="occurrence-match"><span className="badge">{matchLabels[ev.match.method] ?? "Match"}</span>{ev.match.triggered_reopen && <span className="badge active">Reopened this group</span>}</p>}
+      {ev.semantic && <dl className="occurrence-summary"><div><dt>Semantic outcome</dt><dd>{ev.semantic.outcome}{ev.semantic.error_category ? ` · ${ev.semantic.error_category}` : ''}</dd></div>{ev.semantic.confidence != null && <div><dt>Confidence</dt><dd>{Math.round(ev.semantic.confidence * 100)}%</dd></div>}{ev.semantic.reason && <div><dt>Model explanation (unverified)</dt><dd>{ev.semantic.reason}</dd></div>}</dl>}
+      {group.representative.event_id === ev.id ? <span className="badge active" title="This occurrence supplies the text used as the group title">Representative · group title</span> : <button className="quiet-button" onClick={() => void mutate(`admin/groups/${groupId}`, "PATCH", { representative_event_id: ev.id })}>Make representative</button>}
+      <label><input type="checkbox" aria-label={`Select occurrence ${ev.id} for split`} checked={selectedEvents.includes(ev.id)} onChange={e => { const checked = e.target.checked; if (checked) setMoreActions(true); setSelectedEvents(current => checked ? [...current, ev.id] : current.filter(id => id !== ev.id)); }} /> Select for split</label>
+      <dl className="occurrence-summary">
+        {Boolean(ev.agent_reported.question) && <div><dt>Question</dt><dd>{String(ev.agent_reported.question)}</dd></div>}
+        <div><dt>Reported via</dt><dd>{String(ev.system.submitted_via ?? "unknown")}</dd></div>
+        {Boolean(ev.system.token_name) && <div><dt>Token</dt><dd>{String(ev.system.token_name)}</dd></div>}
+        <div><dt>Reported</dt><dd>{ev.system.received_at ? <time dateTime={ev.system.received_at}>{new Date(ev.system.received_at).toLocaleString()}</time> : "Time unavailable"}</dd></div>
+        {Boolean(ev.agent_reported.agent_id) && <div><dt>Agent</dt><dd>{String(ev.agent_reported.agent_id)}</dd></div>}
+        {Boolean(ev.agent_reported.previous_answer) && <div><dt>Previous answer</dt><dd>{String(ev.agent_reported.previous_answer)}</dd></div>}
+        {Boolean(ev.agent_reported.context) && <div><dt>Context</dt><dd>{String(ev.agent_reported.context)}</dd></div>}
+        {ev.event_type === "knowledge_correction" && Boolean(ev.agent_reported.correction ?? ev.submitted_correction) && <div><dt>Submitted correction (unverified)</dt><dd>{stringify(ev.agent_reported.correction ?? ev.submitted_correction)}</dd></div>}
+      </dl>
+      <details><summary>Technical details</summary><h4>System</h4>{safe(ev.system)}{Boolean(ev.agent_reported.metadata) && Object.keys(ev.agent_reported.metadata as object).length > 0 && <><h4>Metadata</h4>{safe(ev.agent_reported.metadata)}</>}</details>
+      <details className="occurrence-more"><summary>More actions</summary><button className="danger-button" aria-label={`Delete occurrence ${ev.id}`} onClick={e => openDialog("delete", e.currentTarget, ev.id)}>Delete occurrence</button></details>
+      {copies}
+    </article>
+  );
   return (
     <main className="dashboard-main">
       <section
@@ -256,65 +292,36 @@ export function GroupDetail({
             {error}
           </p>
         )}
-        <div className="group-detail-columns"><div className="group-detail-main">
-        <section aria-labelledby="occurrences-title">
-          <h2 id="occurrences-title">Occurrences</h2>
-          <p className="subtle">The representative occurrence supplies the text used as this group’s title.</p>
-          {events.map((ev) => (
-            <article className="panel" id={`event-${ev.id}`} key={ev.id}>
-              <h3>Occurrence <code>{ev.id}</code></h3>
-              {ev.match && <p className="occurrence-match"><span className="badge">{matchLabels[ev.match.method] ?? "Match"}</span>{ev.match.triggered_reopen && <span className="badge active">Reopened this group</span>}</p>}
-              {ev.semantic && <dl className="occurrence-summary"><div><dt>Semantic outcome</dt><dd>{ev.semantic.outcome}{ev.semantic.error_category ? ` · ${ev.semantic.error_category}` : ''}</dd></div>{ev.semantic.confidence != null && <div><dt>Confidence</dt><dd>{Math.round(ev.semantic.confidence * 100)}%</dd></div>}{ev.semantic.reason && <div><dt>Model explanation (unverified)</dt><dd>{ev.semantic.reason}</dd></div>}</dl>}
-              {group.representative.event_id === ev.id ? <span className="badge active" title="This occurrence supplies the text used as the group title">Representative · group title</span> : <button className="quiet-button" onClick={() => void mutate(`admin/groups/${groupId}`, "PATCH", { representative_event_id: ev.id })}>Make representative</button>}
-              <label><input type="checkbox" aria-label={`Select occurrence ${ev.id} for split`} checked={selectedEvents.includes(ev.id)} onChange={e => setSelectedEvents(current => e.target.checked ? [...current, ev.id] : current.filter(id => id !== ev.id))} /> Select for split</label>
-              <dl className="occurrence-summary">
-                {Boolean(ev.agent_reported.question) && <div><dt>Question</dt><dd>{String(ev.agent_reported.question)}</dd></div>}
-                <div><dt>Reported via</dt><dd>{String(ev.system.submitted_via ?? "unknown")}</dd></div>
-                {Boolean(ev.system.token_name) && <div><dt>Token</dt><dd>{String(ev.system.token_name)}</dd></div>}
-                <div><dt>Reported</dt><dd>{ev.system.received_at ? <time dateTime={ev.system.received_at}>{new Date(ev.system.received_at).toLocaleString()}</time> : "Time unavailable"}</dd></div>
-                {Boolean(ev.agent_reported.agent_id) && <div><dt>Agent</dt><dd>{String(ev.agent_reported.agent_id)}</dd></div>}
-                {Boolean(ev.agent_reported.previous_answer) && <div><dt>Previous answer</dt><dd>{String(ev.agent_reported.previous_answer)}</dd></div>}
-                {Boolean(ev.agent_reported.context) && <div><dt>Context</dt><dd>{String(ev.agent_reported.context)}</dd></div>}
-                {ev.event_type === "knowledge_correction" && Boolean(ev.agent_reported.correction ?? ev.submitted_correction) && <div><dt>Submitted correction (unverified)</dt><dd>{stringify(ev.agent_reported.correction ?? ev.submitted_correction)}</dd></div>}
-              </dl>
-              <details><summary>Technical details</summary><h4>System</h4>{safe(ev.system)}{Boolean(ev.agent_reported.metadata) && Object.keys(ev.agent_reported.metadata as object).length > 0 && <><h4>Metadata</h4>{safe(ev.agent_reported.metadata)}</>}</details>
-              <details className="occurrence-more"><summary>More actions</summary><button className="danger-button" aria-label={`Delete occurrence ${ev.id}`} onClick={e => openDialog("delete", e.currentTarget, ev.id)}>Delete occurrence</button></details>
-            </article>
-          ))}
-          {!events.length && <p>No occurrences found.</p>}
-        </section>
-        </div><aside className="group-detail-triage">
+        <div className="group-detail-columns"><aside className="group-detail-triage">
         <section className="panel" aria-labelledby="triage-title">
           <h2 id="triage-title">Triage</h2>
           <p role="status" aria-live="polite" className="inline-status">{notice}</p>
-          <div className="action-row">
-            <button className="quiet-button" onClick={e => openDialog("merge", e.currentTarget)}>Merge groups</button>
-            <button className="quiet-button" disabled={!selectedEvents.length || selectedEvents.length >= group.occurrence_count} aria-describedby="split-hint" onClick={e => { setSplitRepresentative(""); openDialog("split", e.currentTarget); }}>Split selected occurrences ({selectedEvents.length})</button>
-          </div>
-          <section aria-labelledby="similar-title"><h3 id="similar-title">Similar groups</h3><button className="quiet-button" onClick={async () => { try { const r = await apiRequest<{items:{group_id:string;question_excerpt:string;score:number}[]}>(`admin/groups/${groupId}/similar`); setSimilar(r.items); } catch(err) { setError(err instanceof Error ? err.message : 'Could not load similar groups.'); } }}>Find similar groups</button>{similar && (similar.length ? <ul>{similar.map(item => <li key={item.group_id}>{item.question_excerpt} <button className="text-button" onClick={e => openDialog('merge', e.currentTarget, undefined, [item.group_id])}>Merge this group</button></li>)}</ul> : <p className="subtle">No similar groups found.</p>)}</section>
-          <p className="inline-note" id="split-hint">{!selectedEvents.length ? "Select an occurrence to enable splitting." : selectedEvents.length >= group.occurrence_count ? "Keep at least one occurrence in this group." : "Selected occurrences will move to a new group."}</p>
-          <label>
-            Status
-            <select
-              aria-label="Group status"
-              value={group.status}
-              onChange={(e) => {
-                const status = e.target.value;
-                setAskChange(false);
-                void mutate(`admin/groups/${groupId}`, "PATCH", { status }).then(saved => { if (saved && status === "resolved") setAskChange(true); });
-              }}
-            >
-              {["open", "in_progress", "resolved", "dismissed"].map((x) => (
-                <option key={x} value={x}>{statusLabels[x]}</option>
+          <fieldset className="status-filter group-status">
+            <legend>Status</legend>
+            <div className="status-toggles">
+              {statuses.map((x) => (
+                <button
+                  type="button"
+                  key={x}
+                  aria-pressed={group.status === x}
+                  className={`status-toggle${group.status === x ? " is-selected" : ""}`}
+                  onClick={() => {
+                    if (group.status === x) return;
+                    setAskChange(false);
+                    void mutate(`admin/groups/${groupId}`, "PATCH", { status: x }).then(saved => { if (saved && x === "resolved") setAskChange(true); });
+                  }}
+                >
+                  {statusLabels[x]}
+                </button>
               ))}
-            </select>
-          </label>
-          {askChange && group.status === "resolved" && <form className="resolve-note" aria-label="What did you change" onSubmit={e => {
+            </div>
+          </fieldset>
+          {askChange && group.status === "resolved" && <form className="resolve-note" onSubmit={e => {
             e.preventDefault();
             void mutate(`admin/groups/${groupId}/notes`, "POST", { body: change.trim(), resolution: true }).then(saved => { if (saved) { setAskChange(false); setChange(""); } });
           }}>
             <label htmlFor="resolve-change">What did you change? (optional)</label>
-            <input id="resolve-change" value={change} maxLength={280} onChange={e => setChange(e.target.value)} placeholder="For example: added shipping countries to the FAQ" />
+            <input id="resolve-change" ref={resolveChangeRef} value={change} maxLength={280} onChange={e => setChange(e.target.value)} placeholder="For example: added shipping countries to the FAQ" />
             <div className="action-row"><button className="primary-button" disabled={!change.trim()}>Save note</button><button type="button" className="quiet-button" onClick={() => { setAskChange(false); setChange(""); }}>Skip</button></div>
           </form>}
           <section aria-labelledby="admin-notes-title">
@@ -388,8 +395,44 @@ export function GroupDetail({
               </span>
             ))}
           </div>
+          <details className="triage-more" open={moreActions} onToggle={e => setMoreActions(e.currentTarget.open)}>
+            <summary>More actions</summary>
+            <div className="action-row">
+              <button className="quiet-button" onClick={e => openDialog("merge", e.currentTarget)}>Merge groups</button>
+              <button className="quiet-button" disabled={!selectedEvents.length || selectedEvents.length >= group.occurrence_count} aria-describedby="split-hint" onClick={e => { setSplitRepresentative(""); openDialog("split", e.currentTarget); }}>Split selected occurrences ({selectedEvents.length})</button>
+            </div>
+            <p className="inline-note" id="split-hint">{!selectedEvents.length ? "Select an occurrence to enable splitting." : selectedEvents.length >= group.occurrence_count ? "Keep at least one occurrence in this group." : "Selected occurrences will move to a new group."}</p>
+            <section aria-labelledby="similar-title"><h3 id="similar-title">Similar groups</h3><button className="quiet-button" onClick={async () => { try { const r = await apiRequest<{items:{group_id:string;question_excerpt:string;score:number}[]}>(`admin/groups/${groupId}/similar`); setSimilar(r.items); } catch(err) { setError(err instanceof Error ? err.message : 'Could not load similar groups.'); } }}>Find similar groups</button>{similar && (similar.length ? <ul>{similar.map(item => <li key={item.group_id}>{item.question_excerpt} <button className="text-button" onClick={e => openDialog('merge', e.currentTarget, undefined, [item.group_id])}>Merge this group</button></li>)}</ul> : <p className="subtle">No similar groups found.</p>)}</section>
+          </details>
         </section>
-        </aside></div>
+        </aside><div className="group-detail-main">
+        <section aria-labelledby="occurrences-title">
+          <h2 id="occurrences-title">Occurrences</h2>
+          <p className="subtle">The representative occurrence supplies the text used as this group’s title.</p>
+          {clusters.map((copies) => {
+            const key = sameText(copies[0]);
+            const first = copies.find((ev) => ev.id === group.representative.event_id) ?? copies[0];
+            const rest = copies.filter((ev) => ev !== first);
+            const open = shownCopies[key] ?? rest.some((ev) => ev.id === highlight);
+            const latest = copies.reduce((last, ev) => (ev.system.received_at > last ? ev.system.received_at : last), "");
+            return (
+              <React.Fragment key={first.id}>
+                {occurrence(first, rest.length > 0 && (
+                  <p className="identical-reports">
+                    {rest.length} more {rest.length === 1 ? "report" : "reports"} with identical text
+                    {latest && <>, last <time dateTime={latest} title={exactDate(latest)}>{relativeDate(latest)}</time></>}
+                    <button type="button" className="text-button" aria-expanded={open} onClick={() => setShownCopies((current) => ({ ...current, [key]: !open }))}>
+                      {open ? "Hide identical reports" : `Show all ${copies.length}`}
+                    </button>
+                  </p>
+                ))}
+                {open && rest.map((ev) => occurrence(ev))}
+              </React.Fragment>
+            );
+          })}
+          {!events.length && <p>No occurrences found.</p>}
+        </section>
+        </div></div>
         {more && <div className="group-detail-main"><button className="quiet-button" onClick={async () => {
           try {
             const page = await apiRequest<{ items: Event[]; next_cursor: string | null }>(`admin/groups/${groupId}/events?cursor=${encodeURIComponent(more)}`);

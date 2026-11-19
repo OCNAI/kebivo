@@ -153,13 +153,19 @@ test('open a group and update its status; the filter survives a reload', async (
   await expect(page.getByRole('heading', { name: 'Occurrences' })).toBeVisible();
   await expect(page.locator('[aria-labelledby="occurrences-title"] article time').first()).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}T/);
   await expect(page.getByText('Time unavailable')).toHaveCount(0);
-  await page.getByLabel('Group status').selectOption({ label: 'Resolved' });
-  await expect(page.getByLabel('Group status')).toHaveValue('resolved');
-  await page.getByLabel('What did you change? (optional)').fill('Added the answer to the FAQ');
+  const status = page.getByRole('group', { name: 'Status' });
+  await expect(status).toBeInViewport();
+  await status.getByRole('button', { name: 'Resolved' }).click();
+  await expect(status.getByRole('button', { name: 'Resolved' })).toHaveAttribute('aria-pressed', 'true');
+  // Resolving moves straight to the change note, in view and focused.
+  const changeNote = page.getByLabel('What did you change? (optional)');
+  await expect(changeNote).toBeFocused();
+  await expect(changeNote).toBeInViewport();
+  await changeNote.fill('Added the answer to the FAQ');
   await page.getByRole('button', { name: 'Save note' }).click();
   await expect(page.getByText('You changed: Added the answer to the FAQ').first()).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel('Group status')).toHaveValue('resolved');
+  await expect(page.getByRole('group', { name: 'Status' }).getByRole('button', { name: 'Resolved' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText(/^Resolved .*, no new occurrences since$/)).toBeVisible();
 
   await page.goto('/inbox');
@@ -275,10 +281,11 @@ test('keyboard only: sign in, open the inbox and a group, change its status', as
   await tabTo(new RegExp(billingQuestion.slice(0, 20)));
   await keys.keyboard.press('Enter');
   await expect(keys.getByRole('heading', { level: 1 })).toContainText(billingQuestion);
-  await tabTo('Group status');
-  await keys.keyboard.type('In progress');
-  await expect(keys.getByLabel('Group status')).toHaveValue('in_progress');
+  await tabTo('In progress');
+  await keys.keyboard.press('Enter');
+  const inProgress = keys.getByRole('group', { name: 'Status' }).getByRole('button', { name: 'In progress' });
+  await expect(inProgress).toHaveAttribute('aria-pressed', 'true');
   await keys.reload();
-  await expect(keys.getByLabel('Group status')).toHaveValue('in_progress');
+  await expect(inProgress).toHaveAttribute('aria-pressed', 'true');
   await fresh.close();
 });
