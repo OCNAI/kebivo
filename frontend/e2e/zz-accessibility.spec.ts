@@ -115,3 +115,28 @@ test('project-filter deep link opens More filters and Clear filters closes it', 
   expect(await moreFilters.evaluate(element => (element as HTMLDetailsElement).open)).toBe(false);
   await api.dispose();
 });
+
+test('phone layout does not scroll sideways; digest form and token table have unique landmarks and named headers', async ({ browser, baseURL }) => {
+  const { admin, api } = await loginApi(baseURL!);
+  const project = await admin.call<{ id: string }>('POST', '/projects', { name: 'Phone check', slug: `phone-check-${Date.now()}` });
+  await admin.call('POST', `/projects/${project.id}/tokens`, { name: 'Phone check token', scopes: ['feedback:gap', 'gaps:read'] });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await signIn(page);
+  await expect(page.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeVisible();
+  for (const [path, title] of [['/', 'Dashboard'], ['/inbox', 'Group inbox'], ['/settings', 'Settings'], [`/?project=${project.id}`, 'Dashboard']]) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { name: title, level: 1 })).toBeVisible();
+    if (path.includes('project=')) await expect(page.getByRole('heading', { name: 'Project tokens' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `${path} scrollWidth at 390px`).toBeLessThanOrEqual(390);
+  }
+  const rules = ['landmark-unique', 'empty-table-header'];
+  await expect(page.locator('.scope-chip', { hasText: 'gaps:read' })).toBeVisible();
+  expect((await new AxeBuilder({ page }).withRules(rules).analyze()).violations.map(({ id }) => id), 'token table').toEqual([]);
+  await page.goto('/destinations');
+  await page.getByRole('button', { name: 'New webhook' }).click();
+  await page.getByLabel('Delivery mode').selectOption('weekly_digest');
+  expect((await new AxeBuilder({ page }).withRules(rules).analyze()).violations.map(({ id }) => id), 'weekly digest form').toEqual([]);
+  await context.close();
+  await api.dispose();
+});

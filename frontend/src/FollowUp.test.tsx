@@ -66,10 +66,12 @@ describe('whether a fix worked', () => {
   it('links the 7-day tiles to the filtered inbox', async () => {
     const navigate = vi.fn();
     await act(async () => { root.render(<DashboardSummary navigate={navigate} />); await tick(); });
-    const tile = (label: string) => [...container.querySelectorAll('a')].find(link => link.textContent?.endsWith(label))!;
-    expect(tile('Resolved (7d)').textContent).toBe('4Resolved (7d)');
-    expect(tile('Reopened (7d)').getAttribute('href')).toBe('/inbox?reopened=true&status_changed_from=2026-11-09T00%3A00%3A00%2B00%3A00');
-    await act(async () => { tile('Resolved (7d)').click(); });
+    const week = container.querySelector('[aria-labelledby="summary-week"]')!;
+    expect(week.querySelector('h3')?.textContent).toBe('Last 7 days');
+    const tile = (label: string) => [...week.querySelectorAll('a')].find(link => link.querySelector('span')?.textContent?.startsWith(label))!;
+    expect(tile('Resolved').textContent).toBe('4Resolved in the last 7 days');
+    expect(tile('Reopened').getAttribute('href')).toBe('/inbox?reopened=true&status_changed_from=2026-11-09T00%3A00%3A00%2B00%3A00');
+    await act(async () => { tile('Resolved').click(); });
     expect(navigate).toHaveBeenCalledWith('/inbox?status=resolved&status_changed_from=2026-11-09T00%3A00%3A00%2B00%3A00');
   });
 

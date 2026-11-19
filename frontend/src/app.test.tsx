@@ -78,6 +78,50 @@ describe('authenticated dashboard', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Configured origins: https://admin.example.org');
   });
 
+  it('derives the new project slug from the name until the slug is edited', async () => {
+    const posts: string[] = [];
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/projects') && init?.method === 'POST') { posts.push(String(init.body)); return new Response(JSON.stringify({ detail: 'stop' }), { status: 422 }); }
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
+      if (path.includes('/admin/groups/summary')) return new Response(JSON.stringify({ total_events: 3, total_groups: 1 }));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).toContain('Select a project');
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'New project')!.click(); });
+    const setValue = (input: HTMLInputElement, value: string) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); };
+    const name = container.querySelector<HTMLInputElement>('#project-name')!, slug = () => container.querySelector<HTMLInputElement>('#project-slug')!;
+    await act(async () => { setValue(name, 'Support bot'); });
+    expect(slug().value).toBe('support-bot');
+    expect(container.querySelector('#slug-help')?.textContent).toBe('Lowercase letters, numbers, and internal hyphens. From the name: support-bot');
+    await act(async () => { setValue(name, '  Café FAQ: v2!  '); });
+    expect(slug().value).toBe('cafe-faq-v2');
+    await act(async () => { setValue(slug(), 'faq'); });
+    await act(async () => { setValue(name, 'Something else'); });
+    expect(slug().value).toBe('faq');
+    expect(container.querySelector('#slug-help')?.textContent).toBe('Lowercase letters, numbers, and internal hyphens.');
+    await act(async () => { container.querySelector<HTMLFormElement>('.project-form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(JSON.parse(posts[0]).slug).toBe('faq');
+  });
+
+  it('hides the Select a project panel while the first-run checklist shows', async () => {
+    globalThis.fetch = vi.fn(async (input) => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) return new Response(JSON.stringify({ admin: { id: 'a1', email: 'admin@example.org' }, csrf_token: 'csrf' }));
+      if (path.endsWith('/projects?limit=100')) return new Response(JSON.stringify({ items: [], next_cursor: null }));
+      if (path.includes('/admin/groups/summary')) return new Response(JSON.stringify({ total_events: 0, total_groups: 0 }));
+      return new Response('{}');
+    }) as typeof fetch;
+    history.replaceState({}, '', '/');
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.textContent).toContain('Get your first event in');
+    expect(container.textContent).not.toContain('Select a project');
+    expect(container.querySelector('.dashboard-grid')?.classList.contains('projects-only')).toBe(true);
+  });
+
   it('loads seeded projects into the Dashboard after first-run setup', async () => {
     const sampleProject = { id: 'sample-p', name: 'Sample support', slug: 'sample-support', description: null, is_active: true, archived_at: null, is_sample: true, settings: { corrections: { enabled: false }, deduplication: { mode: 'disabled' } }, tags: [], created_at: '', updated_at: '' };
     globalThis.fetch = vi.fn(async (input, init) => {
