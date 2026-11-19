@@ -10,9 +10,7 @@ import json
 import sys
 
 # Advisories with no patched release, reachable only through dev tooling.
-ALLOWED = {
-    "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",  # picomatch ReDoS, <=4.0.7 (vite, vitest, typescript-eslint)
-}
+ALLOWED: set[str] = set()
 
 report = json.load(sys.stdin)
 if "vulnerabilities" not in report:
