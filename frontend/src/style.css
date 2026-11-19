@@ -160,6 +160,8 @@ tbody th small { display: block; margin-top: 4px; color: #5f6f67; font-weight: 4
 .status-toggle { min-height:32px; padding:5px 7px; border:1px solid #dce4de; border-radius:6px; color:#52645b; background:#fff; font:inherit; font-size:11px; cursor:pointer; }
 .status-toggle span { color:#5f6f67; font-variant-numeric:tabular-nums; }
 .status-toggle.is-selected { border-color:#35735e; color:#20513e; background:#edf5ef; }
+.status-toggle:hover:not(:disabled) { color:#20513e; background:#f1f6f2; }
+.status-toggle.is-selected:hover:not(:disabled) { background:#e3efe6; }
 .more-filters { margin:2px 0 12px; }
 .more-filters summary { width:max-content; color:#285f4c; font-size:12px; font-weight:600; cursor:pointer; }
 .filter-count { display:inline-grid; place-items:center; min-width:19px; height:19px; margin-left:6px; border-radius:50%; color:#fff; background:#35735e; font-size:10px; }
@@ -214,7 +216,8 @@ a.summary-tile.danger:hover { border-color:#c98d89; background:#fff0ef; }
 .group-chips { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0; }
 .group-detail-columns { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(300px,1fr); gap:24px; align-items:start; }
 .group-detail-main > section, .group-detail-triage > section { margin-top:12px; }
-.group-detail-triage { position:sticky; top:20px; }
+.group-detail-triage { grid-column:2; grid-row:1; }
+.group-detail-columns > .group-detail-main { grid-column:1; grid-row:1; }
 .group-detail-triage .inline-status { min-height:1.4em; color:#285f4c; font-size:13px; }
 .occurrence-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; }
 .occurrence-match { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
@@ -225,7 +228,7 @@ a.summary-tile.danger:hover { border-color:#c98d89; background:#fff0ef; }
 .group-detail-main details summary { cursor:pointer; color:#285f4c; font-weight:600; }
 .inline-confirm { display:inline-flex; flex-wrap:wrap; align-items:center; gap:8px; margin-left:8px; }
 button:disabled, button[aria-disabled="true"] { opacity:1; color:#3d4942; background:#e4e9e5; border-color:#c8d1ca; cursor:not-allowed; }
-@media(max-width:1023px) { .group-detail-columns { grid-template-columns:1fr; } .group-detail-triage { position:static; grid-row:1; } .group-detail-main { grid-row:2; } }
+@media(max-width:1023px) { .group-detail-columns { grid-template-columns:1fr; } .group-detail-triage, .group-detail-columns > .group-detail-main { grid-column:auto; grid-row:auto; } }
 @media(max-width:540px) { .occurrence-summary { grid-template-columns:1fr; } .group-question { max-width:100%; } }
 
 @media (max-width: 780px) { .dashboard-grid { grid-template-columns: 1fr; } .project-panel { order: 0; } .detail-column { order: 1; } }
@@ -313,6 +316,17 @@ button:disabled, button[aria-disabled="true"] { opacity:1; color:#3d4942; backgr
 .resolve-note { display:grid; gap:6px; margin:8px 0 12px; }
 .status-filter-row { display:flex; flex-wrap:wrap; align-items:flex-start; gap:4px; }
 .reopened-toggle { margin-left:6px; }
+.group-status { margin:4px 0 12px; }
+.group-status .status-toggles { gap:0; }
+.group-status .status-toggle { min-height:40px; padding:8px 10px; border-radius:0; margin-left:-1px; font-size:13px; }
+.group-status .status-toggle:first-child { margin-left:0; border-radius:8px 0 0 8px; }
+.group-status .status-toggle:last-child { border-radius:0 8px 8px 0; }
+.group-status .status-toggle.is-selected, .group-status .status-toggle:focus-visible { position:relative; }
+.group-status .status-toggle.is-selected { font-weight:700; }
+.identical-reports { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:14px 0 0; padding-top:12px; border-top:1px solid #edf0ed; color:#52645b; font-size:13px; }
+.triage-more { margin-top:16px; padding-top:12px; border-top:1px solid #edf0ed; }
+.triage-more summary { cursor:pointer; color:#285f4c; font-weight:600; }
+.triage-more button:disabled { color:#5f6f67; background:#fff; border-color:#dce4de; }
 h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus { outline:none; }
 .token-form .checkbox-row code { font-size:13px; }
 .sample-short { display:none; }

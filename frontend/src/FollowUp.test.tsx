@@ -77,12 +77,15 @@ describe('whether a fix worked', () => {
 
   it('resolves in one action and saves an optional change note', async () => {
     await act(async () => { root.render(<GroupDetail groupId="g1" navigate={() => {}} />); await tick(); });
-    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Group status"]')!;
-    await act(async () => { select.value = 'resolved'; select.dispatchEvent(new Event('change', { bubbles: true })); await tick(); await tick(); });
+    const resolved = [...container.querySelectorAll<HTMLButtonElement>('.group-status button')].find(button => button.textContent === 'Resolved')!;
+    await act(async () => { resolved.click(); await tick(); await tick(); });
     expect(requests.filter(request => request.method === 'PATCH').map(request => request.body)).toEqual([{ status: 'resolved' }]);
     expect(container.querySelector('h1 + button + .group-chips + .follow-up')?.textContent).toContain('no new occurrences since');
     const input = container.querySelector<HTMLInputElement>('#resolve-change')!;
     expect(container.querySelector('label[for="resolve-change"]')?.textContent).toBe('What did you change? (optional)');
+    expect(document.activeElement).toBe(input);
+    expect(input.form!.hasAttribute('aria-label')).toBe(false);
+    expect(resolved.getAttribute('aria-pressed')).toBe('true');
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'Linked the shipping page'); input.dispatchEvent(new Event('input', { bubbles: true })); });
     await act(async () => { input.form!.requestSubmit(); await tick(); await tick(); });
     expect(requests.find(request => request.method === 'POST')?.body).toEqual({ body: 'Linked the shipping page', resolution: true });
@@ -92,8 +95,8 @@ describe('whether a fix worked', () => {
 
   it('can skip the change note', async () => {
     await act(async () => { root.render(<GroupDetail groupId="g1" navigate={() => {}} />); await tick(); });
-    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Group status"]')!;
-    await act(async () => { select.value = 'resolved'; select.dispatchEvent(new Event('change', { bubbles: true })); await tick(); await tick(); });
+    const resolved = [...container.querySelectorAll<HTMLButtonElement>('.group-status button')].find(button => button.textContent === 'Resolved')!;
+    await act(async () => { resolved.click(); await tick(); await tick(); });
     await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Skip')!.click(); });
     expect(container.querySelector('#resolve-change')).toBeNull();
     expect(requests.some(request => request.method === 'POST')).toBe(false);

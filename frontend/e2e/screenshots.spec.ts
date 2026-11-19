@@ -65,6 +65,29 @@ test('00 first-run setup with the built-in sample data', async ({ browser, baseU
   const lastShop = (await shopRows.last().boundingBox())!;
   await hero.screenshot({ path: path.join(HERO, 'inbox.png'), fullPage: true, clip: { x: 0, y: 0, width: 1280, height: Math.ceil(lastShop.y + lastShop.height + 8) } });
 
+  // The sample Canada group as someone closing it out sees it, on a laptop and a phone.
+  await shopRows.first().getByRole('link').first().click();
+  await expect(hero.getByRole('heading', { name: 'Occurrences' })).toBeVisible();
+  const groupUrl = hero.url();
+  mkdirSync(path.resolve(process.cwd(), '../artifacts/group-detail'), { recursive: true });
+  for (const [width, height] of [[390, 844], [1280, 800]]) {
+    const viewer = await (await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 })).newPage();
+    await signIn(viewer);
+    await expect(viewer.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeVisible();
+    await viewer.goto(groupUrl);
+    await expect(viewer.getByRole('heading', { name: 'Occurrences' })).toBeVisible();
+    await viewer.waitForLoadState('networkidle');
+    const out = (suffix: string) => path.resolve(process.cwd(), `../artifacts/group-detail/canada-${width}x${height}${suffix}.png`);
+    await viewer.screenshot({ path: out('') });
+    await viewer.screenshot({ path: out('-full'), fullPage: true });
+    if (width === 1280) {
+      await viewer.getByRole('group', { name: 'Status' }).getByRole('button', { name: 'Resolved' }).click();
+      await expect(viewer.getByLabel('What did you change? (optional)')).toBeFocused();
+      await viewer.screenshot({ path: out('-resolved') });
+    }
+    await viewer.context().close();
+  }
+
   await setup.getByRole('button', { name: 'Remove sample data' }).click();
   await setup.getByRole('dialog').getByRole('button', { name: 'Remove sample data' }).click();
   await expect(setup.getByText('Sample data removed.')).toBeVisible();
