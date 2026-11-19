@@ -1,4 +1,3 @@
-Paperclip: GitHub capability_rejected; continuing without managed credentials.
 import React from "react";
 import { apiRequest, ApiError } from "./api";
 import { SampleBadge } from "./FirstRun";
