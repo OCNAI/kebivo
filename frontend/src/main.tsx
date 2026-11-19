@@ -221,7 +221,7 @@ export function App() {
       {!selected && !editing && !createFromBanner && <FirstRunEmpty dashboard navigate={navigate} projectId={projects.find(project=>!project.archived_at&&!project.is_sample)?.id} />}
       {!selected && !editing && !createFromBanner && <FirstRunChecklist projects={projects.filter(project=>!project.archived_at)} navigate={navigate} onShownChange={setChecklistShown} />}
       {!selected && !editing && !createFromBanner && <DashboardSummary navigate={navigate} />}
-      <div className={`dashboard-grid${!selected && !editing && !createFromBanner && checklistShown !== false ? ' projects-only' : ''}`}>
+      <div className="dashboard-grid">
         <section className="panel project-panel" aria-labelledby="projects-title">
           <div className="panel-heading"><div><h2 id="projects-title">Projects</h2><p className="subtle">{projects.length} {projects.length === 1 ? 'project' : 'projects'}</p></div><button onClick={() => { setSelectedProject(null); setEditing(true); setError(''); setNotice(''); }}>New project</button></div>
           {projects.filter((project) => showArchived || !project.archived_at).length === 0 ? <div className="empty-state"><h3>{showArchived ? 'No projects yet' : 'No active projects'}</h3><p>Create a project to organize feedback and issue credentials.</p><button onClick={() => { setSelectedProject(null); setEditing(true); }}>Create a project</button></div> : <ul className="project-list">{projects.filter((project) => showArchived || !project.archived_at).map((project) => <li key={project.id}>

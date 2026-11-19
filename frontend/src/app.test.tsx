@@ -119,7 +119,6 @@ describe('authenticated dashboard', () => {
     await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(container.textContent).toContain('Get your first event in');
     expect(container.textContent).not.toContain('Select a project');
-    expect(container.querySelector('.dashboard-grid')?.classList.contains('projects-only')).toBe(true);
   });
 
   it('loads seeded projects into the Dashboard after first-run setup', async () => {
