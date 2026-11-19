@@ -423,7 +423,8 @@ export function GroupDetail({
                     {rest.length} more loaded {rest.length === 1 ? "report" : "reports"} with identical text
                     {latest && <>, last <time dateTime={latest} title={exactDate(latest)}>{relativeDate(latest)}</time></>}
                     {selectedInCluster > 0 && <span>{selectedInCluster} selected for split</span>}
-                    <button type="button" className="text-button" aria-describedby="split-hint" disabled={copies.length >= group.occurrence_count} onClick={() => { setMoreActions(true); setSelectedEvents(current => [...new Set([...current, ...copies.map(ev => ev.id)])]); }}>Select all {copies.length} for split</button>
+                    <button type="button" className="text-button" aria-describedby={copies.length >= group.occurrence_count ? `select-all-hint-${first.id}` : "split-hint"} disabled={copies.length >= group.occurrence_count} onClick={() => { setMoreActions(true); setSelectedEvents(current => [...new Set([...current, ...copies.map(ev => ev.id)])]); }}>Select all {copies.length} for split</button>
+                    {copies.length >= group.occurrence_count && <span className="subtle" id={`select-all-hint-${first.id}`}>Keep at least one occurrence in this group.</span>}
                     <button type="button" className="text-button" aria-expanded={open} onClick={() => setShownCopies((current) => ({ ...current, [key]: !open }))}>
                       {open ? "Hide identical reports" : `Show all ${copies.length} loaded`}
                     </button>
