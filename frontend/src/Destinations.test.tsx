@@ -375,6 +375,39 @@ describe("Destinations admin UI", () => {
       "Test send: timeout · Timed out safely",
     );
   });
+  it("shows auth secret fields only for the selected authentication type", async () => {
+    await render();
+    await act(async () => {
+      container.querySelector("button")!.click();
+    });
+    const field = (name: string) =>
+      container.querySelector(`input[name="${name}"]`);
+    const auth = container.querySelector<HTMLSelectElement>("#auth")!;
+    const choose = async (value: string) =>
+      act(async () => {
+        auth.value = value;
+        auth.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    expect(field("token")).toBeNull();
+    expect(field("header_name")).toBeNull();
+    expect(field("header_value")).toBeNull();
+    await choose("bearer");
+    expect(field("token")).not.toBeNull();
+    expect(field("header_name")).toBeNull();
+    await choose("header");
+    expect(field("token")).toBeNull();
+    expect(field("header_name")).not.toBeNull();
+    expect(field("header_value")).not.toBeNull();
+    expect(
+      container.querySelector('textarea[name="custom_headers"]'),
+    ).not.toBeNull();
+  });
+  it("names the configured destination list apart from the page", async () => {
+    await render();
+    expect(
+      container.querySelector(".destination-list")?.getAttribute("aria-label"),
+    ).toBe("Configured destinations");
+  });
   it("keeps untouched saved custom headers out of edits and supports clearing", async () => {
     await render();
     await act(async () => {

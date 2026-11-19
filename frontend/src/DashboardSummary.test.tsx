@@ -48,6 +48,43 @@ describe('Dashboard delivery failure link', () => {
     expect(deliveriesUrl.searchParams.get('status')).toBe('failed');
   });
 
+  it('marks delivery failures as needing action and links status tiles to the inbox', async () => {
+    await act(async () => {
+      root.render(<DashboardSummary navigate={() => {}} />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const now = container.querySelector('[aria-labelledby="summary-now"]')!;
+    expect(now.querySelector('h3')?.textContent).toBe('Now');
+    expect([...now.querySelectorAll('.summary-tile')].map(tile => tile.querySelector('span')?.textContent)).toEqual(['Open', 'In progress', 'Delivery failures (24h)']);
+    expect(now.querySelector('a[href="/inbox?status=in_progress"]')).not.toBeNull();
+    expect(now.querySelector('a[href="/deliveries?status=failed"]')?.classList.contains('danger')).toBe(true);
+    expect(container.querySelector('[aria-labelledby="summary-total"] a[href="/inbox?status=dismissed"]')).not.toBeNull();
+  });
+
+  it('does not link or flag delivery failures when there are none', async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ total_groups: 0, total_events: 0, groups_by_status: {}, failed_deliveries_last_24h: 0, top_open_gaps: [] }))) as typeof fetch;
+    await act(async () => {
+      root.render(<DashboardSummary navigate={() => {}} />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(container.querySelector('a[href="/deliveries?status=failed"]')).toBeNull();
+    expect(container.querySelector('.summary-tile.danger')).toBeNull();
+  });
+
+  it('reserves the tile and recurring-gap layout while loading and announces it', async () => {
+    globalThis.fetch = vi.fn(() => new Promise<Response>(() => {})) as typeof fetch;
+    await act(async () => {
+      root.render(<DashboardSummary navigate={() => {}} />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Loading feedback summary…');
+    expect(container.querySelector('.summary-groups')?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelectorAll('.summary-skeleton')).toHaveLength(9);
+    expect(container.querySelectorAll('.summary-groups a')).toHaveLength(0);
+    expect(container.textContent).toContain('Top recurring open gaps');
+    expect(container.querySelector('.recurring-skeleton')).not.toBeNull();
+  });
+
   it('shows only recurring questions in a compact four-column table', async () => {
     globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
       total_groups: 2,
@@ -66,6 +103,9 @@ describe('Dashboard delivery failure link', () => {
     expect(container.querySelectorAll('.recurring-table thead th')).toHaveLength(4);
     expect(container.textContent).toContain('Repeated question');
     expect(container.textContent).not.toContain('One-off question');
+    const lastSeen = container.querySelector('.recurring-table time')!;
+    expect(lastSeen.getAttribute('title')).toBe(new Date('2026-01-03T00:00:00Z').toLocaleString());
+    expect(lastSeen.textContent).toMatch(/ago$/);
   });
 
   it('does not render the old dashboard empty state inside the feedback summary', async () => {
