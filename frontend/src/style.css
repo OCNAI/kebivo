@@ -199,6 +199,7 @@ a.summary-tile:hover { border-color:#9bb7a6; background:#f7faf7; }
 .summary-tile.danger { border-color:#e3b9b6; background:#fff6f5; color:#873e3e; }
 .summary-tile.danger strong { color:#873e3e; }
 a.summary-tile.danger:hover { border-color:#c98d89; background:#fff0ef; }
+.summary-alert { margin-right:5px; font-style:normal; font-size:16px; vertical-align:2px; }
 .summary-skeleton { display:inline-block; width:2ch; height:.8em; border-radius:4px; background:#e6ece7; vertical-align:middle; }
 .recurring-skeleton { min-height:150px; }
 .app-link, .recurring-table a { color:#285f4c; text-decoration:underline; text-underline-offset:3px; }
@@ -339,7 +340,6 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus { outline:none; }
   .sample-banner .sample-long { display:none; }
   .sample-banner .sample-short { display:block; margin-right:2px; }
   .sample-actions { width:auto; flex-direction:row; gap:0; }
-  .sample-actions .sample-remove { order:-1; }
   .sample-actions button, .sample-actions button.quiet-button { width:auto; min-height:44px; padding:0 6px; border:0; background:transparent; color:#285f4c; text-decoration:underline; text-underline-offset:3px; }
   .sample-actions button:hover:not(:disabled) { background:#e8f0ea; color:#1d4f3b; }
   main { padding-top:16px; }

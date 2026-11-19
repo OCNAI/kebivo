@@ -99,6 +99,11 @@ describe('authenticated dashboard', () => {
     expect(container.querySelector('#slug-help')?.textContent).toBe('Lowercase letters, numbers, and internal hyphens. From the name: support-bot');
     await act(async () => { setValue(name, '  Café FAQ: v2!  '); });
     expect(slug().value).toBe('cafe-faq-v2');
+    await act(async () => { setValue(name, 'Łódź Straße Ørsted'); });
+    expect(slug().value).toBe('lodz-strasse-orsted');
+    await act(async () => { setValue(name, '日本語'); });
+    expect(slug().value).toBe('');
+    expect(container.querySelector('#slug-help')?.textContent).toBe("Lowercase letters, numbers, and internal hyphens. Can't make one from this name. Type a slug.");
     await act(async () => { setValue(slug(), 'faq'); });
     await act(async () => { setValue(name, 'Something else'); });
     expect(slug().value).toBe('faq');

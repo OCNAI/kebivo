@@ -107,6 +107,7 @@ describe('sample banner removal', () => {
     await act(async () => { root.render(<FirstRunProvider navigate={navigate}><header>Nav</header><FirstRunNotice /><main><h1 tabIndex={-1}>Inbox</h1></main></FirstRunProvider>); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(host.textContent).toContain("You're looking at sample data.");
     const remove = [...host.querySelectorAll('button')].find(button => button.textContent === 'Remove sample data')!;
+    expect(remove.getAttribute('aria-label')).toBe('Remove sample data');
     await act(async () => { remove.click(); });
     expect(host.querySelector('dialog')?.hasAttribute('open')).toBe(true);
     await act(async () => { host.querySelector<HTMLButtonElement>('dialog button')!.click(); });
