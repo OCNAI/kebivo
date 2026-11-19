@@ -38,7 +38,7 @@ export function FirstRunChecklist({ projects, navigate, onShownChange }: { proje
 type Tile = { label: string; hint?: string; count?: number; url?: string; danger?: boolean };
 function TileGroup({ id, title, tiles, navigate }: { id: string; title: string; tiles: Tile[]; navigate: (url: string) => void }) {
   return <div className="summary-group" role="group" aria-labelledby={id}><h3 id={id}>{title}</h3><div className="summary-counts">{tiles.map(tile => {
-    const body = <><strong>{tile.count ?? <span className="summary-skeleton" />}</strong><span>{tile.label}{tile.hint && <span className="sr-only"> {tile.hint}</span>}</span></>;
+    const body = <><strong>{tile.danger && <i className="summary-alert" aria-hidden="true">⚠&#xFE0E;</i>}{tile.count ?? <span className="summary-skeleton" />}</strong><span>{tile.label}{tile.hint && <span className="sr-only"> {tile.hint}</span>}</span></>;
     const className = tile.danger ? 'summary-tile danger' : 'summary-tile';
     return tile.url ? <a key={tile.label} className={className} href={tile.url} onClick={e => { e.preventDefault(); navigate(tile.url!); }}>{body}</a> : <div key={tile.label} className={className}>{body}</div>;
   })}</div></div>;

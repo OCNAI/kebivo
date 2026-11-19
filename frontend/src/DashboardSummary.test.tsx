@@ -58,6 +58,8 @@ describe('Dashboard delivery failure link', () => {
     expect([...now.querySelectorAll('.summary-tile')].map(tile => tile.querySelector('span')?.textContent)).toEqual(['Open', 'In progress', 'Delivery failures (24h)']);
     expect(now.querySelector('a[href="/inbox?status=in_progress"]')).not.toBeNull();
     expect(now.querySelector('a[href="/deliveries?status=failed"]')?.classList.contains('danger')).toBe(true);
+    expect(now.querySelector('a[href="/deliveries?status=failed"] .summary-alert')?.getAttribute('aria-hidden')).toBe('true');
+    expect(now.querySelectorAll('.summary-alert')).toHaveLength(1);
     expect(container.querySelector('[aria-labelledby="summary-total"] a[href="/inbox?status=dismissed"]')).not.toBeNull();
   });
 
@@ -69,6 +71,7 @@ describe('Dashboard delivery failure link', () => {
     });
     expect(container.querySelector('a[href="/deliveries?status=failed"]')).toBeNull();
     expect(container.querySelector('.summary-tile.danger')).toBeNull();
+    expect(container.querySelector('.summary-alert')).toBeNull();
   });
 
   it('reserves the tile and recurring-gap layout while loading and announces it', async () => {
