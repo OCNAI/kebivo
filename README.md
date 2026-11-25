@@ -7,9 +7,9 @@
 
 # Kebivo: the inbox for questions your AI couldn't answer
 
-For developers who built their own support or docs chatbot. Your app reports each question the bot couldn't answer, over REST or MCP. Kebivo groups the repeats and routes them to whoever can fix the docs. It runs in one container on your own server, with no signup.
+For developers who built their own support or docs chatbot. Your app reports each question the bot couldn't answer, over REST or MCP. Kebivo groups the repeats and routes them to you or your team, so you can fix your docs. It runs in one container on your own server, with no signup.
 
-![Demo: a customer asks a shop's AI support chatbot, "Do you ship to Canada?" The bot cannot answer. The app reports the question to Kebivo over MCP; a configured webhook route delivers it. A second report joins one inbox group with 2 occurrences. Product frames use sample data from a real Kebivo container.](docs/assets/demo.gif)
+![Demo: a customer asks your shop's AI support chatbot, "Do you ship to Canada?" The bot cannot answer. Your app reports the question to Kebivo over MCP; a configured webhook route delivers it. A second report joins one inbox group with 2 occurrences. Product frames use sample data from a real Kebivo container.](docs/assets/demo.gif)
 
 [![CI](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/OCNAI/kebivo/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -26,10 +26,10 @@ docker run -d --name kebivo --restart unless-stopped -p 127.0.0.1:8000:8000 -v k
 curl -fsS --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8000/health/ready
 ```
 
-**Without Kebivo:** the bot says it couldn't find the answer, the user gives up, and the question sits in a log nobody reads.\
-**With Kebivo:** the question shows up once in the inbox with a repeat count, and your routing rules can send it to Slack, email or a webhook for whoever owns those docs.
+**Without Kebivo:** your bot says it couldn't find the answer, your customer gives up, and the question sits in a log you don't read.\
+**With Kebivo:** the question shows up once in your inbox with a repeat count, and your routing rules can send it to you or your team over Slack, email or a webhook.
 
-![Kebivo group inbox with sample data from a shop assistant: "Do you ship to Canada?" has 7 occurrences, alongside other customer questions the chatbot could not answer.](docs/assets/screenshots/inbox.png)
+![Kebivo group inbox with sample shop data: "Do you ship to Canada?" has 7 occurrences, alongside other customer questions the chatbot could not answer.](docs/assets/screenshots/inbox.png)
 
 <sub>Group inbox from a real Kebivo container with sample data.</sub>
 
@@ -37,14 +37,14 @@ Continue with the [Quickstart](#quickstart) to report a question. The full docum
 
 ## Why
 
-When an assistant cannot answer, the documentation owner may never see the question. The same question can fail again, and corrections offered in chat may never reach the people who maintain the content. Kebivo collects those knowledge gaps in one place, where owners can triage and route them to the tools they use.
+When your chatbot cannot answer, you may never see the question. The same question can fail again for the next customer, and corrections your customers offer in chat may never reach your team. Kebivo collects those questions in one place, where you can triage them and route them to the tools your team uses.
 
 ## When to use Kebivo
 
 - Your assistant, chatbot or RAG app can identify an unanswered question and report it over REST or MCP.
-- The same questions recur, and content owners need a grouped count and inbox to prioritize them.
+- The same questions recur, and you need a grouped count and an inbox to prioritize them.
 - Different teams own different topics, so you need to route reports by project or tags to Slack, email or signed webhooks.
-- Users suggest corrections (an opt-in setting, off by default), and a person must review them before anyone changes the knowledge source.
+- Your customers suggest corrections (an opt-in setting, off by default), and you or your team review each one before anything changes in your docs.
 - You need a self-hosted feedback workflow that runs without a cloud account or AI provider.
 
 ## Features
