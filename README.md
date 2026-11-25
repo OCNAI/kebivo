@@ -16,12 +16,12 @@ For developers who built their own support or docs chatbot. Your app reports eac
 [![Release](https://img.shields.io/github/v/release/OCNAI/kebivo?sort=semver)](https://github.com/OCNAI/kebivo/releases)
 [![Container image](https://img.shields.io/badge/image-ghcr.io%2Focnai%2Fkebivo-2496ED?logo=docker&logoColor=white)](https://github.com/OCNAI/kebivo/pkgs/container/kebivo)
 
-> **Status: 0.3.0.** Run the published image `ghcr.io/ocnai/kebivo:0.3.0` (`linux/amd64`, `linux/arm64`) or build it from this repository. Licensed under [Apache-2.0](LICENSE).
+> **Status: 0.4.0.** Run the published image `ghcr.io/ocnai/kebivo:0.4.0` (`linux/amd64`, `linux/arm64`) or build it from this repository. Licensed under [Apache-2.0](LICENSE).
 
 Try it with Docker and a free port 8000:
 
 ```sh
-docker run --name kebivo -p 127.0.0.1:8000:8000 -v kebivo-data:/data ghcr.io/ocnai/kebivo:0.3.0
+docker run --name kebivo -p 127.0.0.1:8000:8000 -v kebivo-data:/data ghcr.io/ocnai/kebivo:0.4.0
 ```
 
 Open the `Kebivo setup:` link printed in the terminal, create your administrator, and keep **Start with sample data** selected to see a filled inbox. The link expires after 60 minutes; restart for a new one. The named volume holds the generated keys as well as the database; see [key custody](docs/self-hosting.md#secrets-and-what-to-protect) before using real credentials.
@@ -83,7 +83,7 @@ You need Docker, Python 3 and a free port 8000. No account, cloud service or API
 **1. Start Kebivo.** Skip this step if you ran the command above. Keep the terminal open for the one-time setup link.
 
 ```sh
-docker run --name kebivo -p 127.0.0.1:8000:8000 -v kebivo-data:/data ghcr.io/ocnai/kebivo:0.3.0
+docker run --name kebivo -p 127.0.0.1:8000:8000 -v kebivo-data:/data ghcr.io/ocnai/kebivo:0.4.0
 ```
 
 Open the printed `Kebivo setup:` link, create an administrator with a password of at least 12 characters, and keep **Start with sample data** selected to see a filled inbox. If you mapped another host port, change `8000` in the link. The sample-data banner lets you remove the examples later.

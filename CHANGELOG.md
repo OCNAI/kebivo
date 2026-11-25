@@ -1,14 +1,28 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-11-25
 
-- A fresh `docker run` with a named volume now generates keys in `/data/kebivo-secrets.env` and prints a one-time administrator setup link. Setup can load labelled, removable sample data. Database-only backups exclude the key file; save the matching keys separately before a restore. See [key custody](docs/self-hosting.md#secrets-and-what-to-protect).
+First run with no setup: one `docker run` with a named volume gets you to a filled inbox, with no keys to generate and no CLI step.
+
+- A fresh `docker run` with a named volume now generates keys in `/data/kebivo-secrets.env` and prints a one-time administrator setup link (valid for 60 minutes; restart for a new one). Setup can load labelled, removable sample data: a **Shop assistant** project whose rows are marked **Sample**, kept apart from your own feedback, never sent to an LLM provider, and removable from the sample-data banner. Database-only backups exclude the key file; save the matching keys separately before a restore. See [key custody](docs/self-hosting.md#secrets-and-what-to-protect). Compose and existing installations still use keys from the environment.
+- First-run and startup errors say what to do next, and invalid settings are printed on one line.
+- After your first real report, the Inbox shows administrators a one-time GitHub star prompt. Dismissing it, or following the link, hides it for good.
+- The MCP Registry entry no longer lists required environment variables, links to <https://kebivo.com>, and describes who reports a miss. Keys are generated locally, so no external account or secret is needed to start it.
+- Inbox filters and text meet contrast checks, and the Connect tab hover state is readable whether or not the tab is selected.
+- The README and Docker quickstart lead with the one-command setup and new screenshots, and the reporting guide covers failures and an app-controlled fallback for chatbots.
+
+### Security
+
+Fixes a slow-regex stall in trace-context parsing (GHSA-mf5v-w3w3-f6cg) that any project token could trigger over MCP. On 0.3.0, set `MCP_ENABLED=false` until you upgrade if you share tokens with agents you don't trust.
 
 ### Upgrade
 
-If `ALLOWED_ORIGINS` is empty, an existing installation now accepts browser login from an HTTP loopback origin when its host and port match the request `Host`. Previously, empty refused all browser login. A valid administrator password is still required. Set `ALLOWED_ORIGINS` for proxy or public access; other origins remain refused. With it empty, the origin check stops other websites, not other hosts, so keep the port bound to `127.0.0.1`.
+Back up first (see [Backup and restore](docs/self-hosting.md#backup-and-restore)). On start, migrations `0017` and `0018` add the sample-data markers and the star prompt dismissal; they leave existing feedback, groups and routing unchanged. The latest migration is `0018`, and a 0.3.0 image will not start on a database that has it, so keep the backup if you may need to roll back. Keep supplying your existing `SECRET_KEY` and `ENCRYPTION_KEY`; an existing database without them still refuses to start. Pull `ghcr.io/ocnai/kebivo:0.4.0` (or `git pull` and rebuild) and check `/health/ready`.
 
-When `/data/kebivo-secrets.env` holds a key and the environment sets that key to a different value, the container now refuses to start and names the variable instead of starting with a key that breaks project tokens or stored secrets. Passing the same value, or leaving the variable unset or blank, works as before. To change a key on purpose, delete its line from the file first.
+Two behaviour changes:
+
+- **Browser login with `ALLOWED_ORIGINS` empty.** An existing installation now accepts browser login from an HTTP loopback origin when its host and port match the request `Host`. Previously, empty refused all browser login. A valid administrator password is still required. Set `ALLOWED_ORIGINS` for proxy or public access; other origins remain refused. With it empty, the origin check stops other websites, not other hosts, so keep the port bound to `127.0.0.1`.
+- **A differing environment key stops startup.** When `/data/kebivo-secrets.env` holds a key and the environment sets that key to a different value, the container now refuses to start and names the variable, instead of starting with a key that breaks project tokens or stored secrets. Passing the same value, or leaving the variable unset or blank, works as before. To change a key on purpose, delete its line from the file first.
 
 ## 0.3.0 — 2026-11-04
 
