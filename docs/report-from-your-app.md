@@ -43,4 +43,6 @@ if __name__ == "__main__":
 
 Run `python3 report_gap.py` from your server shell. It prints a result with `status: accepted` and an `event_id`. Open **Inbox** and find **Do you ship to Canada?** in your project. The report appears as a group row; repeat the command with the same `turn_id` to replay the same event without adding an occurrence. Use a new `turn_id` for a new user turn. Keep that ID stable across retries, including after a timeout.
 
+Only identical wording is grouped by default, ignoring case, spacing and trailing punctuation, so "Do you ship to Canada?" and "Can you deliver to Canada?" become two groups. Your bot already has a model, so connect it as the judge to group paraphrases: add it under **Settings → LLM providers**, then set the project to semantic deduplication with the LLM judge method. See [deduplication](deduplication.md).
+
 The function raises on HTTP or network errors. In your chatbot, catch and log those errors so reporting does not interrupt the answer. Retry temporary failures with the same `turn_id` (see [REST retries](rest-api.md#retries-and-rate-limits)). A model's MCP tool call is not guaranteed; this app-controlled fallback attempts to report every case that meets the stated no-answer condition.

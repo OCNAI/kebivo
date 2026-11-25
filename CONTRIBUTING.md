@@ -49,7 +49,7 @@ uv run python -m kebivo.cli bootstrap --email admin@example.org
 | `make type` | mypy (strict) and `tsc`. |
 | `make test` | pytest and Vitest. |
 | `make migrations` | Applies every migration to a temporary SQLite file. |
-| `make audit` | Audits the locked third-party Python packages (exported from `uv.lock`, without the local project) and the npm dependencies with `pip-audit` and `npm audit`. Run it when dependencies change. Needs network access. |
+| `make audit` | Audits what the image ships: the locked third-party Python runtime packages (exported from `uv.lock`, without the local project or dev tools) with `pip-audit`, and the frontend runtime npm packages with `npm audit`, failing on high or critical advisories. Frontend build and test tools (Vite, Vitest, ESLint) never reach the image; they also fail on high or critical advisories, except the unfixed ones listed in `scripts/npm-audit-gate.py`. Run it when dependencies change. Needs network access. |
 | `make docs` | Builds the MkDocs Material site from `docs/` into `site/` with `--strict` (warnings fail) and checks README links. Needs network access the first time to fetch the pinned MkDocs packages. |
 | `make smoke` | Builds the image and runs the container smoke test. Run it when the Dockerfile, Compose files or smoke scripts change. Needs Docker, `curl`, `python3`, Node.js with network access and the `claude` CLI. |
 | `make e2e` | Builds the image and runs the acceptance suite (AC-01 to AC-15, the examples, restart recovery and a credential canary sweep) online and on an offline network. Run it when anything it covers changes. Needs only Docker; `make e2e E2E_MODES=online` runs one mode. |

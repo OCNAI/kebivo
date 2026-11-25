@@ -1,6 +1,6 @@
 ---
-title: Collect AI knowledge gaps with the REST API
-description: Send AI agent knowledge gaps and proposed corrections to Kebivo over REST. Learn project token authentication, idempotency, retries and response codes.
+title: Report unanswered chatbot questions with the REST API
+description: From your chatbot's no-answer branch, send missed questions to Kebivo over REST. Learn project tokens, idempotency, retries and response codes.
 ---
 
 # REST integration guide
