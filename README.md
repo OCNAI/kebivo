@@ -67,14 +67,16 @@ All screenshots use synthetic data.
 
 | | |
 | --- | --- |
-| ![First-time setup page: create the administrator account, with Start with sample data selected](docs/images/00-first-run.png) | ![Dashboard with feedback counts by status and the top recurring open gaps](docs/images/01-dashboard.png) |
+| ![First-time setup page: create the administrator account, with Start with sample data selected](docs/images/00-first-run.png) | ![Dashboard with counts grouped as now, last 7 days and all time, including groups resolved and reopened this week, above the top recurring open gaps](docs/images/01-dashboard.png) |
 | **First-run setup** | **Dashboard** |
-| ![Group inbox filtered by the tag it, with status counts and filters](docs/images/02-inbox.png) | ![Feedback group with occurrences, notes, history and deliveries](docs/images/03-group-detail.png) |
+| ![Group inbox with status counts, a Reopened filter, and a reopened group showing the new report since it was resolved](docs/images/02-inbox.png) | ![Feedback group with the Status buttons at the top of Triage and identical reports collapsed into one occurrence](docs/images/03-group-detail.png) |
 | **Inbox** | **Feedback group** |
 | ![Project page with the REST and MCP connection snippets (cURL tab)](docs/images/04-connect.png) | ![Ordered routing rules, the fallback destination and the dry-run simulator](docs/images/05-routing.png) |
 | **Connect a client** | **Routing rules** |
 | ![A failed webhook delivery with its attempts and a Retry button](docs/images/07-deliveries.png) | ![Destinations: the built-in inbox, a webhook and an SMTP mail destination](docs/images/06-destinations.png) |
 | **Failed delivery** | **Destinations** |
+| ![Group inbox on a 390 px wide phone: each group is a card with its tags, status and occurrence count, and a reopened group says how many new reports came in since you resolved it](docs/images/11-inbox-phone.png) | |
+| **Inbox on a phone** | |
 
 More: [settings](docs/images/08-settings.png), [LLM settings](docs/images/09-llm-settings.png), [sign-in](docs/images/10-sign-in.png). Regenerate them with `make e2e-ui SCREENSHOTS=1`.
 
