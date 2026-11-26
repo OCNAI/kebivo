@@ -492,6 +492,36 @@ def test_migration_keeps_rows_and_downgrade_needs_no_digest_mode(tmp_path: Path)
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
 
 
+def test_migration_can_be_retried_after_a_broken_foreign_key(tmp_path: Path) -> None:
+    import sqlite3
+
+    from alembic import command
+
+    from kebivo.tests.test_db import _alembic_config
+
+    path = tmp_path / "migration.db"
+    config = _alembic_config(path)
+    command.upgrade(config, "0018_star_prompt_dismissal")
+    now = "2026-11-16 09:00:00"
+    with sqlite3.connect(path) as db:
+        db.executescript(f"""
+            INSERT INTO destinations (id,name,type,created_at,updated_at)
+                VALUES ('d','Hook','webhook','{now}','{now}');
+            INSERT INTO routing_matches (id,event_id,via,destination_id,outcome,created_at)
+                VALUES ('m','gone','rule','d','delivery_created','{now}');
+        """)
+    with pytest.raises(RuntimeError, match="routing_matches row .* missing feedback_events"):
+        command.upgrade(config, "head")
+    with sqlite3.connect(path) as db:
+        assert ("d",) in db.execute("SELECT id FROM destinations").fetchall()
+        db.execute("DELETE FROM routing_matches WHERE id='m'")
+    command.upgrade(config, "head")
+    with sqlite3.connect(path) as db:
+        assert ("d",) in db.execute("SELECT id FROM destinations").fetchall()
+        names = db.execute("SELECT name FROM sqlite_master WHERE name LIKE '_new_%'").fetchall()
+        assert names == []
+
+
 def test_webhook_digest_is_signed_and_matches_schema(monkeypatch: Any) -> None:
     import base64
     import hashlib
