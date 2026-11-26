@@ -38,6 +38,7 @@ from kebivo.models import (
     Tag,
     now_utc,
 )
+from kebivo.star_prompt import real_report_query
 
 
 def _state(db: Session) -> dict[str, bool]:
@@ -46,10 +47,7 @@ def _state(db: Session) -> dict[str, bool]:
         "present": db.scalar(sample_projects.limit(1)) is not None
         or db.scalar(select(Destination.id).where(Destination.is_sample.is_(True)).limit(1))
         is not None,
-        "has_real_events": db.scalar(
-            select(FeedbackEvent.id).join(Project).where(Project.is_sample.is_(False)).limit(1)
-        )
-        is not None,
+        "has_real_events": db.scalar(real_report_query()) is not None,
         "has_real_projects": db.scalar(
             select(Project.id)
             .where(Project.is_sample.is_(False), Project.archived_at.is_(None))
