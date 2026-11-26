@@ -149,6 +149,7 @@ describe('sample banner removal', () => {
     expect(links.map(link => link.getAttribute('href'))).toEqual(['/inbox/groups/g-canada', '/?create=1']);
     await act(async () => { links[1].click(); });
     expect(navigate).toHaveBeenCalledWith('/?create=1');
+    expect(host.querySelector('.sample-announcement')).toBeNull();
     await act(async () => { window.dispatchEvent(new CustomEvent('first-run-notice', { detail: SETUP_PLAIN_NOTICE })); });
     expect(host.querySelector('.sample-announcement')!.textContent).toBe('Account created. Connect your own app to send your first report.');
     expect(host.querySelector('.sample-announcement a')!.getAttribute('href')).toBe('/?create=1');

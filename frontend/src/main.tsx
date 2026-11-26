@@ -79,6 +79,12 @@ export function App() {
   React.useEffect(() => { const pop = () => setRoute(location.pathname + location.search); const expired = () => { setAdmin(null); setSelectedProject(null); setCsrfToken(null); }; addEventListener('popstate', pop); addEventListener('session-expired', expired); return () => { removeEventListener('popstate', pop); removeEventListener('session-expired', expired); }; }, [setSelectedProject]);
   const adminPresent = Boolean(admin);
   React.useEffect(() => {
+    if (!createdToken) return;
+    // Keep the one-time token and the connect steps under it in view.
+    document.getElementById('new-token-reveal')?.scrollIntoView?.({ block: 'start' });
+    document.getElementById('new-token')?.focus({ preventScroll: true });
+  }, [createdToken]);
+  React.useEffect(() => {
   const page = route.startsWith('/inbox') ? 'Inbox' : route.startsWith('/settings') ? 'Settings' : route.startsWith('/deliveries') ? 'Deliveries' : route.startsWith('/destinations') ? 'Destinations' : selected?.name ?? 'Projects';
     document.title = `${page} · ${projectConfig.display_name}`;
   }, [route, selected?.name]);
@@ -183,7 +189,6 @@ export function App() {
     const form = event.currentTarget;
     await run(() => apiRequest<CreatedToken>(`projects/${selected.id}/tokens`, { method: 'POST', body: JSON.stringify({ name: data.get('token-name'), scopes }) }), async (token) => {
       setCreatedToken(token); setCompactProjectId(selected.id); setNotice('Token created. Copy it now; it cannot be shown again.');
-      requestAnimationFrame(() => { document.getElementById('new-token-reveal')?.scrollIntoView?.({ block: 'start' }); document.getElementById('new-token')?.focus({ preventScroll: true }); });
       const result = await apiRequest<{ items: Token[] }>(`projects/${selected.id}/tokens`); setTokens(result.items);
       form.reset(); setShowGapReadWarning(false);
     });

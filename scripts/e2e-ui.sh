@@ -49,8 +49,9 @@ if [[ -z "${ready:-}" ]]; then
   echo "app or test doubles did not become ready" >&2
   exit 1
 fi
-if [[ "${1:-}" == screenshots ]]; then
-  # The screenshots start from the browser setup page, so read the one-time link instead of bootstrapping.
+if [[ "${1:-}" != demo ]]; then
+  # The screenshots and the default suite (first-run.spec.ts, which runs first) start from the
+  # browser setup page, so read the one-time link instead of bootstrapping.
   setup_token="$("${compose[@]}" logs app | sed -n 's/.*Kebivo setup: .*#token=\([A-Za-z0-9_-]*\).*/\1/p' | tail -n 1)"
   [[ -n "$setup_token" ]] || { echo "no setup link in the app logs" >&2; exit 1; }
   export E2E_SETUP_TOKEN="$setup_token"

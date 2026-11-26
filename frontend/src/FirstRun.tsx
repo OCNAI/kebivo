@@ -17,7 +17,7 @@ export function FirstRunProvider({ children, navigate }: { children: React.React
     catch { setSample(null); setSampleError(true); return null; }
   }, []);
   React.useEffect(() => { const refresh = () => void refreshSample(); void Promise.resolve().then(refreshSample); addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshSample]);
-  React.useEffect(() => { const listener = (event: Event) => { const detail = (event as CustomEvent<string>).detail; setNotice(detail === SETUP_SAMPLE_NOTICE || detail === SETUP_PLAIN_NOTICE ? <SetupNotice withSample={detail === SETUP_SAMPLE_NOTICE} navigate={navigate} /> : detail); }; addEventListener('first-run-notice', listener); return () => removeEventListener('first-run-notice', listener); }, [navigate]);
+  React.useEffect(() => { const listener = (event: Event) => { const detail = (event as CustomEvent<string>).detail; setNotice(detail === SETUP_SAMPLE_NOTICE || detail === SETUP_PLAIN_NOTICE ? <SetupNotice withSample={detail === SETUP_SAMPLE_NOTICE} navigate={url => { setNotice(''); navigate(url); }} /> : detail); }; addEventListener('first-run-notice', listener); return () => removeEventListener('first-run-notice', listener); }, [navigate]);
   const value = React.useMemo(() => ({ sample, refreshSample, sampleError, notice, announce: setNotice }), [sample, refreshSample, sampleError, notice]);
   return <FirstRunContext.Provider value={value}>{sample?.present && <SampleBanner sample={sample} refresh={refreshSample} navigate={navigate} announce={setNotice} />}{children}</FirstRunContext.Provider>;
 }

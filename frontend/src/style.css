@@ -287,7 +287,7 @@ button:disabled, button[aria-disabled="true"] { opacity:1; color:#3d4942; backgr
 .connect-panel { margin-top:16px; }
 .test-event { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:16px 0; }
 .test-event p { margin:0; }
-.request-summary { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:14px; background:#f7faf7; border-radius:10px; }
+.request-summary { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:14px; background:#f7faf7; border-radius:10px; margin-top:16px; }
 .request-summary > div { display:grid; gap:8px; align-content:start; }
 .request-summary code { overflow-wrap:anywhere; }
 .connect-tabs { display:flex; gap:4px; overflow-x:auto; border-bottom:1px solid #dfe7e0; margin:12px 0; }
