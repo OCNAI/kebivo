@@ -11,15 +11,20 @@ export function FirstRunNotice() { const notice = useFirstRun()?.notice; return 
 export function FirstRunProvider({ children, navigate }: { children: React.ReactNode; navigate: (url: string) => void }) {
   const [sample, setSample] = React.useState<SampleStatus | null>(null);
   const [sampleError, setSampleError] = React.useState(false);
+  // Hold the page until the first sample check settles, so the banner doesn't push it down after it paints.
+  const [sampleChecked, setSampleChecked] = React.useState(false);
   const [notice, setNotice] = React.useState<React.ReactNode>('');
   const refreshSample = React.useCallback(async () => {
     try { const value = await apiRequest<SampleStatus>('admin/sample-data'); setSample(value); setSampleError(false); return value; }
     catch { setSample(null); setSampleError(true); return null; }
+    finally { setSampleChecked(true); }
   }, []);
   React.useEffect(() => { const refresh = () => void refreshSample(); void Promise.resolve().then(refreshSample); addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshSample]);
   React.useEffect(() => { const listener = (event: Event) => { const detail = (event as CustomEvent<string>).detail; setNotice(detail === SETUP_SAMPLE_NOTICE || detail === SETUP_PLAIN_NOTICE ? <SetupNotice withSample={detail === SETUP_SAMPLE_NOTICE} navigate={url => { setNotice(''); navigate(url); }} /> : detail); }; addEventListener('first-run-notice', listener); return () => removeEventListener('first-run-notice', listener); }, [navigate]);
+  // The app focuses the page heading on navigation, which ran before the page was shown here.
+  React.useLayoutEffect(() => { if (sampleChecked && (!document.activeElement || document.activeElement === document.body)) document.querySelector<HTMLElement>('main h1')?.focus({ preventScroll: true }); }, [sampleChecked]);
   const value = React.useMemo(() => ({ sample, refreshSample, sampleError, notice, announce: setNotice }), [sample, refreshSample, sampleError, notice]);
-  return <FirstRunContext.Provider value={value}>{sample?.present && <SampleBanner sample={sample} refresh={refreshSample} navigate={navigate} announce={setNotice} />}{children}</FirstRunContext.Provider>;
+  return <FirstRunContext.Provider value={value}>{sample?.present && <SampleBanner sample={sample} refresh={refreshSample} navigate={navigate} announce={setNotice} />}{sampleChecked && children}</FirstRunContext.Provider>;
 }
 
 export const SETUP_SAMPLE_NOTICE = 'setup:sample-loaded';

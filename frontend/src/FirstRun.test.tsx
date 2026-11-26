@@ -122,6 +122,17 @@ describe('sample banner removal', () => {
     expect(host.querySelector('header')!.compareDocumentPosition(host.querySelector('[role=status]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('waits for the sample check so the banner does not push the page down', async () => {
+    let answer: (response: Response) => void = () => {};
+    globalThis.fetch = vi.fn(() => new Promise<Response>(resolve => { answer = resolve; })) as typeof fetch;
+    await act(async () => { root.render(<FirstRunProvider navigate={() => {}}><main><h1 tabIndex={-1}>Page</h1></main></FirstRunProvider>); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(host.querySelector('main')).toBeNull();
+    await act(async () => { answer(new Response(JSON.stringify({ present: true, has_real_events: false, has_real_projects: false }))); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(host.querySelector('.sample-banner')).not.toBeNull();
+    expect(host.querySelector('main')?.textContent).toBe('Page');
+    expect(document.activeElement).toBe(host.querySelector('main h1'));
+  });
+
   it('keeps the sample action available when sample status cannot be fetched', async () => {
     globalThis.fetch = vi.fn(async input => {
       const path = String(input);

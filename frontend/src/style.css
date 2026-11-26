@@ -30,7 +30,7 @@ button:active:not(:disabled) { transform: translateY(1px); }
 .fine-print { margin: 20px 0 0; text-align: center; color: #5f6f67; font-size: 11px; line-height: 1.6; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
 footer { padding: 18px; text-align: center; color: #5f6f67; font-size: 11px; }
-.dashboard-main { align-items: start; }
+.dashboard-main { align-items: start; min-height: 100vh; } /* keeps the footer below the fold while data loads */
 .dashboard { width: min(100%, 1180px); margin: 0 auto; }
 .dashboard-heading, .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 18px; }
 .dashboard-heading { margin: 0 0 22px; }
