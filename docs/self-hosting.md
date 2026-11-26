@@ -174,7 +174,7 @@ To move a one-command install to managed keys, copy its existing key file before
 docker stop kebivo
 docker rm kebivo
 docker run --name kebivo -p 127.0.0.1:8000:8000 -v kebivo-data:/data \
-  --env-file ./kebivo.env ghcr.io/ocnai/kebivo:0.4.0
+  --env-file ./kebivo.env ghcr.io/ocnai/kebivo:0.5.0
 ```
 
 After verifying the restart and a database-only backup, keep `kebivo.env` in your managed secret storage. To make a whole-volume copy independent of the keys, remove `/data/kebivo-secrets.env` from the volume only after confirming the env file supplies **both** keys on restart. If an environment key is omitted, the remaining file key is still used. If the environment sets a key to a different value from the one in `/data/kebivo-secrets.env`, the container refuses to start and names the variable. To change a key on purpose, delete that line from the file first.

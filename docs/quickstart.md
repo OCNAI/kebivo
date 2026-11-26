@@ -11,7 +11,7 @@ You need Docker, Python 3 and a free port 8000. Run the commands in bash; on mac
 
 ```sh
 docker run --name kebivo -p 127.0.0.1:8000:8000 \
-  -v kebivo-data:/data ghcr.io/ocnai/kebivo:0.4.0
+  -v kebivo-data:/data ghcr.io/ocnai/kebivo:0.5.0
 ```
 
 Open the printed `Kebivo setup:` link in your browser. It expires after 60 minutes; restart the container for a new link. Create your administrator with a password of at least 12 characters. **Start with sample data** is selected by default; it opens a filled inbox with labelled, removable examples. If you map another host port, change `8000` in the printed link to that port. The generated keys live in the named volume; [protect them before using real credentials](self-hosting.md#secrets-and-what-to-protect).
@@ -65,8 +65,8 @@ Get the [stdlib receiver](../examples/webhook_receiver.py) and its [payload sche
 
 ```sh
 mkdir -p examples docs
-curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.4.0/examples/webhook_receiver.py -o examples/webhook_receiver.py
-curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.4.0/docs/webhook-payload.schema.json -o docs/webhook-payload.schema.json
+curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.5.0/examples/webhook_receiver.py -o examples/webhook_receiver.py
+curl -fsS https://raw.githubusercontent.com/OCNAI/kebivo/v0.5.0/docs/webhook-payload.schema.json -o docs/webhook-payload.schema.json
 docker cp examples/webhook_receiver.py kebivo:/tmp/webhook_receiver.py
 docker cp docs/webhook-payload.schema.json kebivo:/tmp/webhook-payload.schema.json
 rm -f kebivo-webhook.log
