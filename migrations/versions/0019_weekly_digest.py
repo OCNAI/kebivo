@@ -135,6 +135,8 @@ def _rebuild(digest: bool) -> None:
             ("routing_matches", _matches(digest), MATCH_COLUMNS),
             ("deliveries", _deliveries(digest), DELIVERY_COLUMNS),
         ):
+            # A failed earlier run can leave this behind: CREATE commits on its own.
+            bind.exec_driver_sql(f"DROP TABLE IF EXISTS _new_{table}")
             # Renaming the old table would rewrite other tables' foreign keys to it.
             bind.exec_driver_sql(ddl.replace(f"TABLE {table} (", f"TABLE _new_{table} (", 1))
             bind.exec_driver_sql(
@@ -144,8 +146,12 @@ def _rebuild(digest: bool) -> None:
             bind.exec_driver_sql(f"ALTER TABLE _new_{table} RENAME TO {table}")
             for statement in INDEXES[table]:
                 bind.exec_driver_sql(statement)
-        if bind.exec_driver_sql("PRAGMA foreign_key_check").first():
-            raise RuntimeError("Weekly digest migration broke a foreign key")
+        broken = bind.exec_driver_sql("PRAGMA foreign_key_check").first()
+        if broken:
+            raise RuntimeError(
+                f"Weekly digest migration found a {broken[0]} row (rowid {broken[1]}) "
+                f"that points to a missing {broken[2]} row; fix or delete it, then retry"
+            )
     finally:
         bind.exec_driver_sql("PRAGMA foreign_keys=ON")
 
