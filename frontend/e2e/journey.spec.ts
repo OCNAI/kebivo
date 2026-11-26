@@ -53,6 +53,7 @@ test('admin login rejects a wrong password and accepts the right one', async () 
 test('create a project', async () => {
   await page.getByRole('button', { name: 'New project' }).click();
   await page.getByLabel('Name', { exact: true }).fill(projectName);
+  await page.getByText('More options', { exact: true }).click();
   await page.getByLabel('Slug').fill(`support-${suffix}`);
   await page.getByRole('button', { name: 'Create project' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Project created.' })).toBeVisible();

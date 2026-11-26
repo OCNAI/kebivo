@@ -94,8 +94,12 @@ describe('authenticated dashboard', () => {
     await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'New project')!.click(); });
     const setValue = (input: HTMLInputElement, value: string) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); };
     const name = container.querySelector<HTMLInputElement>('#project-name')!, slug = () => container.querySelector<HTMLInputElement>('#project-slug')!;
+    const more = container.querySelector<HTMLDetailsElement>('.project-form details.more-options')!;
+    expect(more.open).toBe(false);
+    expect(more.contains(slug()) && more.contains(container.querySelector('#project-description')) && more.contains(container.querySelector('#deduplication-mode'))).toBe(true);
     await act(async () => { setValue(name, 'Support bot'); });
     expect(slug().value).toBe('support-bot');
+    expect(container.querySelector('#name-help')?.textContent).toBe('Slug: support-bot. You can change it and the defaults under More options.');
     expect(container.querySelector('#slug-help')?.textContent).toBe('Lowercase letters, numbers, and internal hyphens. From the name: support-bot');
     await act(async () => { setValue(name, '  Café FAQ: v2!  '); });
     expect(slug().value).toBe('cafe-faq-v2');
@@ -104,12 +108,13 @@ describe('authenticated dashboard', () => {
     await act(async () => { setValue(name, '日本語'); });
     expect(slug().value).toBe('');
     expect(container.querySelector('#slug-help')?.textContent).toBe("Lowercase letters, numbers, and internal hyphens. Can't make one from this name. Type a slug.");
+    expect(more.open).toBe(true);
     await act(async () => { setValue(slug(), 'faq'); });
     await act(async () => { setValue(name, 'Something else'); });
     expect(slug().value).toBe('faq');
     expect(container.querySelector('#slug-help')?.textContent).toBe('Lowercase letters, numbers, and internal hyphens.');
     await act(async () => { container.querySelector<HTMLFormElement>('.project-form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(JSON.parse(posts[0]).slug).toBe('faq');
+    expect(JSON.parse(posts[0])).toMatchObject({ slug: 'faq', description: null, settings: { corrections: { enabled: false }, deduplication: { mode: 'exact' } } });
   });
 
   it('hides the Select a project panel while the first-run checklist shows', async () => {
@@ -200,7 +205,7 @@ describe('authenticated dashboard', () => {
     await act(async () => { container.querySelector<HTMLButtonElement>('.project-choice')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(container.textContent).toContain('Sample support');
     await act(async () => { container.querySelector<HTMLAnchorElement>('.top-nav a[href="/inbox"]')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
-    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Remove sample data')!.click(); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.sample-banner button[aria-label="Remove sample data"]')!.click(); });
     await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('dialog button')].find(button => button.textContent === 'Remove sample data')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     await act(async () => { container.querySelector<HTMLAnchorElement>('.top-nav a[href="/"]')!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(container.textContent).not.toContain('Sample support');

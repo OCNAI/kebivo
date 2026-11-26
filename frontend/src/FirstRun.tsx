@@ -2,7 +2,7 @@ import React from 'react';
 import { ApiError, apiRequest, setCsrfToken } from './api';
 
 export type SampleStatus = { present: boolean; has_real_events: boolean; has_real_projects: boolean };
-type FirstRunContextValue = { sample: SampleStatus | null; refreshSample: () => Promise<SampleStatus | null>; sampleError: boolean; notice: string; announce: (message: string) => void };
+type FirstRunContextValue = { sample: SampleStatus | null; refreshSample: () => Promise<SampleStatus | null>; sampleError: boolean; notice: React.ReactNode; announce: (message: string) => void };
 const FirstRunContext = React.createContext<FirstRunContextValue | null>(null);
 export function useFirstRun() { return React.useContext(FirstRunContext); }
 
@@ -11,15 +11,35 @@ export function FirstRunNotice() { const notice = useFirstRun()?.notice; return 
 export function FirstRunProvider({ children, navigate }: { children: React.ReactNode; navigate: (url: string) => void }) {
   const [sample, setSample] = React.useState<SampleStatus | null>(null);
   const [sampleError, setSampleError] = React.useState(false);
-  const [notice, setNotice] = React.useState('');
+  const [notice, setNotice] = React.useState<React.ReactNode>('');
   const refreshSample = React.useCallback(async () => {
     try { const value = await apiRequest<SampleStatus>('admin/sample-data'); setSample(value); setSampleError(false); return value; }
     catch { setSample(null); setSampleError(true); return null; }
   }, []);
   React.useEffect(() => { const refresh = () => void refreshSample(); void Promise.resolve().then(refreshSample); addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshSample]);
-  React.useEffect(() => { const listener = (event: Event) => setNotice((event as CustomEvent<string>).detail); addEventListener('first-run-notice', listener); return () => removeEventListener('first-run-notice', listener); }, []);
+  React.useEffect(() => { const listener = (event: Event) => { const detail = (event as CustomEvent<string>).detail; setNotice(detail === SETUP_SAMPLE_NOTICE || detail === SETUP_PLAIN_NOTICE ? <SetupNotice withSample={detail === SETUP_SAMPLE_NOTICE} navigate={url => { setNotice(''); navigate(url); }} /> : detail); }; addEventListener('first-run-notice', listener); return () => removeEventListener('first-run-notice', listener); }, [navigate]);
   const value = React.useMemo(() => ({ sample, refreshSample, sampleError, notice, announce: setNotice }), [sample, refreshSample, sampleError, notice]);
   return <FirstRunContext.Provider value={value}>{sample?.present && <SampleBanner sample={sample} refresh={refreshSample} navigate={navigate} announce={setNotice} />}{children}</FirstRunContext.Provider>;
+}
+
+export const SETUP_SAMPLE_NOTICE = 'setup:sample-loaded';
+export const SETUP_PLAIN_NOTICE = 'setup:account-created';
+const CANADA_QUESTION = 'Do you ship to Canada?';
+
+function SetupNotice({ withSample, navigate }: { withSample: boolean; navigate: (url: string) => void }) {
+  const [canadaHref, setCanadaHref] = React.useState(`/inbox?q=${encodeURIComponent(CANADA_QUESTION)}`);
+  React.useEffect(() => {
+    if (!withSample) return;
+    let live = true;
+    apiRequest<{ items: { id: string; representative: { question_excerpt: string } }[] }>(`admin/groups?q=${encodeURIComponent(CANADA_QUESTION)}&limit=5`)
+      .then(result => { const group = result.items.find(item => item.representative.question_excerpt === CANADA_QUESTION); if (live && group) setCanadaHref(`/inbox/groups/${encodeURIComponent(group.id)}`); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [withSample]);
+  const link = (href: string, label: string) => <a className="app-link" href={href} onClick={event => { event.preventDefault(); navigate(href); }}><strong>{label}</strong></a>;
+  return withSample
+    ? <>Sample data loaded. Open {link(canadaHref, CANADA_QUESTION)} to see seven reports collapse into one, then {link('/?create=1', 'Connect your own app')} when you're ready.</>
+    : <>Account created. {link('/?create=1', 'Connect your own app')} to send your first report.</>;
 }
 
 function SampleBanner({ sample, refresh, navigate, announce }: { sample: SampleStatus; refresh: () => Promise<SampleStatus | null>; navigate: (url: string) => void; announce: (message: string) => void }) {
@@ -34,9 +54,8 @@ function SampleBanner({ sample, refresh, navigate, announce }: { sample: SampleS
   }
   return <>
     <section className="sample-banner" aria-label="Sample data">
-      <p className="sample-long">{sample.has_real_projects ? <><strong>Sample data is still here.</strong> Remove it when you've seen enough. Your own projects and feedback stay.</> : <><strong>You're looking at sample data.</strong> The projects, feedback and destinations marked Sample are made up. Sample destinations never send anything.</>}</p>
-      <p className="sample-short"><strong>{sample.has_real_projects ? 'Sample data is still here.' : 'Sample data.'}</strong></p>
-      <div className="sample-actions">{!sample.has_real_projects && <button type="button" onClick={() => navigate('/?create=1')}>Connect your own app</button>}<button ref={opener} className="quiet-button sample-remove" type="button" aria-label="Remove sample data" onClick={open}>Remove<span className="sample-long"> sample data</span></button></div>
+      <p><strong>{sample.has_real_projects ? 'Sample data is still here.' : 'Sample data.'}</strong></p>
+      <div className="sample-actions">{!sample.has_real_projects && <button type="button" onClick={() => navigate('/?create=1')}>Connect your own app</button>}<button ref={opener} className="quiet-button sample-remove" type="button" aria-label="Remove sample data" onClick={open}>Remove</button></div>
     </section>
     <dialog className="sample-dialog" ref={dialog} aria-labelledby="sample-dialog-title" aria-describedby="sample-dialog-description" onCancel={event => { if (busy) event.preventDefault(); }} onClick={event => { if (event.target === dialog.current && !busy) dialog.current.close(); }} onClose={() => { setError(''); requestAnimationFrame(() => opener.current?.focus()); }}>
       <h2 id="sample-dialog-title">Remove sample data?</h2><p id="sample-dialog-description">This deletes the sample projects, feedback groups, notes and destinations. Anything you added yourself stays. Sample data can be loaded again only while your inbox has no real feedback.</p>

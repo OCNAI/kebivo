@@ -10,6 +10,7 @@ from kebivo.models import AdminUser, FeedbackEvent, Project
 from kebivo.settings import Settings
 from kebivo.tests.test_db import _alembic_config
 from kebivo.tests.test_projects import ORIGIN, make_client, write_headers
+from kebivo.tests.test_tokens import issue_token
 
 PROMPT = (
     "If Kebivo is useful, a GitHub star helps other people find it: https://github.com/OCNAI/kebivo"
@@ -83,6 +84,32 @@ def test_real_report_and_persistent_dismissal(tmp_path: Path) -> None:
         assert db.scalar(select(AdminUser.star_prompt_dismissed_at)) == dismissed_at
     restarted.close()
     restarted_app.state.engine.dispose()
+
+
+def test_test_events_and_sample_data_do_not_count_as_real_reports(tmp_path: Path) -> None:
+    client, app = make_client(tmp_path / "test-events.db")
+    headers = write_headers(client)
+    assert client.post("/api/v1/admin/sample-data", headers=headers).status_code == 201
+    with app.state.session_factory() as db:
+        assert db.scalar(select(FeedbackEvent.id).limit(1)) is not None
+    assert client.get(PATH).json() == {"show": False}
+
+    project = client.post(
+        "/api/v1/projects", json={"name": "Real", "slug": "real"}, headers=headers
+    ).json()
+    sent = client.post(f"/api/v1/projects/{project['id']}/test-event", headers=headers)
+    assert sent.status_code == 202, sent.text
+    assert client.get(PATH).json() == {"show": False}
+
+    token = issue_token(client, project["id"], "app").json()["token"]
+    accepted = client.post(
+        "/api/v1/feedback",
+        json={"event_type": "knowledge_gap", "question": "Do you ship to Norway?"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert accepted.status_code == 202, accepted.text
+    assert client.get(PATH).json() == {"show": True}
+    app.state.engine.dispose()
 
 
 def test_startup_log_skips_after_any_admin_dismisses(tmp_path: Path) -> None:

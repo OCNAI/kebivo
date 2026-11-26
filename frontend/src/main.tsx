@@ -14,7 +14,7 @@ import { GroupDetail } from './GroupDetail';
 import { LlmSettings } from './LlmSettings';
 import { GeneralSettings, SettingsNav } from './Settings';
 import { ConnectPanel } from './ConnectPanel';
-import { CommandBlock, FirstRunEmpty, FirstRunNotice, FirstRunProvider, SampleBadge, SetupPage, takeSetupTokenFromLocation, useFirstRun } from './FirstRun';
+import { CommandBlock, FirstRunEmpty, FirstRunNotice, FirstRunProvider, SampleBadge, SETUP_PLAIN_NOTICE, SETUP_SAMPLE_NOTICE, SetupPage, takeSetupTokenFromLocation, useFirstRun } from './FirstRun';
 
 document.title = projectConfig.display_name;
 
@@ -71,11 +71,19 @@ export function App() {
   const [notice, setNotice] = React.useState('');
   const [showArchived, setShowArchived] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
+  // Right after creating a project or a token, the configuration stays folded so the connect steps come first.
+  const [compactProjectId, setCompactProjectId] = React.useState<string | null>(null);
   const [checklistShown, setChecklistShown] = React.useState<boolean | null>(null);
   const [setupRequired, setSetupRequired] = React.useState(false);
   const [setupCheckDone, setSetupCheckDone] = React.useState(false);
   React.useEffect(() => { const pop = () => setRoute(location.pathname + location.search); const expired = () => { setAdmin(null); setSelectedProject(null); setCsrfToken(null); }; addEventListener('popstate', pop); addEventListener('session-expired', expired); return () => { removeEventListener('popstate', pop); removeEventListener('session-expired', expired); }; }, [setSelectedProject]);
   const adminPresent = Boolean(admin);
+  React.useEffect(() => {
+    if (!createdToken) return;
+    // Keep the one-time token and the connect steps under it in view.
+    document.getElementById('new-token-reveal')?.scrollIntoView?.({ block: 'start' });
+    document.getElementById('new-token')?.focus({ preventScroll: true });
+  }, [createdToken]);
   React.useEffect(() => {
   const page = route.startsWith('/inbox') ? 'Inbox' : route.startsWith('/settings') ? 'Settings' : route.startsWith('/deliveries') ? 'Deliveries' : route.startsWith('/destinations') ? 'Destinations' : selected?.name ?? 'Projects';
     document.title = `${page} · ${projectConfig.display_name}`;
@@ -95,7 +103,7 @@ export function App() {
   React.useEffect(() => { const refresh = () => { void refreshProjects(showArchived).catch((e: unknown) => setError(apiErrorMessage(e))); }; addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshProjects, showArchived]);
   const selectProject = React.useCallback(async (project: Project) => {
     setError(''); setNotice(''); setCreatedToken(null); setTokenFormError(''); setShowGapReadWarning(false); setEditing(false);
-    setSelectedProject(project);
+    setSelectedProject(project); setCompactProjectId(null);
     try {
       const fresh = await apiRequest<Project>(`projects/${project.id}`);
       const tokenResult = fresh.is_sample ? { items: [] as Token[] } : await apiRequest<{ items: Token[] }>(`projects/${project.id}/tokens`);
@@ -157,7 +165,7 @@ export function App() {
     await run(async () => selected
       ? apiRequest<Project>(`projects/${selected.id}`, { method: 'PATCH', body: JSON.stringify({ ...payload, settings: projectSettings }) })
       : apiRequest<Project>('projects', { method: 'POST', body: JSON.stringify(payload) }), async (project) => {
-      setSelectedProject(project); setEditing(false); setNotice(selected ? 'Project settings saved.' : 'Project created.');
+      setSelectedProject(project); setEditing(false); setNotice(selected ? 'Project settings saved.' : 'Project created.'); if (!selected) setCompactProjectId(project.id);
       window.dispatchEvent(new Event('sample-data-refresh'));
       if (createFromBanner) navigate('/');
       await refreshProjects(showArchived);
@@ -180,7 +188,7 @@ export function App() {
     if (scopes.includes(TOKEN_SCOPES.correction) && !scopes.includes(TOKEN_SCOPES.gap)) { setTokenFormError(`${TOKEN_SCOPES.correction} needs ${TOKEN_SCOPES.gap}.`); return; }
     const form = event.currentTarget;
     await run(() => apiRequest<CreatedToken>(`projects/${selected.id}/tokens`, { method: 'POST', body: JSON.stringify({ name: data.get('token-name'), scopes }) }), async (token) => {
-      setCreatedToken(token); setNotice('Token created. Copy it now; it cannot be shown again.');
+      setCreatedToken(token); setCompactProjectId(selected.id); setNotice('Token created. Copy it now; it cannot be shown again.');
       const result = await apiRequest<{ items: Token[] }>(`projects/${selected.id}/tokens`); setTokens(result.items);
       form.reset(); setShowGapReadWarning(false);
     });
@@ -194,7 +202,7 @@ export function App() {
   }
 
   if (!authReady) return <Shell><main className="center"><p role="status">Checking your session…</p></main></Shell>;
-  if (pathname === '/setup') return <Shell><SetupPage token={setupToken} onSuccess={async (createdAdmin, csrf, sampleLoaded, sampleAttempted) => { setCsrfToken(csrf); setAdmin(createdAdmin); await refreshProjects(false).catch((e: unknown) => setError(apiErrorMessage(e))); setTimeout(() => window.dispatchEvent(new CustomEvent('first-run-notice', { detail: sampleAttempted && !sampleLoaded ? "Account created. Sample data couldn't be loaded. You can try again below." : sampleLoaded ? 'Account created. Sample data loaded.' : 'Account created.' })), 0); navigate('/inbox'); }} /></Shell>;
+  if (pathname === '/setup') return <Shell><SetupPage token={setupToken} onSuccess={async (createdAdmin, csrf, sampleLoaded, sampleAttempted) => { setCsrfToken(csrf); setAdmin(createdAdmin); await refreshProjects(false).catch((e: unknown) => setError(apiErrorMessage(e))); setTimeout(() => window.dispatchEvent(new CustomEvent('first-run-notice', { detail: sampleAttempted && !sampleLoaded ? "Account created. Sample data couldn't be loaded. You can try again below." : sampleLoaded ? SETUP_SAMPLE_NOTICE : SETUP_PLAIN_NOTICE })), 0); navigate('/inbox'); }} /></Shell>;
   if (!admin) return <Shell><main className="center">{setupRequired ? <section className="welcome-card" aria-labelledby="setup-needed-title"><div className="eyebrow">SETUP NEEDED</div><h1 id="setup-needed-title" tabIndex={-1}>Finish setup from the container logs</h1><p>This server has no administrator yet. Kebivo printed a one-time setup link when it started. Copy it from the logs and open it in this browser.</p><CommandBlock command="docker logs kebivo"/><p>Use the last line that starts with <code>Kebivo setup:</code>; the link follows it. If you mapped a port other than 8000, change 8000 in the link to yours. If the container has a different name, use that name. The link expires after 60 minutes; restarting the container prints a new one.</p><p className="fine-print">Using the command line instead? See the <a className="app-link" href="https://docs.kebivo.com/">server documentation</a>.</p></section> : <section className="welcome-card" aria-labelledby="welcome-title">
     <div className="eyebrow">ADMINISTRATOR ACCESS</div><h1 id="welcome-title" tabIndex={-1}>Sign in to your workspace</h1>
     <p className="intro">{setupCheckDone ? 'Sign in with the administrator account for this server.' : 'Use the administrator account created from the server command line.'}</p>
@@ -238,7 +246,6 @@ export function App() {
               <dl className="settings-summary"><div><dt>Slug</dt><dd>{selected.slug}</dd></div><div><dt>Status</dt><dd>{selected.archived_at ? 'Archived' : selected.is_active ? 'Active' : 'Disabled'}</dd></div><div><dt>Corrections policy</dt><dd>{selected.settings.corrections?.enabled ? 'Enabled' : 'Disabled'}</dd></div><div><dt>Deduplication</dt><dd>{selected.settings.deduplication?.mode ?? (selected.settings.deduplication?.enabled === false ? 'Disabled' : 'Exact')}</dd></div></dl>
             </section>
             {selected.is_sample ? <section className="panel"><p>Sample projects can't have tokens or receive events. Create your own project to connect an app.</p><button onClick={() => { setSelectedProject(null); setEditing(true); }}>Create a project</button></section> : <><section className="panel" aria-labelledby="tokens-title"><div className="panel-heading"><div><div className="eyebrow">CREDENTIALS</div><h2 id="tokens-title">Project tokens</h2></div></div>
-              {createdToken && <div className="secret-reveal" role="alert"><strong>Copy this token now</strong><p>This secret is shown once. Store it securely; it cannot be retrieved later.</p><label htmlFor="new-token">New token</label><div className="copy-row"><input id="new-token" readOnly value={createdToken.token} onFocus={(e) => e.currentTarget.select()} /><button type="button" className="quiet-button" onClick={() => void navigator.clipboard?.writeText(createdToken.token).then(() => setNotice('Token copied to clipboard.')).catch(() => setNotice('Select and copy the token manually.'))}>Copy token</button></div><button className="quiet-button dismiss-button" onClick={() => setCreatedToken(null)}>I have saved it</button></div>}
               {!selected.archived_at && <form className="token-form" onSubmit={createToken}>
                 <div className="form-row"><div><label htmlFor="token-name">Token name</label><input id="token-name" name="token-name" maxLength={120} placeholder="Production integration" required /></div><button disabled={busy}>Create token</button></div>
                 <label className="checkbox-row"><input name="gap-scope" type="checkbox" defaultChecked onChange={(event) => setShowGapReadWarning(hasGapReadScopes(event.currentTarget.form))} /> Grant <code>{TOKEN_SCOPES.gap}</code><span className="subtle"> (report gaps; turn off for a read-only token)</span></label>
@@ -248,13 +255,15 @@ export function App() {
                 {tokenFormError && <p className="error-message" role="alert">{tokenFormError}</p>}
               </form>}
               {tokens.length === 0 ? <div className="empty-inline">No tokens have been issued for this project.</div> : <div className="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Scopes</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col">Actions</th></tr></thead><tbody>{tokens.map((token) => <tr key={token.id} className={token.revoked_at ? 'revoked-row' : ''}><th scope="row">{token.name}<small>{token.prefix}… {token.revoked_at ? ' · Revoked' : ''}</small></th><td>{token.scopes.map((scope) => <code className="scope-chip" key={scope}>{scope}</code>)}</td><td>{date(token.created_at)}</td><td>{date(token.last_used_at)}</td><td>{!token.revoked_at && <button className="text-button" disabled={busy || Boolean(selected.archived_at)} onClick={() => void revokeToken(token)}>Revoke</button>}</td></tr>)}</tbody></table></div>}
+              {createdToken && <div className="secret-reveal" id="new-token-reveal" role="alert"><strong>Copy this token now</strong><p>This secret is shown once. Store it securely; it cannot be retrieved later.</p><label htmlFor="new-token">New token</label><div className="copy-row"><input id="new-token" readOnly value={createdToken.token} onFocus={(e) => e.currentTarget.select()} /><button type="button" className="quiet-button" onClick={() => void navigator.clipboard?.writeText(createdToken.token).then(() => setNotice('Token copied to clipboard.')).catch(() => setNotice('Select and copy the token manually.'))}>Copy token</button></div><button className="quiet-button dismiss-button" onClick={() => setCreatedToken(null)}>I have saved it</button></div>}
             </section>
               <ConnectPanel correctionsEnabled={Boolean(selected.settings.corrections?.enabled)} archived={Boolean(selected.archived_at)} projectId={selected.id} /></>}
-            <section className="panel project-configuration" aria-label="Project configuration">
-      <DefaultTagsEditor key={selected.id} project={selected} busy={busy} onSaved={(updated) => { setSelectedProject(updated); setNotice('Default tags saved.'); }} onError={setError} />
+            <section className="panel project-configuration" aria-label="Project configuration"><details className="configuration-disclosure" open={compactProjectId !== selected.id}><summary>Default tags, deduplication and routing</summary>
+              <DefaultTagsEditor key={selected.id} project={selected} busy={busy} onSaved={(updated) => { setSelectedProject(updated); setNotice('Default tags saved.'); }} onError={setError} />
               <SemanticSettings key={`semantic-${selected.id}`} project={selected} onSaved={updated => { const backfill = updated.settings.deduplication?.semantic?.method === 'embeddings' && selected.settings.deduplication?.semantic?.method !== 'embeddings'; setSelectedProject(updated); setNotice(`Deduplication settings saved.${backfill ? ' Existing questions are being sent for indexing.' : ''}`); }} onError={setError} />
               <div id="routing"><Routing project={selected} /></div>
               <p className="scope-note"><strong>Correction access uses two gates.</strong> The project policy above controls whether corrections are accepted. Each token must also include the <code>feedback:correction</code> scope.</p>
+            </details>
               {selected.archived_at && <p className="inline-note">Archived {date(selected.archived_at)}. Restore this project before issuing credentials.</p>}
             </section>
           </> : checklistShown === false && <div className="empty-card"><div className="empty-icon" aria-hidden="true">✦</div><h2>Select a project</h2><p>Choose a project to manage its settings and credentials, or create a new one.</p></div>}
@@ -409,13 +418,19 @@ function ProjectForm({ project, busy, onCancel, onSubmit }: { project: Project |
   const [slug, setSlug] = React.useState(project?.slug ?? '');
   const [slugEdited, setSlugEdited] = React.useState(Boolean(project));
   const [hasName, setHasName] = React.useState(false);
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  const moreRef = React.useRef<HTMLDetailsElement>(null);
+  const slugMissing = !slugEdited && !slug && hasName;
+  const slugField = <><label htmlFor="project-slug">Slug</label><input id="project-slug" name="slug" value={slug} onChange={event => { setSlugEdited(true); setSlug(event.target.value); }} pattern="[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,98}[a-zA-Z0-9])?" aria-describedby="slug-help" required /><small id="slug-help" className="subtle">Lowercase letters, numbers, and internal hyphens.{!slugEdited && slug && <> From the name: <code>{slug}</code></>}{slugMissing && <> Can't make one from this name. Type a slug.</>}</small></>;
+  const details = <><label htmlFor="project-description">Description <span className="subtle">(optional)</span></label><textarea id="project-description" name="description" defaultValue={project?.description ?? ''} maxLength={5000} rows={3} />
+      <fieldset><legend>Project policies</legend><label className="checkbox-row"><input type="checkbox" name="corrections" defaultChecked={project?.settings.corrections?.enabled ?? false} /> Enable correction feedback</label><p className="help-text">Tokens also need the correction scope before an integration can submit corrections.</p><label htmlFor="deduplication-mode">Deduplication mode</label><select id="deduplication-mode" name="deduplication_mode" defaultValue={project?.settings.deduplication?.mode ?? (project?.settings.deduplication?.enabled === false ? 'disabled' : 'exact')}><option value="disabled">Disabled</option><option value="exact">Exact</option><option value="semantic" disabled>Semantic (Configure an LLM provider first)</option></select><p className="help-text">{exactHelp}</p><p className="help-text">Add an LLM provider under LLM providers first to enable Semantic.</p></fieldset></>;
   return <section className="panel" aria-labelledby="project-form-title"><div className="panel-heading"><div><div className="eyebrow">{project ? 'EDIT PROJECT' : 'NEW PROJECT'}</div><h2 id="project-form-title">{project ? 'Project settings' : 'Create a project'}</h2></div></div>
     {firstRun?.sample?.present && !firstRun.sample.has_real_projects && !project && <p className="scope-note">Create a project for your app. It gets its own token; the sample projects can't have one.</p>}
-    <form className="project-form" onSubmit={onSubmit}><label htmlFor="project-name">Name</label><input id="project-name" name="name" autoFocus={!project} defaultValue={project?.name ?? ''} maxLength={200} required onChange={event => { setHasName(Boolean(event.target.value.trim())); if (!slugEdited) setSlug(slugFromName(event.target.value)); }} />
-      <label htmlFor="project-slug">Slug</label><input id="project-slug" name="slug" value={slug} onChange={event => { setSlugEdited(true); setSlug(event.target.value); }} pattern="[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,98}[a-zA-Z0-9])?" aria-describedby="slug-help" required /><small id="slug-help" className="subtle">Lowercase letters, numbers, and internal hyphens.{!slugEdited && slug && <> From the name: <code>{slug}</code></>}{!slugEdited && !slug && hasName && <> Can't make one from this name. Type a slug.</>}</small>
-      <label htmlFor="project-description">Description <span className="subtle">(optional)</span></label><textarea id="project-description" name="description" defaultValue={project?.description ?? ''} maxLength={5000} rows={3} />
-      <fieldset><legend>Project policies</legend><label className="checkbox-row"><input type="checkbox" name="corrections" defaultChecked={project?.settings.corrections?.enabled ?? false} /> Enable correction feedback</label><p className="help-text">Tokens also need the correction scope before an integration can submit corrections.</p><label htmlFor="deduplication-mode">Deduplication mode</label><select id="deduplication-mode" name="deduplication_mode" defaultValue={project?.settings.deduplication?.mode ?? (project?.settings.deduplication?.enabled === false ? 'disabled' : 'exact')}><option value="disabled">Disabled</option><option value="exact">Exact</option><option value="semantic" disabled>Semantic (Configure an LLM provider first)</option></select><p className="help-text">{exactHelp}</p><p className="help-text">Add an LLM provider under LLM providers first to enable Semantic.</p></fieldset>
-      {project && <><label className="checkbox-row"><input type="checkbox" name="is_active" defaultChecked={project.is_active} /> Project is active</label></>}
+    <form className="project-form" onSubmit={onSubmit} onInvalidCapture={() => { if (moreRef.current) moreRef.current.open = true; }}><label htmlFor="project-name">Name</label><input id="project-name" name="name" autoFocus={!project} defaultValue={project?.name ?? ''} maxLength={200} required aria-describedby={project ? undefined : 'name-help'} onChange={event => { setHasName(Boolean(event.target.value.trim())); if (!slugEdited) { const next = slugFromName(event.target.value); setSlug(next); if (!next && event.target.value.trim()) setMoreOpen(true); } }} />
+      {project ? <>{slugField}{details}<label className="checkbox-row"><input type="checkbox" name="is_active" defaultChecked={project.is_active} /> Project is active</label></> : <>
+        <small id="name-help" className="subtle">{slug && !moreOpen ? <>Slug: <code>{slug}</code>. You can change it and the defaults under More options.</> : 'You can change the slug and the defaults under More options.'}</small>
+        <details ref={moreRef} className="more-options" open={moreOpen} onToggle={event => setMoreOpen(event.currentTarget.open)}><summary>More options</summary>{slugField}{details}</details>
+      </>}
       <div className="button-row"><button disabled={busy}>{busy ? 'Saving…' : project ? 'Save changes' : 'Create project'}</button><button type="button" className="quiet-button" onClick={onCancel}>Cancel</button></div>
     </form></section>;
 }

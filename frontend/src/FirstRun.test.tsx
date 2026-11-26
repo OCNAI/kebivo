@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FirstRunEmpty, FirstRunNotice, FirstRunProvider, SetupPage, takeSetupTokenFromLocation } from './FirstRun';
+import { FirstRunEmpty, FirstRunNotice, FirstRunProvider, SETUP_PLAIN_NOTICE, SETUP_SAMPLE_NOTICE, SetupPage, takeSetupTokenFromLocation } from './FirstRun';
 import { setCsrfToken } from './api';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -105,9 +105,9 @@ describe('sample banner removal', () => {
     }) as typeof fetch;
     const navigate = vi.fn();
     await act(async () => { root.render(<FirstRunProvider navigate={navigate}><header>Nav</header><FirstRunNotice /><main><h1 tabIndex={-1}>Inbox</h1></main></FirstRunProvider>); await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(host.textContent).toContain("You're looking at sample data.");
-    const remove = [...host.querySelectorAll('button')].find(button => button.textContent === 'Remove sample data')!;
-    expect(remove.getAttribute('aria-label')).toBe('Remove sample data');
+    expect(host.querySelector('.sample-banner')?.textContent).toBe('Sample data.Connect your own appRemove');
+    const remove = host.querySelector<HTMLButtonElement>('.sample-banner button[aria-label="Remove sample data"]')!;
+    expect(remove.textContent).toBe('Remove');
     await act(async () => { remove.click(); });
     expect(host.querySelector('dialog')?.hasAttribute('open')).toBe(true);
     await act(async () => { host.querySelector<HTMLButtonElement>('dialog button')!.click(); });
@@ -117,7 +117,7 @@ describe('sample banner removal', () => {
     await act(async () => { destructive.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(calls).toContain('DELETE /api/v1/admin/sample-data');
     expect(navigate).toHaveBeenCalledWith('/inbox');
-    expect(host.textContent).not.toContain("You're looking at sample data.");
+    expect(host.querySelector('.sample-banner')).toBeNull();
     expect(host.textContent).toContain('Sample data removed.');
     expect(host.querySelector('header')!.compareDocumentPosition(host.querySelector('[role=status]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -131,5 +131,27 @@ describe('sample banner removal', () => {
     }) as typeof fetch;
     await act(async () => { root.render(<FirstRunProvider navigate={() => {}}><main><h1>Dashboard</h1><FirstRunEmpty dashboard navigate={() => {}} /></main></FirstRunProvider>); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect([...host.querySelectorAll<HTMLButtonElement>('button')].some(button => button.textContent === 'Load sample data')).toBe(true);
+  });
+
+  it('turns the post-setup notice into the next steps, with or without sample data', async () => {
+    globalThis.fetch = vi.fn(async input => {
+      const path = String(input);
+      if (path.endsWith('/admin/sample-data')) return new Response(JSON.stringify({ present: true, has_real_events: false, has_real_projects: false }));
+      if (path.includes('/admin/groups?')) return new Response(JSON.stringify({ items: [{ id: 'g-canada', representative: { question_excerpt: 'Do you ship to Canada?' } }] }));
+      return new Response('{}');
+    }) as typeof fetch;
+    const navigate = vi.fn();
+    await act(async () => { root.render(<FirstRunProvider navigate={navigate}><FirstRunNotice /></FirstRunProvider>); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { window.dispatchEvent(new CustomEvent('first-run-notice', { detail: SETUP_SAMPLE_NOTICE })); await new Promise(resolve => setTimeout(resolve, 0)); });
+    const notice = host.querySelector('.sample-announcement')!;
+    expect(notice.textContent).toBe("Sample data loaded. Open Do you ship to Canada? to see seven reports collapse into one, then Connect your own app when you're ready.");
+    const links = [...notice.querySelectorAll('a')];
+    expect(links.map(link => link.getAttribute('href'))).toEqual(['/inbox/groups/g-canada', '/?create=1']);
+    await act(async () => { links[1].click(); });
+    expect(navigate).toHaveBeenCalledWith('/?create=1');
+    expect(host.querySelector('.sample-announcement')).toBeNull();
+    await act(async () => { window.dispatchEvent(new CustomEvent('first-run-notice', { detail: SETUP_PLAIN_NOTICE })); });
+    expect(host.querySelector('.sample-announcement')!.textContent).toBe('Account created. Connect your own app to send your first report.');
+    expect(host.querySelector('.sample-announcement a')!.getAttribute('href')).toBe('/?create=1');
   });
 });
