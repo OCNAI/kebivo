@@ -66,6 +66,15 @@ test('setup with sample data leads to a connected project; only a real report sh
   await expect(page.locator('#name-help')).toContainText('Slug: my-support-bot.');
   await page.screenshot({ path: path.join(ARTIFACTS, 'new-project-1280.png') });
   await noSeriousAxeViolations(page, 'new project form');
+  // Closing More options while the slug is still needed must not block Create silently.
+  await page.getByLabel('Name', { exact: true }).fill('!!!');
+  await expect(page.getByLabel('Slug')).toBeVisible();
+  await page.getByText('More options', { exact: true }).click();
+  await expect(page.getByLabel('Slug')).toBeHidden();
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await expect(page.getByLabel('Slug')).toBeFocused();
+  await page.getByLabel('Name', { exact: true }).fill('My support bot');
+  await expect(page.getByLabel('Slug')).toHaveValue('my-support-bot');
   await page.getByRole('button', { name: 'Create project' }).click();
   await expect(page.getByRole('heading', { name: /My support bot/, level: 2 })).toBeVisible();
   await expect(page.locator('.settings-summary')).toContainText('exact');

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from kebivo.auth import AdminAuth
 from kebivo.models import FeedbackEvent, FeedbackEventTag, Project, Tag, now_utc
 
+# "Send test event" adds this tag. A client can add it too, which only hides a nudge.
 TEST_EVENT_TAG = "kebivo-test"
 
 
