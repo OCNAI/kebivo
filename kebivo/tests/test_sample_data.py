@@ -283,6 +283,19 @@ def test_real_ungrouped_event_prevents_load(tmp_path: Path) -> None:
     assert client.post(PATH, headers=headers).status_code == 409
 
 
+def test_test_event_does_not_count_as_real(tmp_path: Path) -> None:
+    client, app = make_client(tmp_path / "test-event.db")
+    headers = write_headers(client)
+    project = client.post(
+        "/api/v1/projects", json={"name": "Real", "slug": "real"}, headers=headers
+    ).json()
+    sent = client.post(f"/api/v1/projects/{project['id']}/test-event", headers=headers)
+    assert sent.status_code == 202, sent.text
+    assert client.get(PATH).json()["has_real_events"] is False
+    assert client.post(PATH, headers=headers).status_code == 201
+    app.state.engine.dispose()
+
+
 def test_sample_destination_never_sends_even_after_edit_and_retry(tmp_path: Path) -> None:
     received: list[bytes] = []
 
