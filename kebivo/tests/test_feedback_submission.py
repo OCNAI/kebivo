@@ -272,6 +272,7 @@ def test_auth_policy_and_bad_json_write_nothing(tmp_path: Path) -> None:
     error = denied.json()["error"]
     assert error["code"] == "scope_required"
     assert "feedback:correction" in error["message"]
+    assert "create a new token with that scope on the Projects page" in error["message"]
     assert error["details"] == {"required_scope": "feedback:correction"}
     assert error["request_id"] == denied.headers["x-request-id"]
     assert marker not in denied.text

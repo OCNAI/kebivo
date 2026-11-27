@@ -34,7 +34,8 @@ INVALID_TOKEN_MESSAGE = (
 
 def scope_required_message(scope: str) -> str:
     return (
-        f"This project token lacks the {scope} scope; grant it on the Projects page. "
+        f"This project token lacks the {scope} scope; "
+        "create a new token with that scope on the Projects page. "
         "See https://docs.kebivo.com/rest-api/#authentication"
     )
 

@@ -76,7 +76,8 @@ def main() -> None:
             )
             message = f"{status} from {endpoint}"
             if status == 401 and failed_status and failed_status[-1][1]:
-                message += f": {failed_status[-1][1].replace(token, '[redacted]')}"
+                detail = failed_status[-1][1].replace(token, "[redacted]")
+                message += f": {''.join(char for char in detail if char.isprintable())}"
         elif any(isinstance(e, httpx2.ConnectError | httpx2.ConnectTimeout) for e in errors):
             message = f"Could not connect to {endpoint}: is Kebivo running?"
         else:
