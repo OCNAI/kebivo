@@ -18,6 +18,7 @@ Use these pages for setup, integration and operations. Tutorials and framework g
 
 ## Connect an assistant
 
+- [Report from your own app](report-from-your-app.md): send an unanswered question from your app's fallback code.
 - [REST API](rest-api.md): submit gaps and corrections from application code, with idempotency and retries.
 - [MCP](mcp.md): give an MCP client the `report_knowledge_gap` tool, and understand scopes and tool visibility.
 

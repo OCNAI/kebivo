@@ -5,7 +5,7 @@ description: Run the published Kebivo image with Docker, create a project token,
 
 # Run Kebivo with Docker
 
-You need Docker, Python 3 and a free port 8000. Run the commands in bash; on macOS, type `bash` first, because zsh's `read` doesn't accept `-p` for a prompt. The published image is typically ready in about 12 seconds after download.
+You need Docker, Python 3 and a free port 8000. Run the commands in bash (on Windows, in WSL or Git Bash); on macOS, type `bash` first, because zsh's `read` doesn't accept `-p` for a prompt. The published image is typically ready in about 12 seconds after download.
 
 **1. Start Kebivo from the published image.** Keep this terminal open: the container prints a one-time setup link here.
 
