@@ -97,7 +97,12 @@ def test_scope_is_opt_in_and_read_only_tokens_are_allowed(tmp_path: Path) -> Non
     assert anonymous.get("/api/v1/groups", headers=bearer("kebivo_pt_x.y")).status_code == 401
     denied = anonymous.get("/api/v1/groups", headers=bearer(default["token"]))
     assert denied.status_code == 403
-    assert denied.json()["error"]["message"] == "Project token scope required"
+    error = denied.json()["error"]
+    assert error["code"] == "scope_required"
+    assert "gaps:read" in error["message"]
+    assert "create a new token with that scope on the Projects page" in error["message"]
+    assert error["details"] == {"required_scope": "gaps:read"}
+    assert error["request_id"] == denied.headers["x-request-id"]
     # The admin session alone is not a credential for this route.
     assert client.get("/api/v1/groups").status_code == 401
     # A read-only token cannot submit feedback.

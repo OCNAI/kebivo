@@ -10,6 +10,7 @@ from sqlalchemy.exc import TimeoutError as PoolTimeout
 from starlette.concurrency import run_in_threadpool
 
 from kebivo.auth import _peer_ip
+from kebivo.errors import error_response
 from kebivo.feedback.ingest import (
     InvalidIdempotencyKey,
     InvalidSubmission,
@@ -20,7 +21,7 @@ from kebivo.feedback.ingest import (
 )
 from kebivo.feedback.schemas import CorrectionSubmission, GapSubmission
 from kebivo.feedback.service import IdempotencyConflict, submit_feedback
-from kebivo.tokens import INVALID_TOKEN_MESSAGE, authenticate_project_token
+from kebivo.tokens import INVALID_TOKEN_MESSAGE, authenticate_project_token, scope_required_message
 
 GAP_EXAMPLE: dict[str, Any] = {
     "event_type": "knowledge_gap",
@@ -155,8 +156,15 @@ def install_feedback_routes(app: FastAPI) -> None:
                 _submit=submit_feedback,
             )
         except NotAuthorized as exc:
+            if exc.required_scope:
+                return error_response(
+                    403,
+                    "scope_required",
+                    scope_required_message(exc.required_scope),
+                    request.state.request_id,
+                    {"required_scope": exc.required_scope},
+                )
             detail = {
-                "scope_required": "Project token scope required",
                 "corrections_disabled": "Project corrections are disabled",
                 "unauthorized": INVALID_TOKEN_MESSAGE,
             }[exc.code]

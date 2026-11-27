@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Scope errors now include `details.required_scope` and tell you to create a new token with that scope; the example MCP client gives one-line token and connection errors without a traceback.
 - Project tokens can read their project's knowledge gaps with the new opt-in `gaps:read` scope, through `GET /api/v1/groups` or the read-only MCP tool `list_open_gaps`. Results contain only the question, count, first and last seen, tags and status; notes, `user_reference` and other report fields are never returned. Reads are limited to 30 a minute per token (`GAPS_READ_RATE_LIMIT_PER_TOKEN`) and each one is audited. The questions are end-user text, so use a separate token for reading and keep `gaps:read` off the token your assistant uses. Existing tokens keep their scopes. A token may now hold only `gaps:read`. See [read open gaps](docs/rest-api.md#read-open-gaps).
 - After you resolve a group, the inbox and group page show "Resolved 3 days ago, no new occurrences since". If the question comes back, the group shows a **Reopened** chip with how many new occurrences arrived since you resolved it. The inbox has a **Reopened** filter, and the dashboard counts groups resolved and reopened in the last 7 days, each linking to the filtered inbox.
 - Choosing **Resolved** on a group offers an optional "What did you change?" note, shown beside the resolved or reopened chip. Skipping it still resolves the group.

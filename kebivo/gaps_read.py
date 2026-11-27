@@ -20,6 +20,7 @@ from kebivo.tokens import (
     MISSING_TOKEN_MESSAGE,
     ProjectTokenPrincipal,
     authenticate_project_token,
+    scope_required_message,
     touch_project_token,
 )
 
@@ -193,7 +194,13 @@ def install_gaps_read_routes(app: Any) -> None:
             raise HTTPException(status_code=401, detail=MISSING_TOKEN_MESSAGE)
         principal, _project = authenticate_project_token(request, token)
         if GAPS_READ_SCOPE not in principal.scopes:
-            raise HTTPException(status_code=403, detail="Project token scope required")
+            return error_response(
+                403,
+                "scope_required",
+                scope_required_message(GAPS_READ_SCOPE),
+                request.state.request_id,
+                {"required_scope": GAPS_READ_SCOPE},
+            )
         check_gaps_read_rate_limit(request.app, principal.token_id)
         db: Session = request.state.db
         try:

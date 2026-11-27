@@ -262,7 +262,21 @@ def test_auth_policy_and_bad_json_write_nothing(tmp_path: Path) -> None:
         assert "kebivo-admin project create" in message
         assert "https://docs.kebivo.com/rest-api/#authentication" in message
         assert bad not in invalid.text
-    assert post(client, gap_only, CORRECTION_EXAMPLE).status_code == 403
+    marker = "private-correction-marker-741"
+    denied = post(
+        client,
+        gap_only,
+        {**CORRECTION_EXAMPLE, "correction": marker, "question": marker},
+    )
+    assert denied.status_code == 403
+    error = denied.json()["error"]
+    assert error["code"] == "scope_required"
+    assert "feedback:correction" in error["message"]
+    assert "create a new token with that scope on the Projects page" in error["message"]
+    assert error["details"] == {"required_scope": "feedback:correction"}
+    assert error["request_id"] == denied.headers["x-request-id"]
+    assert marker not in denied.text
+    assert gap_only not in denied.text
     assert post(client, token, CORRECTION_EXAMPLE).status_code == 403
     assert post(client, token, GAP_EXAMPLE, "bad key").status_code == 400
     assert (

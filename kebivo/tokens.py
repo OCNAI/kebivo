@@ -32,6 +32,20 @@ INVALID_TOKEN_MESSAGE = (
 )
 
 
+def scope_required_message(scope: str) -> str:
+    return (
+        f"This project token lacks the {scope} scope; "
+        "create a new token with that scope on the Projects page. "
+        "See https://docs.kebivo.com/rest-api/#authentication"
+    )
+
+
+class ScopeRequired(HTTPException):
+    def __init__(self, scope: str) -> None:
+        super().__init__(status_code=403, detail="Project token scope required")
+        self.required_scope = scope
+
+
 @dataclass(frozen=True)
 class ProjectTokenPrincipal:
     """Authenticated project identity and granted scopes, safe to pass to handlers."""
@@ -107,7 +121,7 @@ def authorize_feedback(principal: ProjectTokenPrincipal, project: Project, event
     """Apply scope and project correction policy to each submission."""
     scope = CORRECTION_SCOPE if event_type == "knowledge_correction" else GAP_SCOPE
     if scope not in principal.scopes:
-        raise HTTPException(status_code=403, detail="Project token scope required")
+        raise ScopeRequired(scope)
     if scope == CORRECTION_SCOPE and not _corrections_enabled(project):
         raise HTTPException(status_code=403, detail="Project corrections are disabled")
 
