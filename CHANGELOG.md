@@ -3,6 +3,11 @@
 ## Unreleased
 
 - Scope errors now include `details.required_scope` and tell you to create a new token with that scope; the example MCP client gives one-line token and connection errors without a traceback.
+
+## 0.5.0 — 2026-11-27
+
+Close the loop on a fix: resolve a group with a note on what you changed, see when the question comes back, and get a weekly digest of what is still open.
+
 - Project tokens can read their project's knowledge gaps with the new opt-in `gaps:read` scope, through `GET /api/v1/groups` or the read-only MCP tool `list_open_gaps`. Results contain only the question, count, first and last seen, tags and status; notes, `user_reference` and other report fields are never returned. Reads are limited to 30 a minute per token (`GAPS_READ_RATE_LIMIT_PER_TOKEN`) and each one is audited. The questions are end-user text, so use a separate token for reading and keep `gaps:read` off the token your assistant uses. Existing tokens keep their scopes. A token may now hold only `gaps:read`. See [read open gaps](docs/rest-api.md#read-open-gaps).
 - After you resolve a group, the inbox and group page show "Resolved 3 days ago, no new occurrences since". If the question comes back, the group shows a **Reopened** chip with how many new occurrences arrived since you resolved it. The inbox has a **Reopened** filter, and the dashboard counts groups resolved and reopened in the last 7 days, each linking to the filtered inbox.
 - Choosing **Resolved** on a group offers an optional "What did you change?" note, shown beside the resolved or reopened chip. Skipping it still resolves the group.
@@ -15,7 +20,7 @@
 
 ### Upgrade
 
-On start, migration `0019` rebuilds the `destinations`, `routing_matches` and `deliveries` tables to allow the new mode. Existing rows are kept. Back up first; an older image will not start on a database that has this migration.
+Back up first (see [Backup and restore](docs/self-hosting.md#backup-and-restore)). On start, migration `0019` rebuilds the `destinations`, `routing_matches` and `deliveries` tables to allow the weekly digest mode. Existing destinations, routing matches and deliveries are kept, and feedback, groups and tokens are not touched. The latest migration is `0019`, and a 0.4.0 image will not start on a database that has it, so keep the backup if you may need to roll back. Existing tokens keep their scopes; `gaps:read` is only on tokens you create with it. Pull `ghcr.io/ocnai/kebivo:0.5.0` (or `git pull` and rebuild) and check `/health/ready`.
 
 ## 0.4.0 — 2026-11-25
 
