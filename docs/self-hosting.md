@@ -50,9 +50,10 @@ Optional, only if you configure them:
   Kebivo ──▶ LLM provider               question text, for semantic grouping
   Kebivo ──▶ webhook, Slack or email    routed reports, to the destinations you add
   you    ──▶ backup file                the whole database, wherever you copy it
+  reader ◀── gaps:read token            open-gap questions, through REST or MCP
 ```
 
-The default install sends nothing off the host. Inside it, only the signed-in administrator sees feedback, in the admin UI and the JSON Lines [export](export.md). See [LLM providers](llm-providers.md), [destinations](destinations.md) and [backups](#backup-and-restore).
+The default install sends nothing off the host. Inside it, only administrators and `gaps:read` tokens see feedback: administrators in the admin UI and the JSON Lines [export](export.md), tokens only open-gap questions through [`GET /api/v1/groups`](rest-api.md#read-open-gaps) or the MCP `list_open_gaps` tool. See [LLM providers](llm-providers.md), [destinations](destinations.md) and [backups](#backup-and-restore).
 
 ## Configuration
 
