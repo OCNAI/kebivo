@@ -29,7 +29,7 @@ curl -fsS http://127.0.0.1:8000/health/ready
 docker compose exec app python -m kebivo.cli bootstrap --email admin@example.org
 ```
 
-`--wait` returns once the healthcheck passes, after migrations finish. Readiness returns `"status":"ok"` with `"database":"ok","search":"ok","worker":"ok"` once migrations are done. The last command prompts for the administrator password. Then open <http://127.0.0.1:8000/> and sign in. The [README quickstart](../README.md#quickstart) continues from here to the first feedback event.
+`--wait` (Docker Compose v2.1.1 or later) returns once the healthcheck passes, after migrations finish. Readiness returns `"status":"ok"` with `"database":"ok","search":"ok","worker":"ok"` once migrations are done. The last command prompts for the administrator password. Then open <http://127.0.0.1:8000/> and sign in. The [README quickstart](../README.md#quickstart) continues from here to the first feedback event.
 
 Compose runs only the `app` service. It builds the image `kebivo:local`, stores SQLite at `/data/app.sqlite3` in the named volume `app-data`, publishes the port on `127.0.0.1` only, probes `/health/ready` every 2 seconds for the first minute and every 30 seconds after that, and restarts the container unless you stop it. The image has the same readiness healthcheck for plain `docker run`; Compose keeps its explicit check so the service uses these settings even with an image override. `docker ps` shows `(healthy)` after the first successful probe, usually within a few seconds of migrations finishing. The fast start-up probing needs Docker Engine 25 or newer; older engines ignore it and wait for the 30-second interval. The container runs as an unprivileged user (UID 10001).
 
@@ -275,14 +275,14 @@ If the host or a backup may be compromised, rotate all of the above: tokens, adm
 | `database is locked` or corruption on a network share | Move the volume to local storage. |
 | Group counts look wrong | `docker compose exec app python -m kebivo.cli check-groups`. |
 
+Report security problems as described in [`SECURITY.md`](../SECURITY.md), not in a public issue.
+
 ### Startup stopped
 
-The container exits and the log ends with a `SettingsError` line that names the problem. The two most common:
+The container exits and the log ends with a `SettingsError` line that names the problem. For example:
 
-- `SettingsError: DATABASE_URL must be a SQLite URL, such as sqlite:////data/app.sqlite3`: Kebivo stores data only in SQLite. Remove `DATABASE_URL` from your `docker run -e` options or env file, or set it to `sqlite:////data/app.sqlite3`. Compose already sets it.
+- `SettingsError: DATABASE_URL must be a SQLite URL, such as sqlite:////data/app.sqlite3`, or `SettingsError: DATABASE_URL must use SQLite for this application phase` when the keys are already set: Kebivo stores data only in SQLite. Remove `DATABASE_URL` from your `docker run -e` options or env file, or set it to `sqlite:////data/app.sqlite3`. Compose already sets it.
 - `SettingsError: Cannot write secrets file as uid 10001; set SECRET_KEY and ENCRYPTION_KEY`: the one-command image could not create `/data/kebivo-secrets.env` because the mounted directory is not writable by the container user. Make it writable (for a bind mount, `sudo chown 10001:10001 <host directory>`), or pass both keys with `--env-file`.
-
-Report security problems as described in [`SECURITY.md`](../SECURITY.md), not in a public issue.
 
 ## Intake capacity check
 
