@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0 — 2026-11-26
+## 0.5.0 — 2026-11-27
 
 Close the loop on a fix: resolve a group with a note on what you changed, see when the question comes back, and get a weekly digest of what is still open.
 
