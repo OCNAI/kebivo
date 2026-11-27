@@ -115,7 +115,11 @@ Reporting feedback should never break your user's conversation. Send it in the b
 
 A token with the `gaps:read` scope can list its project's knowledge gaps, for example from a nightly job that writes the top questions into your docs repo. Correction groups are not included.
 
+Create a read token in the admin UI (project → **Project tokens**, with only `gaps:read` turned on) and paste it in place of `<READ_TOKEN>`:
+
 ```bash
+export KEBIVO_URL=http://127.0.0.1:8000
+export KEBIVO_READ_TOKEN='<READ_TOKEN>'
 curl -s "$KEBIVO_URL/api/v1/groups?status=open&sort=occurrences&limit=2" \
   -H "Authorization: Bearer $KEBIVO_READ_TOKEN"
 ```
