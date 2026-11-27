@@ -18,27 +18,41 @@ Kebivo runs in one container with one SQLite file. The container serves the API,
 ## Install
 
 ```sh
-git clone <REPOSITORY_URL> kebivo
+git clone https://github.com/OCNAI/kebivo.git kebivo
 cd kebivo
 cp .env.example .env
 printf 'SECRET_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
 printf 'ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
 printf 'ALLOWED_ORIGINS=http://127.0.0.1:8000\n' >> .env
-docker compose up --build -d
+docker compose up --build -d --wait
 curl -fsS http://127.0.0.1:8000/health/ready
 docker compose exec app python -m kebivo.cli bootstrap --email admin@example.org
 ```
 
-`<REPOSITORY_URL>` is the address you cloned from. Readiness returns `"status":"ok"` with `"database":"ok","search":"ok","worker":"ok"` once migrations are done. The last command prompts for the administrator password. Then open <http://127.0.0.1:8000/> and sign in. The [README quickstart](../README.md#quickstart) continues from here to the first feedback event.
+`--wait` (Docker Compose v2.1.1 or later) returns once the healthcheck passes, after migrations finish. Readiness returns `"status":"ok"` with `"database":"ok","search":"ok","worker":"ok"` once migrations are done. The last command prompts for the administrator password. Then open <http://127.0.0.1:8000/> and sign in. The [README quickstart](../README.md#quickstart) continues from here to the first feedback event.
 
 Compose runs only the `app` service. It builds the image `kebivo:local`, stores SQLite at `/data/app.sqlite3` in the named volume `app-data`, publishes the port on `127.0.0.1` only, probes `/health/ready` every 2 seconds for the first minute and every 30 seconds after that, and restarts the container unless you stop it. The image has the same readiness healthcheck for plain `docker run`; Compose keeps its explicit check so the service uses these settings even with an image override. `docker ps` shows `(healthy)` after the first successful probe, usually within a few seconds of migrations finishing. The fast start-up probing needs Docker Engine 25 or newer; older engines ignore it and wait for the 30-second interval. The container runs as an unprivileged user (UID 10001).
 
 | Command | Effect |
 | --- | --- |
-| `docker compose logs -f app` | Follow the logs. They contain request metadata and error categories, never feedback content or credentials. |
+| `docker compose logs -f app` | Follow the logs. They contain request metadata and error categories, never feedback content. Until an administrator exists, they also print a one-time `Kebivo setup: …/setup#token=…` URL that creates the administrator: keep it private until setup is done. |
 | `docker compose stop` / `docker compose up -d` | Stop and start; data is kept. |
 | `docker compose down` | Remove the container; the volume and data are kept. |
 | `docker compose down --volumes` | **Deletes the volume and all feedback.** |
+
+## Where your data goes
+
+```text
+your app ── report + project token ──▶ Kebivo container ──▶ data volume /data
+             (REST or MCP)                                   app.sqlite3: feedback in plain text
+
+Optional, only if you configure them:
+  Kebivo ──▶ LLM provider               question text, for semantic grouping
+  Kebivo ──▶ webhook, Slack or email    routed reports, to the destinations you add
+  you    ──▶ backup file                the whole database, wherever you copy it
+```
+
+The default install sends nothing off the host. Inside it, only the signed-in administrator sees feedback, in the admin UI and the JSON Lines [export](export.md). See [LLM providers](llm-providers.md), [destinations](destinations.md) and [backups](#backup-and-restore).
 
 ## Configuration
 
@@ -202,7 +216,7 @@ To restore, first take a fresh backup of the current database, then stop the app
 BACKUP_FILE=backups/app-YYYYMMDDTHHMMSSZ.sqlite3
 docker compose stop app
 docker compose run --rm --no-deps -T --entrypoint python app -m scripts.sqlite_maintenance restore < "$BACKUP_FILE"
-docker compose up -d app
+docker compose up -d --wait app
 curl -fsS http://127.0.0.1:8000/health/ready
 ```
 
@@ -220,7 +234,7 @@ Migrations are versioned and run automatically before the server starts. A faile
 
    ```sh
    git pull
-   docker compose up --build -d
+   docker compose up --build -d --wait
    curl -fsS http://127.0.0.1:8000/health/ready
    ```
 
@@ -249,7 +263,6 @@ If the host or a backup may be compromised, rotate all of the above: tokens, adm
 | --- | --- |
 | Container exits at startup | `docker compose logs app` or `docker logs kebivo`. The message names the invalid variable (for example a short `SECRET_KEY` or missing `ENCRYPTION_KEY`) or the failed migration. For an existing database, restore its original key file or pass the matching keys; startup will not mint replacements. |
 | `docker compose up` says `Set SECRET_KEY ...` | The variable is missing from `.env`. |
-| One-command container cannot write `/data` | Make the named volume writable by container UID 10001, or supply both keys through `--env-file`. |
 | Sign-in fails with a forbidden error | With `ALLOWED_ORIGINS` set, the URL must match an entry exactly, including scheme and port. When empty, use HTTP loopback with the same host and port as the request; set `ALLOWED_ORIGINS` for a proxy or other origin. |
 | Setup link expired or missing | Check `docker logs kebivo`. A link prints only while no administrator exists; restart for a new 60-minute link. Change `8000` in it if you remapped the host port. |
 | `/health/ready` returns `503` | `"database":"unavailable"`: the volume or file is not readable. `"search":"unavailable"`: the search index failed to start. `"worker":"stopped"`: the worker crashed; check the logs and restart. `"worker":"disabled"` with status `ok` only means `WORKER_ENABLED=false`. |
@@ -263,6 +276,13 @@ If the host or a backup may be compromised, rotate all of the above: tokens, adm
 | Group counts look wrong | `docker compose exec app python -m kebivo.cli check-groups`. |
 
 Report security problems as described in [`SECURITY.md`](../SECURITY.md), not in a public issue.
+
+### Startup stopped
+
+The container exits and the log ends with a `SettingsError` line that names the problem. For example:
+
+- `SettingsError: DATABASE_URL must be a SQLite URL, such as sqlite:////data/app.sqlite3`, or `SettingsError: DATABASE_URL must use SQLite for this application phase` when the keys are already set: Kebivo stores data only in SQLite. Remove `DATABASE_URL` from your `docker run -e` options or env file, or set it to `sqlite:////data/app.sqlite3`. Compose already sets it.
+- `SettingsError: Cannot write secrets file as uid 10001; set SECRET_KEY and ENCRYPTION_KEY`: the one-command image could not create `/data/kebivo-secrets.env` because the mounted directory is not writable by the container user. Make it writable (for a bind mount, `sudo chown 10001:10001 <host directory>`), or pass both keys with `--env-file`.
 
 ## Intake capacity check
 
