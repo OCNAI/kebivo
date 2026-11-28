@@ -37,9 +37,7 @@ def acquire_instance_lock(directory: Path) -> int:
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         os.close(descriptor)
-        raise StartupError(
-            f"Another Kebivo is already using {directory}; stop it first"
-        ) from None
+        raise StartupError(f"Another Kebivo is already using {directory}; stop it first") from None
     except BaseException:
         os.close(descriptor)
         raise
@@ -76,9 +74,7 @@ def current_revision(database: Path) -> str | None:
 def backup_before_upgrade(database: Path, revision: str) -> Path:
     """Write a checked backup next to the database and remove older pre-upgrade backups."""
     target = database.with_name(f"{BACKUP_PREFIX}{revision}{BACKUP_SUFFIX}")
-    descriptor, name = tempfile.mkstemp(
-        prefix=".pre-upgrade-", suffix=".tmp", dir=database.parent
-    )
+    descriptor, name = tempfile.mkstemp(prefix=".pre-upgrade-", suffix=".tmp", dir=database.parent)
     temporary = Path(name)
     try:
         with os.fdopen(descriptor, "wb") as output:

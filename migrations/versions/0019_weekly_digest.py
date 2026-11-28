@@ -136,9 +136,7 @@ def _rebuild(digest: bool) -> None:
         bind.exec_driver_sql(f"DROP TABLE IF EXISTS _new_{table}")
         # Renaming the old table would rewrite other tables' foreign keys to it.
         bind.exec_driver_sql(ddl.replace(f"TABLE {table} (", f"TABLE _new_{table} (", 1))
-        bind.exec_driver_sql(
-            f"INSERT INTO _new_{table} ({columns}) SELECT {columns} FROM {table}"
-        )
+        bind.exec_driver_sql(f"INSERT INTO _new_{table} ({columns}) SELECT {columns} FROM {table}")
         bind.exec_driver_sql(f"DROP TABLE {table}")
         bind.exec_driver_sql(f"ALTER TABLE _new_{table} RENAME TO {table}")
         for statement in INDEXES[table]:

@@ -19,7 +19,7 @@ from kebivo.startup import (
 BEFORE_HEAD = "0018_star_prompt_dismissal"
 HEAD = "0019_weekly_digest"
 
-BAD_MIGRATION = '''
+BAD_MIGRATION = """
 import sqlalchemy as sa
 from alembic import op
 
@@ -37,7 +37,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     pass
-'''
+"""
 
 
 @pytest.fixture
@@ -55,7 +55,9 @@ def migrations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, C
 
 def _schema(database: Path) -> list[tuple[str, str, str | None]]:
     with sqlite3.connect(database) as db:
-        return db.execute("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").fetchall()
+        return db.execute(
+            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        ).fetchall()
 
 
 def test_failed_migration_rolls_back_the_whole_run(

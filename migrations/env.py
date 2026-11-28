@@ -15,8 +15,10 @@ target_metadata = Base.metadata
 
 
 def include_object(object, name, type_, reflected, compare_to):
-    if reflected and type_ == "table" and (
-        name == "feedback_search" or name.startswith("feedback_search_")
+    if (
+        reflected
+        and type_ == "table"
+        and (name == "feedback_search" or name.startswith("feedback_search_"))
     ):
         return False
     return True
