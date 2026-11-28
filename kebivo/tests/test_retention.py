@@ -255,6 +255,61 @@ def test_each_retention_class_uses_its_own_setting(tmp_path: Path) -> None:
     assert run(app.state.session_factory, feedback_only, clock)["feedback"] == 1
 
 
+def test_digest_retention_keeps_latest_per_destination_and_cascades_attempts(
+    tmp_path: Path,
+) -> None:
+    _, app, project, _ = setup(tmp_path)
+    clock = datetime(2026, 1, 1, tzinfo=UTC)
+    old = clock - timedelta(days=60)
+    recent = clock - timedelta(days=7)
+    with app.state.session_factory() as db:
+        first = Destination(name="First digest", type="inbox", config_json="{}")
+        second = Destination(name="Second digest", type="inbox", config_json="{}")
+        db.add_all([first, second])
+        db.flush()
+        rows = [
+            Delivery(
+                project_id=project["id"],
+                destination_id=destination.id,
+                event_id=None,
+                status=status,
+                digest_period_start=created - timedelta(days=7),
+                digest_period_end=created,
+                created_at=created,
+            )
+            for destination, status, created in (
+                (first, "delivered", old - timedelta(days=7)),
+                (first, "delivered", old),
+                (first, "delivered", recent),
+                (second, "delivered", old),
+            )
+        ]
+        db.add_all(rows)
+        db.flush()
+        db.add(
+            DeliveryAttempt(
+                delivery_id=rows[0].id,
+                attempt_number=1,
+                trigger="auto",
+                started_at=recent,
+                result="success",
+            )
+        )
+        db.commit()
+        ids = [row.id for row in rows]
+    settings = replace(app.state.settings, delivery_log_retention_days=30)
+    assert preview(app.state.session_factory, settings, clock)["digest_deliveries"] == 2
+    counts = run(app.state.session_factory, settings, clock)
+    assert counts["digest_deliveries"] == 2
+    assert counts["delivery_attempts"] == 0
+    with app.state.session_factory() as db:
+        assert db.get(Delivery, ids[0]) is None
+        assert db.get(Delivery, ids[1]) is None
+        assert db.get(Delivery, ids[2]) is not None
+        assert db.get(Delivery, ids[3]) is not None
+        assert db.scalar(select(func.count()).select_from(DeliveryAttempt)) == 0
+
+
 def test_attempt_pruning_preserves_delivery_state_and_number(tmp_path: Path) -> None:
     client, app, a, _ = setup(tmp_path)
     old = datetime(2025, 1, 1, tzinfo=UTC)
