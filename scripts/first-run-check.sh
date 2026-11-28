@@ -41,6 +41,24 @@ if ! docker logs "$suffix" 2>&1 | grep -q '^Kebivo setup: http.*/setup#token='; 
   docker logs "$suffix" 2>&1 | tail -20 >&2
   exit 1
 fi
+
+# Database, secrets and lock files on a fresh volume are private to the app user.
+modes="$(docker exec "$suffix" sh -c 'stat -c "%a %n" /data/app.sqlite3* /data/kebivo-secrets.env /data/.kebivo.lock')"
+if grep -qv '^600 ' <<<"$modes"; then
+  echo "Fresh /data files should be 0600; got:" >&2
+  printf '%s\n' "$modes" >&2
+  exit 1
+fi
+
+# A second container on the same volume exits with one line; the first keeps serving.
+status=0
+output="$(docker run --rm -v "$suffix:/data" "$image" 2>&1)" || status=$?
+if [[ "$status" -eq 0 || "$output" != 'Another Kebivo is already using /data; stop it first' ]]; then
+  echo "A second container on the same volume should print one lock line; got (exit $status):" >&2
+  printf '%s\n' "$output" >&2
+  exit 1
+fi
+docker exec "$suffix" python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"
 cleanup
 
 # A bad setting prints one line, never a traceback.
