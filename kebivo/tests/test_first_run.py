@@ -162,13 +162,39 @@ def test_existing_database_never_gets_new_keys(tmp_path: Path) -> None:
         generate(env)
     assert not path.exists()
     assert "=" not in str(error.value)
-    for override in (
-        {"DATABASE_PATH": str(tmp_path / "elsewhere")},
-        {"DATABASE_URL": f"sqlite:///{database}?timeout=5"},
-    ):
-        with pytest.raises(SettingsError, match="SECRET_KEY"):
-            generate({**env, **override})
-        assert not path.exists()
+    with pytest.raises(SettingsError, match="name different files"):
+        generate({**env, "DATABASE_PATH": str(tmp_path / "elsewhere")})
+    assert not path.exists()
+    with pytest.raises(SettingsError, match="SECRET_KEY"):
+        generate({**env, "DATABASE_URL": f"sqlite:///{database}?timeout=5"})
+    assert not path.exists()
+    with pytest.raises(SettingsError, match="SECRET_KEY"):
+        generate(
+            {
+                "KEBIVO_SECRETS_FILE": str(path),
+                "DATABASE_PATH": str(database),
+                "APP_ENV": "production",
+            }
+        )
+    assert not path.exists()
+
+
+def test_sqlite_uri_mode_never_generates_keys_for_existing_database(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.env"
+    database = tmp_path / "db.sqlite3"
+    with sqlite3.connect(database) as db:
+        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.execute("INSERT INTO alembic_version VALUES ('0018')")
+    env = {
+        "KEBIVO_SECRETS_FILE": str(path),
+        "DATABASE_URL": f"sqlite:///file:{database}?mode=rw&uri=true",
+        "APP_ENV": "production",
+    }
+    with pytest.raises(SettingsError, match="SQLite URI mode is not supported"):
+        generate(env)
+    assert not path.exists()
+    with sqlite3.connect(database) as db:
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0018",)
 
 
 def test_blank_environment_keys_use_generated_file(tmp_path: Path) -> None:

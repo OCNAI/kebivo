@@ -232,6 +232,20 @@ describe("group detail safety and sections", () => {
     expect(requests.filter(request => request.url.endsWith("/admin/groups/g1/events"))).toHaveLength(2);
   });
 
+  it("explains why select all is disabled when a cluster contains the whole group", async () => {
+    globalThis.fetch = vi.fn(async input => {
+      const url = String(input);
+      if (url.endsWith("/admin/groups/g1/events")) return new Response(JSON.stringify({ items: ["e1", "e2"].map(id => ({ id, event_type: "knowledge_gap", agent_reported: { question: "Same question" }, system: {}, tags: [] })) }));
+      if (url.endsWith("/admin/groups/g1/history")) return new Response(JSON.stringify({ items: [] }));
+      if (url.includes("/deliveries?group_id=")) return new Response(JSON.stringify({ items: [] }));
+      return new Response(JSON.stringify({ id: "g1", status: "open", occurrence_count: 2, representative: { event_id: "e1", question: "Same question" }, project: { id: "p1", name: "Support" }, event_type: "knowledge_gap", notes: [], tags: [] }));
+    }) as typeof fetch;
+    await act(async () => { root.render(<GroupDetail groupId="g1" navigate={() => {}} />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    const selectAll = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(button => button.textContent === "Select all 2 for split")!;
+    expect(selectAll.disabled).toBe(true);
+    expect(container.querySelector(`#${selectAll.getAttribute("aria-describedby")}`)?.textContent).toBe("Keep at least one occurrence in this group.");
+  });
+
   it("shows identical reports once, keeps a reopening report apart, and splits a collapsed cluster in one step", async () => {
     const requests: { url: string; init?: RequestInit }[] = [];
     const same = (id: string, at: string) => ({ id, event_type: "knowledge_gap", agent_reported: { question: "Do you ship to Canada?" }, system: { received_at: at }, tags: [] });

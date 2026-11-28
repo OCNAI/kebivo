@@ -119,8 +119,8 @@ Values are whole days from 1 to 36500; `0` turns off automatic deletion for that
 | `ENCRYPTION_KEY_PREVIOUS` | Empty | The old key, only while [rotating](#rotate-credentials) `ENCRYPTION_KEY`. |
 | `LLM_API_KEY_*` | None | Optional provider keys referenced by name from an LLM provider (`api_key_env`). Compose does not pass them by default: add them under `environment:` in a `compose.override.yaml`. See [LLM providers](llm-providers.md). |
 | `APP_ENV` | `production` in the image | `development`, `test` or `production`. Production enforces the key and origin rules. |
-| `DATABASE_URL` | `sqlite:////data/app.sqlite3` | Must be a SQLite URL. Compose fixes it to the volume. |
-| `DATABASE_PATH` | From `DATABASE_URL` | Optional override of the SQLite file path. |
+| `DATABASE_URL` | `sqlite:////data/app.sqlite3` | Must be a SQLite file URL; SQLite URI mode (`uri=true`) is unsupported. Compose fixes it to the volume. |
+| `DATABASE_PATH` | From `DATABASE_URL` | Optional. If you set it, it must name the same file as `DATABASE_URL`, or startup stops. Prefer setting only `DATABASE_URL`. |
 | `DISPLAY_NAME` | `Kebivo` | Backend display name (the OpenAPI title). The UI name comes from `config/project.json` at build time. |
 
 Compose passes only the variables listed in `compose.yaml`. Restart the container after changing `.env`: `docker compose up -d`.
@@ -228,7 +228,11 @@ Restore the matching `.env` before `docker compose up -d app`. For a one-command
 
 ## Upgrades
 
-Migrations are versioned and run automatically before the server starts. A failed migration stops startup and leaves the previous data untouched.
+Migrations are versioned and run automatically before the server starts. All pending migrations run in one transaction: if one fails, startup stops and the database stays at its previous version, so the previous image still starts on it.
+
+Before it migrates, the container saves a checked copy of the database next to it, as `/data/pre-upgrade-<old version>.sqlite3` (for example `pre-upgrade-0018_star_prompt_dismissal.sqlite3`). It keeps only the latest one, logs its path in one line, and does not migrate if the copy fails. A start that has nothing to migrate makes no copy, and neither does an older image on a database from a newer release; that start stops without touching the database or the copy. The copy is on the same volume and has no keys, so it does not replace your own backups (step 2).
+
+Only one Kebivo can use a data volume at a time. The container holds a lock on `/data/.kebivo.lock` while it runs; a second container on the same volume exits with `Another Kebivo is already using /data; stop it first`, and the first keeps serving. Stop the old container before starting the new one.
 
 1. Read [`CHANGELOG.md`](../CHANGELOG.md) for configuration changes.
 2. Take a backup (above) and keep `.env` or the one-command volume's key file separately.
@@ -281,10 +285,12 @@ Report security problems as described in [`SECURITY.md`](../SECURITY.md), not in
 
 ### Startup stopped
 
-The container exits and the log ends with a `SettingsError` line that names the problem. For example:
+The container exits and the log ends with a line that names the problem. For example:
 
 - `SettingsError: DATABASE_URL must be a SQLite URL, such as sqlite:////data/app.sqlite3`, or `SettingsError: DATABASE_URL must use SQLite for this application phase` when the keys are already set: Kebivo stores data only in SQLite. Remove `DATABASE_URL` from your `docker run -e` options or env file, or set it to `sqlite:////data/app.sqlite3`. Compose already sets it.
 - `SettingsError: Cannot write secrets file as uid 10001; set SECRET_KEY and ENCRYPTION_KEY`: the one-command image could not create `/data/kebivo-secrets.env` because the mounted directory is not writable by the container user. Make it writable (for a bind mount, `sudo chown 10001:10001 <host directory>`), or pass both keys with `--env-file`.
+- `Another Kebivo is already using /data; stop it first`: another container still runs on the same volume. Stop it (`docker ps` shows it), then start again.
+- `Pre-upgrade backup failed, not migrating: …`: the container could not save the automatic copy before an upgrade, usually because the volume is full. Free space on the volume and start again; nothing was migrated.
 
 ## Intake capacity check
 
