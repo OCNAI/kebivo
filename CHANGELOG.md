@@ -1,14 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 — 2026-11-28
 
-- Upgrades can no longer leave a half-migrated database. All pending migrations now run in one transaction, so a failed migration leaves the database at its previous version and the previous image still starts on it. Before migrating, the container saves a checked copy to `/data/pre-upgrade-<old version>.sqlite3`, keeps only the latest one, and does not migrate if the copy fails. The copy does not replace your own backups. See [upgrades](docs/self-hosting.md#upgrades).
+Safer upgrades: migrations are all or nothing, the container saves a copy before it migrates, and only one Kebivo can use a data volume at a time.
+
+- Upgrades can no longer leave a half-migrated database. All pending migrations now run in one transaction, so a failed migration leaves the database at its previous version and the previous image still starts on it. Before migrating, the container saves a checked copy to `/data/pre-upgrade-<old revision>.sqlite3`, keeps only the latest one, and does not migrate if the copy fails. The copy does not replace your own backups. See [upgrades](docs/self-hosting.md#upgrades).
 - Only one Kebivo can use a data volume at a time. A second container on the same volume exits with `Another Kebivo is already using /data; stop it first` instead of taking over the first one's deliveries.
 - Database, WAL, backup and lock files in `/data` are now readable only by the container user (mode 0600). Existing database files are changed to 0600 on start. If something on the host reads the volume as another non-root user, give it access again.
 - Startup prints each migration log line once instead of twice.
-- `DATABASE_PATH` set on its own now also sets the database the app and migrations use. Before, they kept using `DATABASE_URL`, so the app could run on an unmigrated file. If both are set and name different files, startup stops with `DATABASE_PATH and DATABASE_URL name different files; set only DATABASE_URL`.
+- The app, migrations, backup and lock now always use the same database file. Before, setting `DATABASE_PATH` could leave the app on a file the migrations never touched. If `DATABASE_PATH` and `DATABASE_URL` name different files, startup stops with `DATABASE_PATH and DATABASE_URL name different files; set only DATABASE_URL`. The image sets `DATABASE_URL`, so to move the database in the container, change `DATABASE_URL`. `DATABASE_PATH` on its own only applies where `DATABASE_URL` is unset.
 - Each release image is started on `linux/amd64` and `linux/arm64` before it is published as `latest`, and `latest` only moves to the highest release. docs.kebivo.com serves `/.well-known/security.txt`.
 - Scope errors now include `details.required_scope` and tell you to create a new token with that scope; the example MCP client gives one-line token and connection errors without a traceback.
+- On the group page, a disabled **Select all for split** button now says why: at least one occurrence has to stay in the group.
+- The image now installs Debian security updates when it is built, so it no longer waits for the base image to pick them up. This fixes CVE-2026-124851 in `libzstd1`.
+
+### Upgrade
+
+Back up first (see [Backup and restore](docs/self-hosting.md#backup-and-restore)). 0.5.1 adds no migration: the latest is still `0019`, so a 0.5.0 image still starts on the database if you roll back, and an upgrade from 0.5.0 makes no pre-upgrade copy. From 0.4.0 or older, the first start saves `/data/pre-upgrade-<old revision>.sqlite3` before it migrates. Stop the old container before you start the new one; a second container on the same volume exits. Files in `/data` become mode 0600 on start. Pull `ghcr.io/ocnai/kebivo:0.5.1` (or `git pull` and rebuild) and check `/health/ready`.
 
 ## 0.5.0 — 2026-11-27
 
