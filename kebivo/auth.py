@@ -25,11 +25,13 @@ LOGIN_WINDOW = timedelta(minutes=15)
 LOGIN_LIMIT = 5
 # One source address trying many emails is capped more loosely.
 LOGIN_SOURCE_LIMIT = 20
-# Failures for one email from all sources only add a capped, escalating delay,
-# so nobody who only knows the email can hold the administrator out. One
-# source alone never reaches it.
+# Failures for one email from all sources only add a capped, escalating delay.
+# One source alone never reaches it, and a source that signed in to that email
+# within LOGIN_KNOWN_SOURCE skips it, so attackers with many addresses can't
+# hold the administrator out of their usual address.
 LOGIN_EMAIL_FREE = 2 * LOGIN_LIMIT
 LOGIN_EMAIL_MAX_DELAY = 60
+LOGIN_KNOWN_SOURCE = timedelta(days=30)
 PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 _DEVELOPMENT_KEY = secrets.token_bytes(32)
 _DUMMY_PASSWORD_HASH = PASSWORD_HASHER.hash(secrets.token_urlsafe(32))
@@ -154,7 +156,21 @@ def _login_wait(db: Session, identity_key: str, source_key: str) -> int:
         window_wait(recent(LoginAttempt.ip_address == source_key), LOGIN_SOURCE_LIMIT),
     ]
     by_email = recent(LoginAttempt.email == identity_key)
-    if len(by_email) >= LOGIN_EMAIL_FREE:
+    known_source = (
+        len(by_email) >= LOGIN_EMAIL_FREE
+        and db.scalar(
+            select(LoginAttempt.id)
+            .where(
+                LoginAttempt.succeeded.is_(True),
+                LoginAttempt.email == identity_key,
+                LoginAttempt.ip_address == source_key,
+                LoginAttempt.attempted_at >= now - LOGIN_KNOWN_SOURCE,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+    if len(by_email) >= LOGIN_EMAIL_FREE and not known_source:
         delay = min(2 ** min(len(by_email) - LOGIN_EMAIL_FREE, 6), LOGIN_EMAIL_MAX_DELAY)
         waits.append((by_email[-1] + timedelta(seconds=delay) - now).total_seconds())
     longest = max(waits)
@@ -314,21 +330,37 @@ def install_auth_routes(app: Any) -> None:
         settings = request.app.state.settings
         identity_key = _private_digest(settings, "email:" + email)
         source_key = _private_digest(settings, "ip:" + _peer_ip(request))[:40]
-        # Check and record the attempt in one write transaction, before the slow
-        # password check, so parallel requests cannot all pass the throttle.
-        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
-        wait = _login_wait(db, identity_key, source_key)
-        if wait:
-            db.rollback()
-            raise HTTPException(
+
+        def throttled(wait: int) -> HTTPException:
+            return HTTPException(
                 status_code=429,
                 detail=f"Too many login attempts. Try again in {wait} seconds.",
                 headers={"Retry-After": str(wait)},
             )
 
+        # Reject throttled requests with a plain read, so a flood never takes the
+        # write lock. Then check again and record the attempt in one write
+        # transaction, before the slow password check, so parallel requests
+        # cannot all pass the throttle.
+        wait = _login_wait(db, identity_key, source_key)
+        db.rollback()
+        if wait:
+            raise throttled(wait)
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        wait = _login_wait(db, identity_key, source_key)
+        if wait:
+            db.rollback()
+            raise throttled(wait)
+
         attempt_count = db.scalar(select(func.count()).select_from(LoginAttempt)) or 0
         if attempt_count >= 20_000:
-            oldest_ids = select(LoginAttempt.id).order_by(LoginAttempt.attempted_at).limit(1_000)
+            # Keep sign-ins: they mark known sources and need the right password.
+            oldest_ids = (
+                select(LoginAttempt.id)
+                .where(LoginAttempt.succeeded.is_(False))
+                .order_by(LoginAttempt.attempted_at)
+                .limit(1_000)
+            )
             db.execute(delete(LoginAttempt).where(LoginAttempt.id.in_(oldest_ids)))
         stale_ids = (
             select(LoginAttempt.id)

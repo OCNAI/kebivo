@@ -139,7 +139,7 @@ Failed logins are throttled over a 15-minute window. Throttled requests return `
 
 - Five failures for one e-mail from one IP address lock that e-mail on that address only. The same account can still sign in from another address.
 - Twenty failures from one IP address, for any e-mails, lock that address.
-- After ten failures for one e-mail from all addresses, each further attempt waits after the last failure: 1 second, doubling up to 60 seconds. This slows guessing from many addresses without locking the administrator out.
+- After ten failures for one e-mail from all addresses, each further attempt waits after the last failure: 1 second, doubling up to 60 seconds. This slows guessing from many addresses to about one attempt a minute. An address that signed in to that e-mail in the last 30 days skips this delay, but not the two locks above. So an attacker with many addresses can still make the administrator wait at a new address, but not at the one they usually sign in from.
 
 Behind a proxy, set `TRUSTED_PROXY_IPS`, or every client shares the proxy's address and its limits.
 

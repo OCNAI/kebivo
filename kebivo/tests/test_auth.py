@@ -197,6 +197,40 @@ def test_guessing_one_email_from_many_addresses_is_slowed(tmp_path: Path) -> Non
     app.state.engine.dispose()
 
 
+def test_throttled_login_does_not_take_the_write_lock(tmp_path: Path) -> None:
+    from sqlalchemy import event
+
+    _, app = make_client(tmp_path)
+    for _ in range(5):
+        assert login_from(app, "192.0.2.10", "admin@example.test", "wrong").status_code == 401
+    statements: list[str] = []
+
+    def record(_conn: Any, _cursor: Any, statement: str, *_args: Any) -> None:
+        statements.append(statement)
+
+    event.listen(app.state.engine, "before_cursor_execute", record)
+    limited = login_from(app, "192.0.2.10", "admin@example.test", "long-test-password")
+    event.remove(app.state.engine, "before_cursor_execute", record)
+    assert limited.status_code == 429
+    assert statements and not any("BEGIN IMMEDIATE" in sql for sql in statements)
+    app.state.engine.dispose()
+
+
+def test_known_address_skips_the_many_address_delay(tmp_path: Path) -> None:
+    _, app = make_client(tmp_path)
+    home = "192.0.2.50"
+    assert login_from(app, home, "admin@example.test", "long-test-password").status_code == 200
+    for index in range(30):
+        login_from(app, f"198.51.100.{index}", "admin@example.test", "wrong")
+    stranger = login_from(app, "198.51.100.200", "admin@example.test", "long-test-password")
+    assert stranger.status_code == 429
+    assert login_from(app, home, "admin@example.test", "long-test-password").status_code == 200
+    for _ in range(5):
+        assert login_from(app, home, "admin@example.test", "wrong").status_code == 401
+    assert login_from(app, home, "admin@example.test", "long-test-password").status_code == 429
+    app.state.engine.dispose()
+
+
 def test_wrong_origin_without_allowed_origins_points_to_https_or_a_tunnel(
     tmp_path: Path,
 ) -> None:
