@@ -8,6 +8,8 @@ export function useFirstRun() { return React.useContext(FirstRunContext); }
 
 export function FirstRunNotice() { const notice = useFirstRun()?.notice; return notice ? <p role="status" className="sample-announcement" aria-live="polite">{notice}</p> : null; }
 
+const SAMPLE_CHECK_TIMEOUT_MS = 8000;
+
 export function FirstRunProvider({ children, navigate }: { children: React.ReactNode; navigate: (url: string) => void }) {
   const [sample, setSample] = React.useState<SampleStatus | null>(null);
   const [sampleError, setSampleError] = React.useState(false);
@@ -15,9 +17,10 @@ export function FirstRunProvider({ children, navigate }: { children: React.React
   const [sampleChecked, setSampleChecked] = React.useState(false);
   const [notice, setNotice] = React.useState<React.ReactNode>('');
   const refreshSample = React.useCallback(async () => {
-    try { const value = await apiRequest<SampleStatus>('admin/sample-data'); setSample(value); setSampleError(false); return value; }
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), SAMPLE_CHECK_TIMEOUT_MS);
+    try { const value = await apiRequest<SampleStatus>('admin/sample-data', { signal: controller.signal }); setSample(value); setSampleError(false); return value; }
     catch { setSample(null); setSampleError(true); return null; }
-    finally { setSampleChecked(true); }
+    finally { clearTimeout(timer); setSampleChecked(true); }
   }, []);
   React.useEffect(() => { const refresh = () => void refreshSample(); void Promise.resolve().then(refreshSample); addEventListener('sample-data-refresh', refresh); return () => removeEventListener('sample-data-refresh', refresh); }, [refreshSample]);
   React.useEffect(() => { const listener = (event: Event) => { const detail = (event as CustomEvent<string>).detail; setNotice(detail === SETUP_SAMPLE_NOTICE || detail === SETUP_PLAIN_NOTICE ? <SetupNotice withSample={detail === SETUP_SAMPLE_NOTICE} navigate={url => { setNotice(''); navigate(url); }} /> : detail); }; addEventListener('first-run-notice', listener); return () => removeEventListener('first-run-notice', listener); }, [navigate]);
