@@ -126,34 +126,29 @@ INDEXES = {
 
 def _rebuild(digest: bool) -> None:
     bind = op.get_bind()
-    # SQLite requires FK toggles outside its transaction; keep Alembic's transaction open.
-    bind.connection.driver_connection.commit()
-    bind.exec_driver_sql("PRAGMA foreign_keys=OFF")
-    try:
-        for table, ddl, columns in (
-            ("destinations", _destinations(digest), DESTINATION_COLUMNS),
-            ("routing_matches", _matches(digest), MATCH_COLUMNS),
-            ("deliveries", _deliveries(digest), DELIVERY_COLUMNS),
-        ):
-            # A failed earlier run can leave this behind: CREATE commits on its own.
-            bind.exec_driver_sql(f"DROP TABLE IF EXISTS _new_{table}")
-            # Renaming the old table would rewrite other tables' foreign keys to it.
-            bind.exec_driver_sql(ddl.replace(f"TABLE {table} (", f"TABLE _new_{table} (", 1))
-            bind.exec_driver_sql(
-                f"INSERT INTO _new_{table} ({columns}) SELECT {columns} FROM {table}"
-            )
-            bind.exec_driver_sql(f"DROP TABLE {table}")
-            bind.exec_driver_sql(f"ALTER TABLE _new_{table} RENAME TO {table}")
-            for statement in INDEXES[table]:
-                bind.exec_driver_sql(statement)
-        broken = bind.exec_driver_sql("PRAGMA foreign_key_check").first()
-        if broken:
-            raise RuntimeError(
-                f"Weekly digest migration found a {broken[0]} row (rowid {broken[1]}) "
-                f"that points to a missing {broken[2]} row; fix or delete it, then retry"
-            )
-    finally:
-        bind.exec_driver_sql("PRAGMA foreign_keys=ON")
+    # migrations/env.py runs every migration in one transaction with foreign keys off.
+    for table, ddl, columns in (
+        ("destinations", _destinations(digest), DESTINATION_COLUMNS),
+        ("routing_matches", _matches(digest), MATCH_COLUMNS),
+        ("deliveries", _deliveries(digest), DELIVERY_COLUMNS),
+    ):
+        # Releases before 0.5.1 could leave this behind after a failed run.
+        bind.exec_driver_sql(f"DROP TABLE IF EXISTS _new_{table}")
+        # Renaming the old table would rewrite other tables' foreign keys to it.
+        bind.exec_driver_sql(ddl.replace(f"TABLE {table} (", f"TABLE _new_{table} (", 1))
+        bind.exec_driver_sql(
+            f"INSERT INTO _new_{table} ({columns}) SELECT {columns} FROM {table}"
+        )
+        bind.exec_driver_sql(f"DROP TABLE {table}")
+        bind.exec_driver_sql(f"ALTER TABLE _new_{table} RENAME TO {table}")
+        for statement in INDEXES[table]:
+            bind.exec_driver_sql(statement)
+    broken = bind.exec_driver_sql("PRAGMA foreign_key_check").first()
+    if broken:
+        raise RuntimeError(
+            f"Weekly digest migration found a {broken[0]} row (rowid {broken[1]}) "
+            f"that points to a missing {broken[2]} row; fix or delete it, then retry"
+        )
 
 
 def upgrade() -> None:
