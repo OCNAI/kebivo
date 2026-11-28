@@ -1,3 +1,7 @@
+# HSTS for docs.kebivo.com only: no includeSubDomains or preload.
+/*
+  Strict-Transport-Security: max-age=31536000
+
 https://:project.pages.dev/*
   X-Robots-Tag: noindex
 
