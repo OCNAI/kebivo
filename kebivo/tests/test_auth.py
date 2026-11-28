@@ -160,7 +160,8 @@ def test_one_address_trying_many_emails_is_capped(tmp_path: Path) -> None:
         assert response.status_code == 401
     limited = login_from(app, "192.0.2.10", "admin@example.test", "long-test-password")
     assert limited.status_code == 429 and "retry-after" in limited.headers
-    assert login_from(app, "192.0.2.20", "admin@example.test", "long-test-password").status_code == 200
+    elsewhere = login_from(app, "192.0.2.20", "admin@example.test", "long-test-password")
+    assert elsewhere.status_code == 200
     app.state.engine.dispose()
 
 
@@ -190,9 +191,7 @@ def test_guessing_one_email_from_many_addresses_is_slowed(tmp_path: Path) -> Non
     assert 50 <= int(capped.headers["retry-after"]) <= 60
 
     with app.state.session_factory.begin() as db:
-        db.execute(
-            update(LoginAttempt).values(attempted_at=now - timedelta(seconds=61))
-        )
+        db.execute(update(LoginAttempt).values(attempted_at=now - timedelta(seconds=61)))
     allowed = login_from(app, "198.51.100.201", "admin@example.test", "long-test-password")
     assert allowed.status_code == 200
     app.state.engine.dispose()
@@ -286,4 +285,25 @@ def test_forwarded_ip_is_used_only_from_configured_proxy(tmp_path: Path) -> None
     )
     assert _peer_ip(trusted) == "203.0.113.9"
     assert _peer_ip(untrusted) == "10.0.0.6"
+    app.state.engine.dispose()
+
+
+def test_parallel_wrong_logins_cannot_pass_the_lock_together(tmp_path: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    _, app = make_client(tmp_path)
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        codes = list(
+            pool.map(
+                lambda _: login_from(app, "192.0.2.10", "admin@example.test", "wrong").status_code,
+                range(12),
+            )
+        )
+    assert codes.count(401) == 5 and codes.count(429) == 7
+    assert (
+        login_from(app, "192.0.2.20", "admin@example.test", "long-test-password").status_code == 200
+    )
+    with app.state.session_factory() as db:
+        outcomes = db.scalars(select(LoginAttempt.succeeded)).all()
+        assert sorted(outcomes) == [False] * 5 + [True]
     app.state.engine.dispose()

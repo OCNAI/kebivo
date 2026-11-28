@@ -23,9 +23,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from sqlalchemy import select
 
+import kebivo.destinations.smtp as smtp_module
 from kebivo.destinations.payload import payload_v1
 from kebivo.destinations.payload import test_payload as make_test_payload
-import kebivo.destinations.smtp as smtp_module
 from kebivo.destinations.smtp import SmtpAdapter
 from kebivo.destinations.validation import ConfigError, validate_config
 from kebivo.models import (
@@ -527,7 +527,6 @@ def test_smtp_destination_accepts_private_network_option(tmp_path: Path) -> None
 
 
 def test_stalled_resolver_fails_within_the_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-
     release = threading.Event()
 
     def stalled(*args: Any, **kwargs: Any) -> Any:

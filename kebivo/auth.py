@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import secrets
 import time
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
@@ -108,7 +108,7 @@ def wrong_origin_error(request: Request) -> HTTPException:
         detail=(
             f"Page origin is not in ALLOWED_ORIGINS. Configured origins: {', '.join(configured)}"
             if configured
-            else "Without ALLOWED_ORIGINS, Kebivo accepts sign-in only from localhost. "
+            else "Without ALLOWED_ORIGINS, Kebivo accepts the admin console only from localhost. "
             + REMOTE_ACCESS_HINT
         ),
     )
@@ -136,11 +136,11 @@ def _login_wait(db: Session, identity_key: str, source_key: str) -> int:
         LoginAttempt.succeeded.is_(False), LoginAttempt.attempted_at >= now - LOGIN_WINDOW
     )
 
-    def recent(*conditions: Any) -> list[Any]:
+    def recent(*conditions: Any) -> list[datetime]:
         rows = db.scalars(failed.where(*conditions).order_by(LoginAttempt.attempted_at)).all()
         return [row if row.tzinfo else row.replace(tzinfo=UTC) for row in rows]
 
-    def window_wait(times: list[Any], limit: int) -> float:
+    def window_wait(times: list[datetime], limit: int) -> float:
         # The window reopens once enough of the oldest failures have aged out.
         if len(times) < limit:
             return 0
@@ -155,7 +155,7 @@ def _login_wait(db: Session, identity_key: str, source_key: str) -> int:
     ]
     by_email = recent(LoginAttempt.email == identity_key)
     if len(by_email) >= LOGIN_EMAIL_FREE:
-        delay = min(2 ** (len(by_email) - LOGIN_EMAIL_FREE), LOGIN_EMAIL_MAX_DELAY)
+        delay = min(2 ** min(len(by_email) - LOGIN_EMAIL_FREE, 6), LOGIN_EMAIL_MAX_DELAY)
         waits.append((by_email[-1] + timedelta(seconds=delay) - now).total_seconds())
     longest = max(waits)
     return int(longest) + 1 if longest > 0 else 0
@@ -314,8 +314,12 @@ def install_auth_routes(app: Any) -> None:
         settings = request.app.state.settings
         identity_key = _private_digest(settings, "email:" + email)
         source_key = _private_digest(settings, "ip:" + _peer_ip(request))[:40]
+        # Check and record the attempt in one write transaction, before the slow
+        # password check, so parallel requests cannot all pass the throttle.
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
         wait = _login_wait(db, identity_key, source_key)
         if wait:
+            db.rollback()
             raise HTTPException(
                 status_code=429,
                 detail=f"Too many login attempts. Try again in {wait} seconds.",
@@ -333,25 +337,22 @@ def install_auth_routes(app: Any) -> None:
             .limit(500)
         )
         db.execute(delete(LoginAttempt).where(LoginAttempt.id.in_(stale_ids)))
+        attempt = LoginAttempt(
+            email=identity_key, ip_address=source_key, succeeded=False, attempted_at=now_utc()
+        )
+        db.add(attempt)
+        db.commit()
 
         admin = db.scalar(select(AdminUser).where(AdminUser.email == email))
         verified = verify_password(
             admin.password_hash if admin is not None else _DUMMY_PASSWORD_HASH, body.password
         )
-        valid = bool(admin and admin.is_active and verified)
-        db.add(
-            LoginAttempt(
-                email=identity_key,
-                ip_address=source_key,
-                succeeded=valid,
-                attempted_at=now_utc(),
-            )
-        )
-        if not valid:
+        if not (admin and admin.is_active and verified):
             _audit(db, "admin.login_failed")
             db.commit()
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
+        attempt.succeeded = True
         assert admin is not None
         return issue_session(db, admin, request)
 
