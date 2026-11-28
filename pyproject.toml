@@ -6,31 +6,31 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "alembic==1.16.1",
+  "alembic==1.20.1",
   "argon2-cffi==23.1.0",
   "cryptography==50.0.2",
-  "fastapi==0.143.3",
+  "fastapi==0.165.0",
   "httpx==0.28.1",
   "mcp==2.3.0",
   # Floor for GHSA-mf5v-w3w3-f6cg; mcp and fastapi pull it in unpinned.
   "opentelemetry-api>=1.45.2",
-  "sqlalchemy==2.0.41",
-  "starlette==1.8.0",
-  "uvicorn[standard]==0.34.2",
+  "sqlalchemy==2.1.9",
+  "starlette==1.10.0",
+  "uvicorn[standard]==0.54.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "aiosmtpd==1.4.6",
-  "langchain-core==1.7.0",
+  "langchain-core==1.8.4",
   "kebivo-client",
-  "mypy==1.15.0",
-  "pytest==8.3.5",
-  "ruff==0.11.8",
+  "mypy==1.20.2",
+  "pytest==8.4.2",
+  "ruff==0.17.6",
 ]
 
 [build-system]
-requires = ["hatchling==1.27.0"]
+requires = ["hatchling==1.33.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
