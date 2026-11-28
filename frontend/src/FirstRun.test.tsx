@@ -122,6 +122,7 @@ describe('sample banner removal', () => {
     expect(host.querySelector('header')!.compareDocumentPosition(host.querySelector('[role=status]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+
   it('waits for the sample check so the banner does not push the page down', async () => {
     let answer: (response: Response) => void = () => {};
     globalThis.fetch = vi.fn(() => new Promise<Response>(resolve => { answer = resolve; })) as typeof fetch;
@@ -131,6 +132,24 @@ describe('sample banner removal', () => {
     expect(host.querySelector('.sample-banner')).not.toBeNull();
     expect(host.querySelector('main')?.textContent).toBe('Page');
     expect(document.activeElement).toBe(host.querySelector('main h1'));
+  });
+
+  it('shows the page after the timeout when the sample-data check never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      globalThis.fetch = vi.fn((input, init) => {
+        const path = String(input);
+        if (path.endsWith('/admin/sample-data')) return new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+        if (path.endsWith('/admin/groups/summary')) return Promise.resolve(new Response(JSON.stringify({ total_events: 0 })));
+        return Promise.resolve(new Response('{}'));
+      }) as typeof fetch;
+      await act(async () => { root.render(<FirstRunProvider navigate={() => {}}><main><h1>Dashboard</h1><FirstRunEmpty dashboard navigate={() => {}} /></main></FirstRunProvider>); await vi.advanceTimersByTimeAsync(100); });
+      expect(host.textContent).not.toContain('Dashboard');
+      await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+      expect(host.textContent).toContain('Dashboard');
+      expect(host.textContent).not.toContain('Loading sample data options…');
+      expect([...host.querySelectorAll('button')].some(button => button.textContent === 'Load sample data')).toBe(true);
+    } finally { vi.useRealTimers(); }
   });
 
   it('keeps the sample action available when sample status cannot be fetched', async () => {
