@@ -2,12 +2,14 @@ import os
 import shutil
 import sqlite3
 import stat
+import sys
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
 
+from kebivo.settings import Settings, SettingsError
 from kebivo.startup import (
     StartupError,
     acquire_instance_lock,
@@ -132,14 +134,52 @@ def test_failed_backup_stops_before_migrating(
 ) -> None:
     database, config = migrations
     command.upgrade(config, BEFORE_HEAD)
-    # The backup subprocess reads this path and finds no database there.
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'missing.sqlite3'}")
+    # The backup subprocess runs sys.executable; make it exit 1.
+    monkeypatch.setattr(sys, "executable", shutil.which("false"))
 
     with pytest.raises(StartupError, match="Pre-upgrade backup failed, not migrating"):
         prepare_database(database, config)
 
     assert current_revision(database) == BEFORE_HEAD
     assert sorted(path.name for path in database.parent.iterdir()) == ["app.sqlite3"]
+
+
+def test_database_path_override_is_the_file_backed_up_and_migrated(
+    migrations: tuple[Path, Config], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    database, config = migrations
+    command.upgrade(config, BEFORE_HEAD)
+    other = tmp_path / "other.sqlite3"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{other}")
+    monkeypatch.setenv("DATABASE_PATH", str(database))
+    with pytest.raises(SettingsError, match="name different files"):
+        Settings.from_env()
+
+    # DATABASE_PATH alone: every part of startup and the app uses that file.
+    monkeypatch.delenv("DATABASE_URL")
+    settings = Settings.from_env()
+    assert settings.database_url == f"sqlite:///{database}"
+    # Even a caller that passes a different DATABASE_URL gets the checked file migrated.
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{other}")
+    backup = prepare_database(Path(settings.database_path), config)
+
+    assert current_revision(database) == HEAD
+    with sqlite3.connect(database) as db:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(destinations)")}
+    assert "digest_weekday" in columns
+    assert backup == database.with_name(f"pre-upgrade-{BEFORE_HEAD}.sqlite3")
+    assert current_revision(backup) == BEFORE_HEAD
+    assert not other.exists()
+
+
+def test_matching_database_settings_are_accepted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'app.sqlite3'}?timeout=5")
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "." / "app.sqlite3"))
+    assert Settings.from_env().database_path == str(tmp_path / "." / "app.sqlite3")
+    monkeypatch.delenv("DATABASE_PATH")
+    Settings.from_env()
 
 
 def test_second_lock_on_the_same_directory_fails(tmp_path: Path) -> None:

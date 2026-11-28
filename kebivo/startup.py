@@ -17,7 +17,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
-from kebivo.settings import Settings
+from kebivo.settings import Settings, SettingsError
 
 LOCK_NAME = ".kebivo.lock"
 BACKUP_PREFIX = "pre-upgrade-"
@@ -71,6 +71,19 @@ def current_revision(database: Path) -> str | None:
     return None if row is None else str(row[0])
 
 
+def _pinned_environment(database: Path) -> dict[str, str]:
+    """The environment with both database settings naming ``database``."""
+    return {**os.environ, "DATABASE_URL": f"sqlite:///{database}", "DATABASE_PATH": str(database)}
+
+
+def _fsync_directory(directory: Path) -> None:
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def backup_before_upgrade(database: Path, revision: str) -> Path:
     """Write a checked backup next to the database and remove older pre-upgrade backups."""
     target = database.with_name(f"{BACKUP_PREFIX}{revision}{BACKUP_SUFFIX}")
@@ -80,6 +93,7 @@ def backup_before_upgrade(database: Path, revision: str) -> Path:
         with os.fdopen(descriptor, "wb") as output:
             result = subprocess.run(
                 [sys.executable, "-m", "scripts.sqlite_maintenance", "backup"],
+                env=_pinned_environment(database),
                 stdout=output,
                 stderr=subprocess.PIPE,
                 text=False,
@@ -91,11 +105,13 @@ def backup_before_upgrade(database: Path, revision: str) -> Path:
             detail = result.stderr.decode(errors="replace").strip() or f"exit {result.returncode}"
             raise StartupError(f"Pre-upgrade backup failed, not migrating: {detail}")
         os.replace(temporary, target)
+        _fsync_directory(database.parent)
     finally:
         temporary.unlink(missing_ok=True)
     for old in database.parent.glob(f"{BACKUP_PREFIX}*{BACKUP_SUFFIX}"):
         if old != target:
             old.unlink(missing_ok=True)
+    _fsync_directory(database.parent)
     return target
 
 
@@ -105,6 +121,8 @@ def prepare_database(database: Path, config: Config) -> Path | None:
     scripts = ScriptDirectory.from_config(config)
     head = scripts.get_current_head()
     known = {script.revision for script in scripts.walk_revisions()}
+    # Migrate the file that was checked and backed up, whatever DATABASE_URL says.
+    config.attributes["database_url"] = f"sqlite:///{database}"
     backup = None
     # A revision this image does not know is from a newer release: Alembic refuses it
     # below, and backing it up would delete the copy taken before that upgrade.
@@ -118,12 +136,12 @@ def prepare_database(database: Path, config: Config) -> Path | None:
 def main(argv: list[str]) -> None:
     if not argv:
         raise SystemExit("Usage: python -m kebivo.startup <command> [args...]")
-    database = Path(Settings.from_env().database_path).resolve()
     try:
+        database = Path(Settings.from_env().database_path).resolve()
         lock = acquire_instance_lock(database.parent)
         restrict_database_files(database)
         prepare_database(database, Config("alembic.ini"))
-    except StartupError as exc:
+    except (StartupError, SettingsError) as exc:
         raise SystemExit(str(exc)) from None
     os.set_inheritable(lock, True)
     os.execvp(argv[0], argv)

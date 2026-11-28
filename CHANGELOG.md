@@ -6,6 +6,7 @@
 - Only one Kebivo can use a data volume at a time. A second container on the same volume exits with `Another Kebivo is already using /data; stop it first` instead of taking over the first one's deliveries.
 - Database, WAL, backup and lock files in `/data` are now readable only by the container user (mode 0600). Existing database files are changed to 0600 on start. If something on the host reads the volume as another non-root user, give it access again.
 - Startup prints each migration log line once instead of twice.
+- `DATABASE_PATH` set on its own now also sets the database the app and migrations use. Before, they kept using `DATABASE_URL`, so the app could run on an unmigrated file. If both are set and name different files, startup stops with `DATABASE_PATH and DATABASE_URL name different files; set only DATABASE_URL`.
 - Scope errors now include `details.required_scope` and tell you to create a new token with that scope; the example MCP client gives one-line token and connection errors without a traceback.
 
 ## 0.5.0 — 2026-11-27

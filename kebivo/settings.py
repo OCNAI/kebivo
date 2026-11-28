@@ -17,6 +17,13 @@ _DEVELOPMENT_ENCRYPTION_KEY = secrets.token_hex(32)
 PROJECT_CONFIG = Path(__file__).resolve().parents[1] / "config" / "project.json"
 
 
+def _same_database(database_url: str, database_path: str) -> bool:
+    url_path = database_url.removeprefix("sqlite:///").partition("?")[0]
+    if ":memory:" in (url_path, database_path):
+        return url_path == database_path
+    return Path(url_path).resolve() == Path(database_path).resolve()
+
+
 class SettingsError(ValueError):
     """Raised when application configuration is missing or invalid."""
 
@@ -126,6 +133,15 @@ class Settings:
             raise SettingsError("DATABASE_PATH must be non-empty")
         if environment == "production" and database_path == ":memory:":
             raise SettingsError("DATABASE_PATH must be persistent in production")
+        # Startup, migrations, backups and the app must all use one file.
+        if "DATABASE_URL" not in values:
+            database_url = (
+                "sqlite://" if database_path == ":memory:" else f"sqlite:///{database_path}"
+            )
+        elif "DATABASE_PATH" in values and not _same_database(database_url, database_path):
+            raise SettingsError(
+                "DATABASE_PATH and DATABASE_URL name different files; set only DATABASE_URL"
+            )
 
         origins_raw = values.get("ALLOWED_ORIGINS", "")
         allowed_origins = tuple(
