@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, exists, func, or_, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, aliased, sessionmaker
 
 from kebivo.admin_group_membership import (
     OrphanFeedbackError,
@@ -74,6 +74,7 @@ def _base_counts() -> dict[str, int]:
             "skipped_busy",
             "skipped_error",
             "delivery_attempts",
+            "digest_deliveries",
             "audit_events",
             "admin_sessions",
             "idempotency_records",
@@ -96,6 +97,23 @@ def due(db: Session, now: datetime) -> bool:
     if latest.status == "completed" and latest.finished_at is not None:
         return latest.finished_at.replace(tzinfo=UTC) < now - RUN_INTERVAL
     return True
+
+
+def _expired_digest_condition(cutoff: datetime) -> Any:
+    latest = aliased(Delivery)
+    return (
+        Delivery.event_id.is_(None)
+        & Delivery.status.in_(("delivered", "failed"))
+        & (Delivery.created_at < cutoff)
+        & (
+            Delivery.id
+            != select(latest.id)
+            .where(latest.event_id.is_(None), latest.destination_id == Delivery.destination_id)
+            .order_by(latest.digest_period_end.desc(), latest.id.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+    )
 
 
 def preview(
@@ -144,6 +162,14 @@ def preview(
                         func.coalesce(DeliveryAttempt.completed_at, DeliveryAttempt.started_at)
                         < cutoff,
                     )
+                )
+                or 0
+            )
+            counts["digest_deliveries"] = (
+                db.scalar(
+                    select(func.count())
+                    .select_from(Delivery)
+                    .where(_expired_digest_condition(cutoff))
                 )
                 or 0
             )
@@ -283,6 +309,9 @@ def run(
                 )
             )
             counts["delivery_attempts"] = _delete_rows(factory, DeliveryAttempt, condition, stop)
+            counts["digest_deliveries"] = _delete_rows(
+                factory, Delivery, _expired_digest_condition(cutoff), stop
+            )
         if (cutoff := limits["audit_events"]) is not None:
             counts["audit_events"] = _delete_rows(
                 factory, AuditEvent, AuditEvent.created_at < cutoff, stop

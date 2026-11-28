@@ -5,7 +5,7 @@ Retention runs as a separate task in the embedded worker. Deliveries, routing an
 | Environment variable | Default | Removed data |
 | --- | ---: | --- |
 | `FEEDBACK_RETENTION_DAYS` | 180 | Feedback events created before the cutoff, including associated deliveries and search rows |
-| `DELIVERY_LOG_RETENTION_DAYS` | 30 | Attempts for delivered or failed deliveries, using completion time or start time |
+| `DELIVERY_LOG_RETENTION_DAYS` | 30 | Attempts for delivered or failed deliveries, using completion time or start time; old delivered or failed weekly digest rows and their attempts, keeping the latest digest row per destination |
 | `AUDIT_RETENTION_DAYS` | 90 | Audit events created before the cutoff |
 
 Values are whole days from 1 to 36500. `0` disables automatic deletion for that class. The cutoff is strict: a row exactly at the cutoff stays. Settings are read only in the UI and must be changed through the environment.
