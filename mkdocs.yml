@@ -32,6 +32,7 @@ exclude_docs: |
   hooks/
   overrides/
   assets/social-preview.html
+  !.well-known/
 markdown_extensions:
   - admonition
   - tables
