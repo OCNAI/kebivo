@@ -4,6 +4,8 @@ import asyncio
 import json
 import socket
 import ssl
+import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
@@ -21,6 +23,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from sqlalchemy import select
 
+import kebivo.destinations.smtp as smtp_module
 from kebivo.destinations.payload import payload_v1
 from kebivo.destinations.payload import test_payload as make_test_payload
 from kebivo.destinations.smtp import SmtpAdapter
@@ -521,3 +524,21 @@ def test_smtp_destination_accepts_private_network_option(tmp_path: Path) -> None
         json={"allow_private_network": False},
     )
     assert turned_off.status_code == 422
+
+
+def test_stalled_resolver_fails_within_the_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    release = threading.Event()
+
+    def stalled(*args: Any, **kwargs: Any) -> Any:
+        release.wait(10)
+        raise socket.gaierror("stalled")
+
+    monkeypatch.setattr(socket, "getaddrinfo", stalled)
+    monkeypatch.setattr(smtp_module, "RESOLVE_TIMEOUT", 0.2)
+    started = time.monotonic()
+    try:
+        result = send(payload(), config(587, "none"))
+    finally:
+        release.set()
+    assert time.monotonic() - started < 2
+    assert (result.outcome, result.category) == ("retryable", "smtp_transient")

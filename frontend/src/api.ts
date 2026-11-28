@@ -1,6 +1,6 @@
 /** Same-origin API boundary. CSRF material is intentionally held only in memory. */
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string, public readonly fields: { field: string; message: string }[] = [], public readonly code = '') {
+  constructor(public readonly status: number, message: string, public readonly fields: { field: string; message: string }[] = [], public readonly code = '', public readonly retryAfterSeconds: number | null = null) {
     super(message);
     this.name = 'ApiError';
   }
@@ -36,7 +36,8 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
       fields = (body.error?.details?.fields ?? []).map((field) => ({ field: field.field ?? '', message: field.message ?? 'Invalid value' }));
       code = body.error?.code ?? '';
     } catch { /* Keep the useful status message when the response is not JSON. */ }
-    throw new ApiError(response.status, message, fields, code);
+    const retryAfter = Number.parseInt(response.headers.get('Retry-After') ?? '', 10);
+    throw new ApiError(response.status, message, fields, code, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
   }
   if (response.status === 204) return undefined as T;
   return await response.json() as T;

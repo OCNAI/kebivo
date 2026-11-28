@@ -31,9 +31,16 @@ type CreatedToken = Token & { token: string };
 const exactHelp = 'Only identical wording is grouped by default: Exact groups identical questions in the same project and event type. Your bot already has a model, so connect it as the judge (Semantic, LLM judge method) to group paraphrases. The embeddings method groups only very close matches by default.';
 const date = (value: string | null) => value ? new Date(value).toLocaleDateString() : 'Never';
 
+function retryWait(seconds: number | null) {
+  if (!seconds) return 'Wait a few minutes, then try again.';
+  if (seconds < 60) return `Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`;
+  const minutes = Math.ceil(seconds / 60);
+  return `Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+}
+
 function apiErrorMessage(error: unknown) {
   if (error instanceof ApiError && error.status === 401) return 'Your session has expired. Sign in again to continue.';
-  if (error instanceof ApiError && error.status === 429) return 'Too many sign-in attempts. Wait a while before trying again.';
+  if (error instanceof ApiError && error.status === 429) return `Too many sign-in attempts. ${retryWait(error.retryAfterSeconds)}`;
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 }
 

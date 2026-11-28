@@ -335,7 +335,7 @@ def test_setup_token_refusals_and_single_claim(tmp_path: Path) -> None:
             "/api/v1/auth/setup", json=body, headers={"Origin": "http://evil.example"}
         )
         assert wrong_origin.status_code == 403
-        assert "set ALLOWED_ORIGINS" in wrong_origin.text
+        assert "SSH or VPN tunnel" in wrong_origin.text
         assert "Configured origins: none" not in wrong_origin.text
         app.state.setup_deadline = time.monotonic() - 1
         assert client.post("/api/v1/auth/setup", json=body, headers=headers).status_code == 403

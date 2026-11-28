@@ -139,15 +139,19 @@ def test_production_accepts_valid_secret_and_persistent_database() -> None:
 
 
 def test_production_rejects_non_loopback_http_origin() -> None:
-    with pytest.raises(SettingsError, match="HTTPS"):
+    with pytest.raises(SettingsError, match="HTTPS") as refused:
         Settings.from_env(
             {
                 "APP_ENV": "production",
                 "SECRET_KEY": "s" * 40,
                 "ENCRYPTION_KEY": "12" * 32,
-                "ALLOWED_ORIGINS": "http://remote.example.invalid",
+                "ALLOWED_ORIGINS": "http://192.168.1.20:8000",
             }
         )
+    message = str(refused.value)
+    assert "HTTPS reverse proxy" in message and "SSH or VPN tunnel" in message
+    assert "http://127.0.0.1" in message and "docs.kebivo.com/self-hosting" in message
+    assert "APP_ENV" not in message
 
 
 def test_allowed_origins_are_parsed_and_validated() -> None:

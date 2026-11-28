@@ -4,14 +4,14 @@ import hashlib
 import hmac
 import secrets
 import time
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, VerifyMismatchError
 from fastapi import Depends, HTTPException, Request
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from kebivo.models import AdminSession, AdminUser, AuditEvent, LoginAttempt, now_utc
@@ -21,7 +21,15 @@ COOKIE_NAME = "kebivo_admin_session"
 SESSION_SECONDS = 8 * 60 * 60
 IDLE_SECONDS = 30 * 60
 LOGIN_WINDOW = timedelta(minutes=15)
+# Hard lock: this many failures for one email from one source address.
 LOGIN_LIMIT = 5
+# One source address trying many emails is capped more loosely.
+LOGIN_SOURCE_LIMIT = 20
+# Failures for one email from all sources only add a capped, escalating delay,
+# so nobody who only knows the email can hold the administrator out. One
+# source alone never reaches it.
+LOGIN_EMAIL_FREE = 2 * LOGIN_LIMIT
+LOGIN_EMAIL_MAX_DELAY = 60
 PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 _DEVELOPMENT_KEY = secrets.token_bytes(32)
 _DUMMY_PASSWORD_HASH = PASSWORD_HASHER.hash(secrets.token_urlsafe(32))
@@ -86,6 +94,13 @@ def origin_allowed(request: Request) -> bool:
         return False
 
 
+REMOTE_ACCESS_HINT = (
+    "To sign in from another address, put an HTTPS reverse proxy in front of Kebivo "
+    "and add its https:// origin to ALLOWED_ORIGINS, or open an SSH or VPN tunnel and "
+    "use http://127.0.0.1. See https://docs.kebivo.com/self-hosting/#reverse-proxy-and-tls"
+)
+
+
 def wrong_origin_error(request: Request) -> HTTPException:
     configured = request.app.state.settings.allowed_origins
     return HTTPException(
@@ -93,7 +108,8 @@ def wrong_origin_error(request: Request) -> HTTPException:
         detail=(
             f"Page origin is not in ALLOWED_ORIGINS. Configured origins: {', '.join(configured)}"
             if configured
-            else "Page origin must match the loopback Host; set ALLOWED_ORIGINS for other origins"
+            else "Without ALLOWED_ORIGINS, Kebivo accepts the admin console only from localhost. "
+            + REMOTE_ACCESS_HINT
         ),
     )
 
@@ -111,6 +127,38 @@ def _peer_ip(request: Request) -> str:
         return str(ipaddress.ip_address(candidate))
     except ValueError:
         return peer
+
+
+def _login_wait(db: Session, identity_key: str, source_key: str) -> int:
+    """Seconds this email and source must wait before another login attempt."""
+    now = now_utc()
+    failed = select(LoginAttempt.attempted_at).where(
+        LoginAttempt.succeeded.is_(False), LoginAttempt.attempted_at >= now - LOGIN_WINDOW
+    )
+
+    def recent(*conditions: Any) -> list[datetime]:
+        rows = db.scalars(failed.where(*conditions).order_by(LoginAttempt.attempted_at)).all()
+        return [row if row.tzinfo else row.replace(tzinfo=UTC) for row in rows]
+
+    def window_wait(times: list[datetime], limit: int) -> float:
+        # The window reopens once enough of the oldest failures have aged out.
+        if len(times) < limit:
+            return 0
+        return (times[len(times) - limit] + LOGIN_WINDOW - now).total_seconds()
+
+    waits = [
+        window_wait(
+            recent(LoginAttempt.email == identity_key, LoginAttempt.ip_address == source_key),
+            LOGIN_LIMIT,
+        ),
+        window_wait(recent(LoginAttempt.ip_address == source_key), LOGIN_SOURCE_LIMIT),
+    ]
+    by_email = recent(LoginAttempt.email == identity_key)
+    if len(by_email) >= LOGIN_EMAIL_FREE:
+        delay = min(2 ** min(len(by_email) - LOGIN_EMAIL_FREE, 6), LOGIN_EMAIL_MAX_DELAY)
+        waits.append((by_email[-1] + timedelta(seconds=delay) - now).total_seconds())
+    longest = max(waits)
+    return int(longest) + 1 if longest > 0 else 0
 
 
 def _audit(db: Session, action: str, admin_id: str | None = None) -> None:
@@ -266,21 +314,17 @@ def install_auth_routes(app: Any) -> None:
         settings = request.app.state.settings
         identity_key = _private_digest(settings, "email:" + email)
         source_key = _private_digest(settings, "ip:" + _peer_ip(request))[:40]
-        since = now_utc() - LOGIN_WINDOW
-        failures = (
-            db.scalar(
-                select(func.count())
-                .select_from(LoginAttempt)
-                .where(
-                    or_(LoginAttempt.email == identity_key, LoginAttempt.ip_address == source_key),
-                    LoginAttempt.succeeded.is_(False),
-                    LoginAttempt.attempted_at >= since,
-                )
+        # Check and record the attempt in one write transaction, before the slow
+        # password check, so parallel requests cannot all pass the throttle.
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        wait = _login_wait(db, identity_key, source_key)
+        if wait:
+            db.rollback()
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many login attempts. Try again in {wait} seconds.",
+                headers={"Retry-After": str(wait)},
             )
-            or 0
-        )
-        if failures >= LOGIN_LIMIT:
-            raise HTTPException(status_code=429, detail="Too many login attempts")
 
         attempt_count = db.scalar(select(func.count()).select_from(LoginAttempt)) or 0
         if attempt_count >= 20_000:
@@ -293,25 +337,22 @@ def install_auth_routes(app: Any) -> None:
             .limit(500)
         )
         db.execute(delete(LoginAttempt).where(LoginAttempt.id.in_(stale_ids)))
+        attempt = LoginAttempt(
+            email=identity_key, ip_address=source_key, succeeded=False, attempted_at=now_utc()
+        )
+        db.add(attempt)
+        db.commit()
 
         admin = db.scalar(select(AdminUser).where(AdminUser.email == email))
         verified = verify_password(
             admin.password_hash if admin is not None else _DUMMY_PASSWORD_HASH, body.password
         )
-        valid = bool(admin and admin.is_active and verified)
-        db.add(
-            LoginAttempt(
-                email=identity_key,
-                ip_address=source_key,
-                succeeded=valid,
-                attempted_at=now_utc(),
-            )
-        )
-        if not valid:
+        if not (admin and admin.is_active and verified):
             _audit(db, "admin.login_failed")
             db.commit()
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
+        attempt.succeeded = True
         assert admin is not None
         return issue_session(db, admin, request)
 

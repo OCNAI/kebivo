@@ -133,9 +133,17 @@ There is exactly one administrator and no public signup. Create it from a truste
 docker compose exec app python -m kebivo.cli bootstrap --email admin@example.org
 ```
 
-Sessions last eight hours with a 30-minute idle timeout, use an `HttpOnly`, `SameSite=Lax` cookie (Secure over HTTPS), and store only a digest of the session token. Five failed logins within 15 minutes, for the same e-mail or from the same IP address, return `429` even for the correct password. Cookie-authenticated writes need the configured `Origin` and the session's `X-CSRF-Token`.
+Sessions last eight hours with a 30-minute idle timeout, use an `HttpOnly`, `SameSite=Lax` cookie (Secure over HTTPS), and store only a digest of the session token. Cookie-authenticated writes need the configured `Origin` and the session's `X-CSRF-Token`.
 
-To reset a lost password, or to get back in while failed attempts from someone else keep the login throttled (this signs out every session and clears the login throttle):
+Failed logins are throttled over a 15-minute window. Throttled requests return `429` with a `Retry-After` header, even for the correct password, and the sign-in page shows the wait.
+
+- Five failures for one e-mail from one IP address lock that e-mail on that address only. The same account can still sign in from another address.
+- Twenty failures from one IP address, for any e-mails, lock that address.
+- After ten failures for one e-mail from all addresses, each further attempt waits after the last failure: 1 second, doubling up to 60 seconds. This slows guessing from many addresses without locking the administrator out.
+
+Behind a proxy, set `TRUSTED_PROXY_IPS`, or every client shares the proxy's address and its limits.
+
+To reset a lost password, or to get back in while failed attempts keep your address throttled (this signs out every session and clears the login throttle):
 
 ```sh
 docker compose exec app python -m kebivo.cli reset-password --email admin@example.org
@@ -158,6 +166,8 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $remote_addr;
     }
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
 }
 ```
 
@@ -170,6 +180,16 @@ Then:
 - Keep the `Authorization` header and the original `Host` for `/mcp`. Because the host in `ALLOWED_ORIGINS` is already allowed for MCP, this setup needs no `MCP_ALLOWED_HOSTS`. If the public URL has a non-default port, include it.
 
 Caddy, Traefik or a cloud load balancer work the same way: TLS at the edge, the original `Host`, a replaced `X-Forwarded-For`, and the proxy in `TRUSTED_PROXY_IPS`.
+
+### No certificate? Use a tunnel
+
+Production Kebivo refuses a plain `http://` origin other than loopback, such as `http://192.168.1.20:8000`, because the session cookie and password would cross the network unencrypted. Without a certificate, reach the server through an SSH or VPN tunnel and use the loopback address instead. From your computer:
+
+```sh
+ssh -N -L 8000:127.0.0.1:8000 you@192.168.1.20
+```
+
+Leave it running and open `http://127.0.0.1:8000`, including the setup link from the logs. The tunnel needs no `ALLOWED_ORIGINS`. If you already set `ALLOWED_ORIGINS`, add `http://127.0.0.1:8000` to it. If local port 8000 is taken, pick another, such as `-L 8080:127.0.0.1:8000`, and open that port; the setup link then needs the same port change. Over a VPN such as WireGuard or Tailscale, run the same command against the server's VPN address.
 
 ## Secrets and what to protect
 
@@ -265,12 +285,13 @@ If the host or a backup may be compromised, rotate all of the above: tokens, adm
 | --- | --- |
 | Container exits at startup | `docker compose logs app` or `docker logs kebivo`. The message names the invalid variable (for example a short `SECRET_KEY` or missing `ENCRYPTION_KEY`) or the failed migration. For an existing database, restore its original key file or pass the matching keys; startup will not mint replacements. |
 | `docker compose up` says `Set SECRET_KEY ...` | The variable is missing from `.env`. |
-| Sign-in fails with a forbidden error | With `ALLOWED_ORIGINS` set, the URL must match an entry exactly, including scheme and port. When empty, use HTTP loopback with the same host and port as the request; set `ALLOWED_ORIGINS` for a proxy or other origin. |
+| Sign-in fails with a forbidden error | With `ALLOWED_ORIGINS` set, the URL must match an entry exactly, including scheme and port. When empty, use HTTP loopback with the same host and port as the request. From another machine, use an [HTTPS proxy](#reverse-proxy-and-tls) or an [SSH tunnel](#no-certificate-use-a-tunnel). |
 | Setup link expired or missing | Check `docker logs kebivo`. A link prints only while no administrator exists; restart for a new 60-minute link. Change `8000` in it if you remapped the host port. |
 | `/health/ready` returns `503` | `"database":"unavailable"`: the volume or file is not readable. `"search":"unavailable"`: the search index failed to start. `"worker":"stopped"`: the worker crashed; check the logs and restart. `"worker":"disabled"` with status `ok` only means `WORKER_ENABLED=false`. |
 | `/health/ready` shows a rising `routing_backlog.pending_count` | Routing jobs are waiting. `oldest_pending_age_seconds` shows how long the oldest has waited. A growing queue with `worker: ok` means the worker is running but intake exceeds its processing rate; a stopped worker returns 503. Queued work alone does not fail readiness. Both backlog fields may be `null` if the short read-only metrics query fails; the separate database probe still determines database readiness. |
 | Port 8000 is in use | Set `APP_PORT` in `.env` and use that port in your URLs and `ALLOWED_ORIGINS`. |
 | Rate limits hit everyone at once behind a proxy | `TRUSTED_PROXY_IPS` is not set, so every request appears to come from the proxy. |
+| Startup says `Production ALLOWED_ORIGINS must use HTTPS except loopback` | An `http://` origin other than loopback is listed. Use an [HTTPS proxy](#reverse-proxy-and-tls) or an [SSH tunnel](#no-certificate-use-a-tunnel). |
 | MCP returns `421` | The `Host` the client uses is not in `ALLOWED_ORIGINS` or `MCP_ALLOWED_HOSTS`, or the proxy does not forward the original `Host`. |
 | A webhook or provider is rejected as unsafe | Private, loopback and metadata addresses are blocked unless the destination or provider opts into private networks; metadata addresses are always blocked. |
 | Deliveries stay `retry_scheduled` | Open `/deliveries` for the attempt error. Fix the receiver; retries continue on schedule, or use **Retry** after a final failure. |
