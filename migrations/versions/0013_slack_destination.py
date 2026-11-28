@@ -27,16 +27,9 @@ def downgrade() -> None:
 
 def _replace_type_check(expression: str) -> None:
     bind = op.get_bind()
-    # SQLite requires FK toggles outside its transaction; keep Alembic's transaction open.
-    bind.connection.driver_connection.commit()
-    bind.exec_driver_sql("PRAGMA foreign_keys=OFF")
-    try:
-        with op.batch_alter_table(
-            "destinations", recreate="always", copy_from=destinations
-        ) as batch:
-            batch.drop_constraint("ck_destinations_type", type_="check")
-            batch.create_check_constraint("ck_destinations_type", expression)
-    finally:
-        bind.exec_driver_sql("PRAGMA foreign_keys=ON")
+    # migrations/env.py runs every migration in one transaction with foreign keys off.
+    with op.batch_alter_table("destinations", recreate="always", copy_from=destinations) as batch:
+        batch.drop_constraint("ck_destinations_type", type_="check")
+        batch.create_check_constraint("ck_destinations_type", expression)
     if bind.exec_driver_sql("PRAGMA foreign_key_check").first():
         raise RuntimeError("Destination migration broke a foreign key")

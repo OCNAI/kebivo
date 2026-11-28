@@ -76,6 +76,7 @@ echo "Old image prepared retry-scheduled delivery with $retry_attempts attempt(s
 docker stop "$old_container" >/dev/null
 docker run --rm -i -v "$volume:/data" --entrypoint python "$old_image" - \
   < scripts/upgrade-snapshot.py > "$scratch/before.json"
+old_revision="$(docker run --rm -v "$volume:/data" --entrypoint python "$old_image" -c 'import sqlite3; print(sqlite3.connect("/data/app.sqlite3").execute("SELECT version_num FROM alembic_version").fetchone()[0])')"
 run_app "$new_container" "$new_image"
 head="$(docker exec "$new_container" python -c 'import sqlite3; c=sqlite3.connect("/data/app.sqlite3"); print(c.execute("SELECT version_num FROM alembic_version").fetchone()[0])')"
 expected_head="$(uv run alembic heads | awk 'NR==1 {print $1}')"
@@ -84,6 +85,25 @@ if [[ "$head" != "$expected_head" ]]; then
   exit 1
 fi
 docker exec "$new_container" python -m kebivo.cli check-groups
+# The new image backs up the old database once, only if it had to migrate it.
+docker exec -i -e OLD_REVISION="$old_revision" -e HEAD="$head" "$new_container" python - <<'PY'
+import glob, os, sqlite3, stat
+old, head = os.environ["OLD_REVISION"], os.environ["HEAD"]
+backups = glob.glob("/data/pre-upgrade-*.sqlite3")
+if old == head:
+    assert backups == [], backups
+    print(f"Old volume was already at {head}; no pre-upgrade backup, as expected.")
+else:
+    assert backups == [f"/data/pre-upgrade-{old}.sqlite3"], (old, backups)
+    with sqlite3.connect(f"file:{backups[0]}?mode=ro", uri=True) as db:
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == old
+    print(f"Pre-upgrade backup {backups[0]} passed integrity_check.")
+for path in [*backups, *glob.glob("/data/app.sqlite3*")]:
+    mode = stat.S_IMODE(os.stat(path).st_mode)
+    assert mode == 0o600, (path, oct(mode))
+print("Database files are 0600.")
+PY
 docker run --rm -i -v "$volume:/data" -e UPGRADE_COLUMNS="$(cat "$scratch/before.json")" \
   --entrypoint python "$new_image" - < scripts/upgrade-snapshot.py > "$scratch/after.json"
 python3 - "$scratch/before.json" "$scratch/after.json" <<'PY'
