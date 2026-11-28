@@ -2,7 +2,12 @@
 # Check what a newcomer sees on first run of a candidate image.
 set -euo pipefail
 
-image="${1:?usage: first-run-check.sh IMAGE}"
+image="${1:?usage: first-run-check.sh IMAGE [PLATFORM]}"
+# An optional platform such as linux/arm64 runs that variant of a multi-platform
+# image (under QEMU on other hosts). FIRST_RUN_TIMEOUT allows for emulation.
+platform=()
+[[ -n "${2:-}" ]] && platform=(--platform "$2")
+timeout="${FIRST_RUN_TIMEOUT:-60}"
 suffix="first-run-check-$$"
 cleanup() {
   docker rm -f "$suffix" >/dev/null 2>&1 || true
@@ -29,15 +34,15 @@ if [[ "${command[*]}" != "docker run --name $suffix -p 127.0.0.1:0:8000 -v $suff
   echo "README docker run line changed shape; update this check: $readme_line" >&2
   exit 1
 fi
-"${command[@]}" >/dev/null 2>&1 &
-for _ in $(seq 60); do
-  if docker logs "$suffix" 2>&1 | grep -q '^Kebivo setup: http.*/setup#token='; then
+"${command[@]:0:2}" "${platform[@]}" "${command[@]:2}" >/dev/null 2>&1 &
+for _ in $(seq "$timeout"); do
+  if docker logs "$suffix" 2>&1 | grep '^Kebivo setup: http.*/setup#token=' >/dev/null; then
     break
   fi
   sleep 1
 done
-if ! docker logs "$suffix" 2>&1 | grep -q '^Kebivo setup: http.*/setup#token='; then
-  echo 'README docker run did not print a Kebivo setup: URL within 60 seconds.' >&2
+if ! docker logs "$suffix" 2>&1 | grep '^Kebivo setup: http.*/setup#token=' >/dev/null; then
+  echo "README docker run did not print a Kebivo setup: URL within $timeout seconds." >&2
   docker logs "$suffix" 2>&1 | tail -20 >&2
   exit 1
 fi
@@ -63,10 +68,10 @@ cleanup
 
 # A bad setting prints one line, never a traceback.
 status=0
-output="$(docker run --rm -e SECRET_KEY=bad -e ENCRYPTION_KEY=bad "$image" 2>&1)" || status=$?
+output="$(docker run --rm "${platform[@]}" -e SECRET_KEY=bad -e ENCRYPTION_KEY=bad "$image" 2>&1)" || status=$?
 if [[ "$status" -eq 0 || "$(printf '%s\n' "$output" | wc -l)" -ne 1 || "$output" != SettingsError:*SECRET_KEY* ]]; then
   echo "SECRET_KEY=bad should print one SettingsError line; got (exit $status):" >&2
   printf '%s\n' "$output" >&2
   exit 1
 fi
-echo "First-run checks passed for $image"
+echo "First-run checks passed for $image${2:+ ($2)}"
