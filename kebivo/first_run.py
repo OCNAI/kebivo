@@ -56,6 +56,8 @@ def generate(environ: dict[str, str] | None = None) -> None:
         raise SettingsError(
             "DATABASE_URL must be a SQLite URL, such as sqlite:////data/app.sqlite3"
         )
+    if "uri" in url.query:
+        raise SettingsError("DATABASE_URL SQLite URI mode is not supported")
     if "DATABASE_URL" in values and "DATABASE_PATH" in values:
         if not _same_database(url.database, values["DATABASE_PATH"]):
             raise SettingsError(

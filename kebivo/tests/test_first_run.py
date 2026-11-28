@@ -179,6 +179,24 @@ def test_existing_database_never_gets_new_keys(tmp_path: Path) -> None:
     assert not path.exists()
 
 
+def test_sqlite_uri_mode_never_generates_keys_for_existing_database(tmp_path: Path) -> None:
+    path = tmp_path / "secrets.env"
+    database = tmp_path / "db.sqlite3"
+    with sqlite3.connect(database) as db:
+        db.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        db.execute("INSERT INTO alembic_version VALUES ('0018')")
+    env = {
+        "KEBIVO_SECRETS_FILE": str(path),
+        "DATABASE_URL": f"sqlite:///file:{database}?mode=rw&uri=true",
+        "APP_ENV": "production",
+    }
+    with pytest.raises(SettingsError, match="SQLite URI mode is not supported"):
+        generate(env)
+    assert not path.exists()
+    with sqlite3.connect(database) as db:
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0018",)
+
+
 def test_blank_environment_keys_use_generated_file(tmp_path: Path) -> None:
     path = tmp_path / "secrets.env"
     env = {

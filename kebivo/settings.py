@@ -131,9 +131,12 @@ class Settings:
         if not database_url.startswith("sqlite:///"):
             raise SettingsError("DATABASE_URL must use SQLite for this application phase")
         try:
-            url_path = make_url(database_url).database or ""
+            parsed_url = make_url(database_url)
         except ArgumentError:
             raise SettingsError("DATABASE_URL must be a valid SQLite URL") from None
+        if "uri" in parsed_url.query:
+            raise SettingsError("DATABASE_URL SQLite URI mode is not supported")
+        url_path = parsed_url.database or ""
         database_path = values.get("DATABASE_PATH", url_path)
         if not database_path.strip():
             raise SettingsError("DATABASE_PATH must be non-empty")

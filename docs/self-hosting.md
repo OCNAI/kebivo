@@ -119,7 +119,7 @@ Values are whole days from 1 to 36500; `0` turns off automatic deletion for that
 | `ENCRYPTION_KEY_PREVIOUS` | Empty | The old key, only while [rotating](#rotate-credentials) `ENCRYPTION_KEY`. |
 | `LLM_API_KEY_*` | None | Optional provider keys referenced by name from an LLM provider (`api_key_env`). Compose does not pass them by default: add them under `environment:` in a `compose.override.yaml`. See [LLM providers](llm-providers.md). |
 | `APP_ENV` | `production` in the image | `development`, `test` or `production`. Production enforces the key and origin rules. |
-| `DATABASE_URL` | `sqlite:////data/app.sqlite3` | Must be a SQLite URL. Compose fixes it to the volume. |
+| `DATABASE_URL` | `sqlite:////data/app.sqlite3` | Must be a SQLite file URL; SQLite URI mode (`uri=true`) is unsupported. Compose fixes it to the volume. |
 | `DATABASE_PATH` | From `DATABASE_URL` | Optional. If you set it, it must name the same file as `DATABASE_URL`, or startup stops. Prefer setting only `DATABASE_URL`. |
 | `DISPLAY_NAME` | `Kebivo` | Backend display name (the OpenAPI title). The UI name comes from `config/project.json` at build time. |
 

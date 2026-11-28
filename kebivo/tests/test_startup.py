@@ -262,6 +262,32 @@ def test_url_only_query_parameter_backs_up_the_served_database(
         }
 
 
+def test_sqlite_uri_mode_stops_before_backup_or_migration(
+    migrations: tuple[Path, Config], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database, config = migrations
+    command.upgrade(config, BEFORE_HEAD)
+    before = _schema(database)
+    environment = {
+        **os.environ,
+        "DATABASE_URL": f"sqlite:///file:{database}?mode=rw&uri=true",
+        "APP_ENV": "test",
+    }
+    environment.pop("DATABASE_PATH", None)
+    result = subprocess.run(
+        [sys.executable, "-m", "kebivo.startup", sys.executable, "-c", "pass"],
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "DATABASE_URL SQLite URI mode is not supported" in result.stderr
+    assert current_revision(database) == BEFORE_HEAD
+    assert _schema(database) == before
+    assert list(database.parent.glob("pre-upgrade-*.sqlite3")) == []
+
+
 def test_directory_fsync_failure_stops_before_pruning_or_migrating(
     migrations: tuple[Path, Config], monkeypatch: pytest.MonkeyPatch
 ) -> None:
