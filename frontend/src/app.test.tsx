@@ -78,6 +78,15 @@ describe('authenticated dashboard', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Configured origins: https://admin.example.org');
   });
 
+  it('shows how long to wait when sign-in is throttled', async () => {
+    globalThis.fetch = vi.fn(async input => String(input).endsWith('/auth/session')
+      ? new Response(JSON.stringify({ detail: 'Authentication required' }), { status: 401 })
+      : new Response(JSON.stringify({ detail: 'Too many login attempts. Try again in 840 seconds.' }), { status: 429, headers: { 'Retry-After': '840' } })) as typeof fetch;
+    await act(async () => { root.render(<App />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { container.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Too many sign-in attempts. Try again in 14 minutes.');
+  });
+
   it('derives the new project slug from the name until the slug is edited', async () => {
     const posts: string[] = [];
     globalThis.fetch = vi.fn(async (input, init) => {

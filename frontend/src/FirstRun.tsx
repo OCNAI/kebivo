@@ -133,7 +133,7 @@ export function SetupPage({ token, onSuccess }: { token: string | null; onSucces
     } catch (e) {
       if (e instanceof ApiError && e.status === 403 && e.message === 'Invalid or expired setup link') { setInvalid(true); return; }
       if (e instanceof ApiError && e.status === 409) { setRequired(false); return; }
-      if (e instanceof ApiError && e.status === 403) { setError("Kebivo doesn't accept setup from this address. Open the setup link using the same address and port you use to reach Kebivo. If that isn't localhost, set ALLOWED_ORIGINS to it and restart the container."); return; }
+      if (e instanceof ApiError && e.status === 403) { setError("Kebivo doesn't accept setup from this address. Open the setup link using the same address and port you use to reach Kebivo. Without a certificate, open an SSH tunnel to the server and use the setup link with 127.0.0.1. With HTTPS, add that https:// address to ALLOWED_ORIGINS and restart the container."); return; }
       if (e instanceof ApiError && e.status === 422) { const emailIssue = e.fields.find(x => x.field.includes('email')); const passwordIssue = e.fields.find(x => x.field.includes('password')); if (emailIssue) setEmailError(emailIssue.message); setFieldError(passwordIssue?.message ?? (!emailIssue ? e.message : '')); (emailIssue && !passwordIssue ? emailInput : passwordInput).current?.focus(); return; }
       setError("Couldn't create the account. Nothing was saved. Try again.");
     } finally { setBusy(false); }

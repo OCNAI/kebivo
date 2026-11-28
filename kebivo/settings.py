@@ -151,7 +151,12 @@ class Settings:
                 except ValueError:
                     is_loopback = parsed.hostname in {"localhost", "localhost.localdomain"}
                 if not is_loopback:
-                    raise SettingsError("Production ALLOWED_ORIGINS must use HTTPS except loopback")
+                    raise SettingsError(
+                        "Production ALLOWED_ORIGINS must use HTTPS except loopback. Put an "
+                        "HTTPS reverse proxy in front of Kebivo and list its https:// origin, "
+                        "or reach Kebivo through an SSH or VPN tunnel to http://127.0.0.1. "
+                        "See https://docs.kebivo.com/self-hosting/#reverse-proxy-and-tls"
+                    )
 
         public_url = values.get("PUBLIC_URL", "").rstrip("/") or None
         if public_url:
