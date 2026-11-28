@@ -64,8 +64,10 @@ def run_migrations_online() -> None:
             transactional_ddl=True,
         )
         with context.begin_transaction():
+            before = context.get_context().get_current_heads()
             context.run_migrations()
-            if connection.dialect.name == "sqlite":
+            migrated = context.get_context().get_current_heads() != before
+            if migrated and connection.dialect.name == "sqlite":
                 broken = connection.exec_driver_sql("PRAGMA foreign_key_check").first()
                 if broken:
                     raise RuntimeError(
