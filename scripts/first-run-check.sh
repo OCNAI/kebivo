@@ -57,7 +57,7 @@ fi
 
 # A second container on the same volume exits with one line; the first keeps serving.
 status=0
-output="$(docker run --rm -v "$suffix:/data" "$image" 2>&1)" || status=$?
+output="$(docker run --rm "${platform[@]}" -v "$suffix:/data" "$image" 2>&1)" || status=$?
 if [[ "$status" -eq 0 || "$output" != 'Another Kebivo is already using /data; stop it first' ]]; then
   echo "A second container on the same volume should print one lock line; got (exit $status):" >&2
   printf '%s\n' "$output" >&2
