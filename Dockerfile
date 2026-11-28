@@ -9,6 +9,10 @@ COPY config/project.json /build/config/project.json
 RUN npm run build
 
 FROM python:3.12-slim AS kebivo-runtime
+# The base image can lag Debian security fixes; install them at build time.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 ARG KEBIVO_VERSION=local
 ARG KEBIVO_REVISION=unknown
 ARG KEBIVO_CREATED=1970-01-01T00:00:00Z

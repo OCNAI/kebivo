@@ -189,7 +189,7 @@ To move a one-command install to managed keys, copy its existing key file before
 docker stop kebivo
 docker rm kebivo
 docker run --name kebivo -p 127.0.0.1:8000:8000 -v kebivo-data:/data \
-  --env-file ./kebivo.env ghcr.io/ocnai/kebivo:0.5.0
+  --env-file ./kebivo.env ghcr.io/ocnai/kebivo:0.5.1
 ```
 
 After verifying the restart and a database-only backup, keep `kebivo.env` in your managed secret storage. To make a whole-volume copy independent of the keys, remove `/data/kebivo-secrets.env` from the volume only after confirming the env file supplies **both** keys on restart. If an environment key is omitted, the remaining file key is still used. If the environment sets a key to a different value from the one in `/data/kebivo-secrets.env`, the container refuses to start and names the variable. To change a key on purpose, delete that line from the file first.
@@ -230,7 +230,7 @@ Restore the matching `.env` before `docker compose up -d app`. For a one-command
 
 Migrations are versioned and run automatically before the server starts. All pending migrations run in one transaction: if one fails, startup stops and the database stays at its previous version, so the previous image still starts on it.
 
-Before it migrates, the container saves a checked copy of the database next to it, as `/data/pre-upgrade-<old version>.sqlite3` (for example `pre-upgrade-0018_star_prompt_dismissal.sqlite3`). It keeps only the latest one, logs its path in one line, and does not migrate if the copy fails. A start that has nothing to migrate makes no copy, and neither does an older image on a database from a newer release; that start stops without touching the database or the copy. The copy is on the same volume and has no keys, so it does not replace your own backups (step 2).
+Before it migrates, the container saves a checked copy of the database next to it, as `/data/pre-upgrade-<old revision>.sqlite3`, named after the migration the database was at (for example `pre-upgrade-0018_star_prompt_dismissal.sqlite3`). It keeps only the latest one, logs its path in one line, and does not migrate if the copy fails. A start that has nothing to migrate makes no copy, and neither does an older image on a database from a newer release; that start stops without touching the database or the copy. The copy is on the same volume and has no keys, so it does not replace your own backups (step 2).
 
 Only one Kebivo can use a data volume at a time. The container holds a lock on `/data/.kebivo.lock` while it runs; a second container on the same volume exits with `Another Kebivo is already using /data; stop it first`, and the first keeps serving. Stop the old container before starting the new one.
 
