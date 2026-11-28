@@ -36,12 +36,12 @@ if [[ "${command[*]}" != "docker run --name $suffix -p 127.0.0.1:0:8000 -v $suff
 fi
 "${command[@]:0:2}" "${platform[@]}" "${command[@]:2}" >/dev/null 2>&1 &
 for _ in $(seq "$timeout"); do
-  if docker logs "$suffix" 2>&1 | grep -q '^Kebivo setup: http.*/setup#token='; then
+  if docker logs "$suffix" 2>&1 | grep '^Kebivo setup: http.*/setup#token=' >/dev/null; then
     break
   fi
   sleep 1
 done
-if ! docker logs "$suffix" 2>&1 | grep -q '^Kebivo setup: http.*/setup#token='; then
+if ! docker logs "$suffix" 2>&1 | grep '^Kebivo setup: http.*/setup#token=' >/dev/null; then
   echo "README docker run did not print a Kebivo setup: URL within $timeout seconds." >&2
   docker logs "$suffix" 2>&1 | tail -20 >&2
   exit 1

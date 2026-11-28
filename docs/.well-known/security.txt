@@ -1,5 +1,5 @@
 Contact: https://github.com/OCNAI/kebivo/security/advisories/new
-Expires: 2027-11-28T00:00:00Z
+Expires: 2027-11-20T00:00:00Z
 Policy: https://github.com/OCNAI/kebivo/blob/main/SECURITY.md
 Preferred-Languages: en
 Canonical: https://docs.kebivo.com/.well-known/security.txt

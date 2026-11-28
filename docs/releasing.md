@@ -21,6 +21,8 @@ The check verifies the version and clean tree, and that `README.md` and `docs/qu
 5. Check that the image pulls without a login: `docker logout ghcr.io; docker pull ghcr.io/ocnai/kebivo:X.Y.Z`. A new GHCR package starts private; an organization owner makes it public once under the package's **Package settings**.
 6. Run the **MCP Registry** workflow (`.github/workflows/mcp-registry.yml`, manual dispatch) to publish `server.json`. See [MCP Registry metadata](mcp-registry.md).
 
+Renew `/.well-known/security.txt` on both kebivo.com and docs.kebivo.com before its `Expires` date.
+
 ## Repository history
 
 The public repository `OCNAI/kebivo` started from a single root commit made with `scripts/prepare-public-history.sh`, which builds a one-commit `public-main` branch from a clean `main` and checks it for private markers before it is pushed. Development history before that commit is not public.
