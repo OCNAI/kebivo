@@ -106,9 +106,13 @@ def backup_before_upgrade(database: Path, revision: str) -> Path:
 def prepare_database(database: Path, config: Config) -> Path | None:
     """Back up a database that is behind head, then migrate. Return the backup path."""
     revision = current_revision(database)
-    head = ScriptDirectory.from_config(config).get_current_head()
+    scripts = ScriptDirectory.from_config(config)
+    head = scripts.get_current_head()
+    known = {script.revision for script in scripts.walk_revisions()}
     backup = None
-    if revision is not None and revision != head:
+    # A revision this image does not know is from a newer release: Alembic refuses it
+    # below, and backing it up would delete the copy taken before that upgrade.
+    if revision in known and revision != head:
         backup = backup_before_upgrade(database, revision)
         print(f"Kebivo: backed up the database before upgrading to {backup}", flush=True)
     command.upgrade(config, "head")

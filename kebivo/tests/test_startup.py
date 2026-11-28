@@ -111,6 +111,20 @@ def test_fresh_database_is_not_backed_up(migrations: tuple[Path, Config]) -> Non
     assert list(database.parent.glob("pre-upgrade-*")) == []
 
 
+def test_newer_database_keeps_the_existing_backup(migrations: tuple[Path, Config]) -> None:
+    database, config = migrations
+    command.upgrade(config, HEAD)
+    with sqlite3.connect(database) as db:
+        db.execute("UPDATE alembic_version SET version_num = '0099_from_a_newer_release'")
+    kept = database.with_name(f"pre-upgrade-{BEFORE_HEAD}.sqlite3")
+    kept.write_bytes(b"backup taken before the newer release")
+
+    with pytest.raises(Exception, match="0099_from_a_newer_release"):
+        prepare_database(database, config)
+
+    assert sorted(database.parent.glob("pre-upgrade-*.sqlite3")) == [kept]
+
+
 def test_failed_backup_stops_before_migrating(
     migrations: tuple[Path, Config], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
