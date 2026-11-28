@@ -2,6 +2,7 @@ import os
 import shutil
 import sqlite3
 import stat
+import subprocess
 import sys
 from pathlib import Path
 
@@ -180,6 +181,68 @@ def test_matching_database_settings_are_accepted(
     assert Settings.from_env().database_path == str(tmp_path / "." / "app.sqlite3")
     monkeypatch.delenv("DATABASE_PATH")
     Settings.from_env()
+
+
+def test_startup_rejects_divergence_then_serves_the_upgraded_database(
+    migrations: tuple[Path, Config], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    database, config = migrations
+    other = tmp_path / "other.sqlite3"
+    command.upgrade(config, BEFORE_HEAD)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{other}")
+    command.upgrade(config, BEFORE_HEAD)
+
+    environment = {**os.environ, "DATABASE_PATH": str(database), "APP_ENV": "test"}
+    command_line = [
+        sys.executable,
+        "-m",
+        "kebivo.startup",
+        sys.executable,
+        "-c",
+        "from kebivo.app import create_app; print(create_app().state.engine.url.database)",
+    ]
+    rejected = subprocess.run(command_line, env=environment, capture_output=True, text=True)
+    assert rejected.returncode != 0
+    assert "name different files" in rejected.stderr
+    assert current_revision(database) == current_revision(other) == BEFORE_HEAD
+    assert list(database.parent.glob("pre-upgrade-*.sqlite3")) == []
+
+    environment.pop("DATABASE_URL")
+    served = subprocess.run(
+        command_line, env=environment, capture_output=True, text=True, check=True
+    )
+    assert Path(served.stdout.splitlines()[-1]) == database
+    assert current_revision(database) == HEAD
+    assert current_revision(other) == BEFORE_HEAD
+    with sqlite3.connect(database) as db:
+        assert "digest_weekday" in {row[1] for row in db.execute("PRAGMA table_info(destinations)")}
+    backup = database.with_name(f"pre-upgrade-{BEFORE_HEAD}.sqlite3")
+    assert current_revision(backup) == BEFORE_HEAD
+    with sqlite3.connect(backup) as db:
+        assert "digest_weekday" not in {
+            row[1] for row in db.execute("PRAGMA table_info(destinations)")
+        }
+
+
+def test_directory_fsync_failure_stops_before_pruning_or_migrating(
+    migrations: tuple[Path, Config], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database, config = migrations
+    command.upgrade(config, BEFORE_HEAD)
+    stale = database.with_name("pre-upgrade-0017_sample_data.sqlite3")
+    stale.write_bytes(b"old backup")
+    fsync = os.fsync
+
+    def fail_directory_fsync(descriptor: int) -> None:
+        if stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            raise OSError("directory fsync failed")
+        fsync(descriptor)
+
+    monkeypatch.setattr("kebivo.startup.os.fsync", fail_directory_fsync)
+    with pytest.raises(OSError, match="directory fsync failed"):
+        prepare_database(database, config)
+    assert current_revision(database) == BEFORE_HEAD
+    assert stale.exists()
 
 
 def test_second_lock_on_the_same_directory_fails(tmp_path: Path) -> None:

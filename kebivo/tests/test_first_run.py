@@ -162,13 +162,12 @@ def test_existing_database_never_gets_new_keys(tmp_path: Path) -> None:
         generate(env)
     assert not path.exists()
     assert "=" not in str(error.value)
-    for override in (
-        {"DATABASE_PATH": str(tmp_path / "elsewhere")},
-        {"DATABASE_URL": f"sqlite:///{database}?timeout=5"},
-    ):
-        with pytest.raises(SettingsError, match="SECRET_KEY"):
-            generate({**env, **override})
-        assert not path.exists()
+    with pytest.raises(SettingsError, match="name different files"):
+        generate({**env, "DATABASE_PATH": str(tmp_path / "elsewhere")})
+    assert not path.exists()
+    with pytest.raises(SettingsError, match="SECRET_KEY"):
+        generate({**env, "DATABASE_URL": f"sqlite:///{database}?timeout=5"})
+    assert not path.exists()
 
 
 def test_blank_environment_keys_use_generated_file(tmp_path: Path) -> None:

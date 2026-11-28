@@ -12,7 +12,7 @@ from urllib.parse import quote
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
-from kebivo.settings import SettingsError
+from kebivo.settings import SettingsError, _same_database
 
 
 def database_is_fresh(path: Path) -> bool:
@@ -56,6 +56,11 @@ def generate(environ: dict[str, str] | None = None) -> None:
         raise SettingsError(
             "DATABASE_URL must be a SQLite URL, such as sqlite:////data/app.sqlite3"
         )
+    if "DATABASE_URL" in values and "DATABASE_PATH" in values:
+        if not _same_database(database_url, values["DATABASE_PATH"]):
+            raise SettingsError(
+                "DATABASE_PATH and DATABASE_URL name different files; set only DATABASE_URL"
+            )
     database_path = Path(url.database)
     if not database_is_fresh(database_path) or path.exists():
         raise SettingsError(f"{missing[0]} is required for an existing database or secrets file")
