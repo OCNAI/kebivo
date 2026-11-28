@@ -1,7 +1,9 @@
 name: Release
 
-# A v*.*.* tag runs the release checks, then pushes the image to GHCR.
-# Manual dispatch runs the checks only.
+# A v*.*.* tag runs the release checks, pushes :X.Y.Z to GHCR, starts it on
+# each platform, then moves :latest if this is the highest release.
+# Manual dispatch runs the checks and starts a local build on each platform,
+# without pushing.
 on:
   workflow_dispatch:
     inputs:
@@ -54,6 +56,27 @@ jobs:
           echo "Upgrade check from $PREVIOUS_REF"
           make release-check VERSION="$VERSION" PREVIOUS_REF="$PREVIOUS_REF"
 
+  platforms:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: kebivo:platform-check
+      - name: First run
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: FIRST_RUN_TIMEOUT=300 bash scripts/first-run-check.sh kebivo:platform-check "$PLATFORM"
+
   publish:
     needs: check
     if: github.event_name == 'push'
@@ -63,6 +86,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -76,13 +101,12 @@ jobs:
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
-            ${{ env.IMAGE }}:latest
+          tags: ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
           build-args: |
             KEBIVO_VERSION=${{ steps.meta.outputs.version }}
             KEBIVO_REVISION=${{ github.sha }}
@@ -96,3 +120,20 @@ jobs:
             echo "$platform $labels"
             python3 -c 'import json, sys; l = json.loads(sys.argv[1]); assert l["io.modelcontextprotocol.server.name"] == "io.github.OCNAI/kebivo"; assert l["org.opencontainers.image.version"] == sys.argv[2]; assert l["org.opencontainers.image.source"] == "https://github.com/OCNAI/kebivo"' "$labels" "$VERSION"
           done
+      - name: First run on each platform
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          for platform in linux/amd64 linux/arm64; do
+            FIRST_RUN_TIMEOUT=300 bash scripts/first-run-check.sh "$IMAGE@$DIGEST" "$platform"
+          done
+      - name: Move latest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          highest="$(git tag --list 'v*.*.*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          if [[ "$GITHUB_REF_NAME" != "$highest" ]]; then
+            echo "Leaving :latest alone: $highest is higher than $GITHUB_REF_NAME"
+            exit 0
+          fi
+          docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE@$DIGEST"

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Each release image is started on `linux/amd64` and `linux/arm64` before it is published as `latest`, and `latest` only moves to the highest release. docs.kebivo.com serves `/.well-known/security.txt`.
 - Scope errors now include `details.required_scope` and tell you to create a new token with that scope; the example MCP client gives one-line token and connection errors without a traceback.
 
 ## 0.5.0 — 2026-11-27
