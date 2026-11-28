@@ -168,6 +168,15 @@ def test_existing_database_never_gets_new_keys(tmp_path: Path) -> None:
     with pytest.raises(SettingsError, match="SECRET_KEY"):
         generate({**env, "DATABASE_URL": f"sqlite:///{database}?timeout=5"})
     assert not path.exists()
+    with pytest.raises(SettingsError, match="SECRET_KEY"):
+        generate(
+            {
+                "KEBIVO_SECRETS_FILE": str(path),
+                "DATABASE_PATH": str(database),
+                "APP_ENV": "production",
+            }
+        )
+    assert not path.exists()
 
 
 def test_blank_environment_keys_use_generated_file(tmp_path: Path) -> None:

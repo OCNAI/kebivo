@@ -12,13 +12,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
+
 _DEVELOPMENT_ENCRYPTION_KEY = secrets.token_hex(32)
 
 PROJECT_CONFIG = Path(__file__).resolve().parents[1] / "config" / "project.json"
 
 
-def _same_database(database_url: str, database_path: str) -> bool:
-    url_path = database_url.removeprefix("sqlite:///").partition("?")[0]
+def _same_database(url_path: str, database_path: str) -> bool:
     if ":memory:" in (url_path, database_path):
         return url_path == database_path
     return Path(url_path).resolve() == Path(database_path).resolve()
@@ -128,7 +130,11 @@ class Settings:
         database_url = values.get("DATABASE_URL", "sqlite:///./data/app.sqlite3")
         if not database_url.startswith("sqlite:///"):
             raise SettingsError("DATABASE_URL must use SQLite for this application phase")
-        database_path = values.get("DATABASE_PATH", database_url.removeprefix("sqlite:///"))
+        try:
+            url_path = make_url(database_url).database or ""
+        except ArgumentError:
+            raise SettingsError("DATABASE_URL must be a valid SQLite URL") from None
+        database_path = values.get("DATABASE_PATH", url_path)
         if not database_path.strip():
             raise SettingsError("DATABASE_PATH must be non-empty")
         if environment == "production" and database_path == ":memory:":
@@ -138,7 +144,7 @@ class Settings:
             database_url = (
                 "sqlite://" if database_path == ":memory:" else f"sqlite:///{database_path}"
             )
-        elif "DATABASE_PATH" in values and not _same_database(database_url, database_path):
+        elif "DATABASE_PATH" in values and not _same_database(url_path, database_path):
             raise SettingsError(
                 "DATABASE_PATH and DATABASE_URL name different files; set only DATABASE_URL"
             )

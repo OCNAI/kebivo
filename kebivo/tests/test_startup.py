@@ -224,6 +224,44 @@ def test_startup_rejects_divergence_then_serves_the_upgraded_database(
         }
 
 
+def test_url_only_query_parameter_backs_up_the_served_database(
+    migrations: tuple[Path, Config], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database, config = migrations
+    command.upgrade(config, BEFORE_HEAD)
+    environment = {
+        **os.environ,
+        "DATABASE_URL": f"sqlite:///{database}?timeout=5",
+        "APP_ENV": "test",
+    }
+    environment.pop("DATABASE_PATH", None)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "kebivo.startup",
+            sys.executable,
+            "-c",
+            "from kebivo.app import create_app; print(create_app().state.engine.url.database)",
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert Path(result.stdout.splitlines()[-1]) == database
+    assert current_revision(database) == HEAD
+    with sqlite3.connect(database) as db:
+        assert "digest_weekday" in {row[1] for row in db.execute("PRAGMA table_info(destinations)")}
+    backup = database.with_name(f"pre-upgrade-{BEFORE_HEAD}.sqlite3")
+    assert current_revision(backup) == BEFORE_HEAD
+    with sqlite3.connect(backup) as db:
+        assert "digest_weekday" not in {
+            row[1] for row in db.execute("PRAGMA table_info(destinations)")
+        }
+
+
 def test_directory_fsync_failure_stops_before_pruning_or_migrating(
     migrations: tuple[Path, Config], monkeypatch: pytest.MonkeyPatch
 ) -> None:
