@@ -22,12 +22,13 @@ from kebivo.feedback.service import (
 )
 from kebivo.feedback_limits import FixedWindowLimiter
 from kebivo.models import Project
-from kebivo.tokens import ProjectTokenPrincipal, authorize_feedback
+from kebivo.tokens import ProjectTokenPrincipal, ScopeRequired, authorize_feedback
 
 
 @dataclass(frozen=True)
 class NotAuthorized(Exception):
     code: str
+    required_scope: str | None = None
 
 
 @dataclass(frozen=True)
@@ -95,9 +96,8 @@ async def ingest(
         authorize_feedback(principal, project, event_type)
     except HTTPException as exc:
         raise NotAuthorized(
-            "scope_required"
-            if exc.detail == "Project token scope required"
-            else "corrections_disabled"
+            "scope_required" if isinstance(exc, ScopeRequired) else "corrections_disabled",
+            exc.required_scope if isinstance(exc, ScopeRequired) else None,
         ) from None
     model = CorrectionSubmission if event_type == "knowledge_correction" else GapSubmission
     try:

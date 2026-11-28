@@ -1,11 +1,11 @@
 ---
 title: "Kebivo docs: self-hosted inbox for questions your chatbot couldn't answer"
-description: "Your chatbot app reports each question it couldn't answer over REST or MCP. Kebivo groups repeats and routes them to whoever fixes the docs. Self-hosted, no signup."
+description: "Your chatbot app reports each question it couldn't answer over REST or MCP. Kebivo groups repeats and routes them to you or your team. Self-hosted, no signup."
 ---
 
 # Kebivo documentation
 
-Kebivo is a self-hosted inbox for questions your chatbot couldn't answer. Your app reports each one over REST or MCP; Kebivo groups repeats and routes them to whoever can fix the docs. No signup needed.
+Kebivo is a self-hosted inbox for questions your chatbot couldn't answer. Your app reports each one over REST or MCP; Kebivo groups repeats and routes them to you or your team, so you can fix your docs. No signup needed.
 
 Kebivo does not answer questions or edit your knowledge base.
 
@@ -18,6 +18,7 @@ Use these pages for setup, integration and operations. Tutorials and framework g
 
 ## Connect an assistant
 
+- [Report from your own app](report-from-your-app.md): send an unanswered question from your app's fallback code.
 - [REST API](rest-api.md): submit gaps and corrections from application code, with idempotency and retries.
 - [MCP](mcp.md): give an MCP client the `report_knowledge_gap` tool, and understand scopes and tool visibility.
 

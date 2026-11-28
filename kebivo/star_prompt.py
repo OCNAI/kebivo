@@ -3,11 +3,30 @@
 from typing import Any
 
 from fastapi import APIRouter, Request, Response
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from kebivo.auth import AdminAuth
-from kebivo.models import FeedbackEvent, Project, now_utc
+from kebivo.models import FeedbackEvent, FeedbackEventTag, Project, Tag, now_utc
+
+# "Send test event" adds this tag. A client can add it too, which only hides a nudge.
+TEST_EVENT_TAG = "kebivo-test"
+
+
+def real_report_query() -> Select[tuple[str]]:
+    """One report that is neither sample data nor a "Send test event" event."""
+    test_event = (
+        select(FeedbackEventTag.event_id)
+        .join(Tag, Tag.id == FeedbackEventTag.tag_id)
+        .where(FeedbackEventTag.event_id == FeedbackEvent.id, Tag.name == TEST_EVENT_TAG)
+        .exists()
+    )
+    return (
+        select(FeedbackEvent.id)
+        .join(Project)
+        .where(Project.is_sample.is_(False), ~test_event)
+        .limit(1)
+    )
 
 
 def install_star_prompt_routes(app: Any) -> None:
@@ -17,11 +36,9 @@ def install_star_prompt_routes(app: Any) -> None:
     def status(request: Request, auth: AdminAuth) -> dict[str, bool]:
         admin, _, _ = auth
         db: Session = request.state.db
-        real_report = (
-            select(FeedbackEvent.id).join(Project).where(Project.is_sample.is_(False)).limit(1)
-        )
         return {
-            "show": admin.star_prompt_dismissed_at is None and db.scalar(real_report) is not None
+            "show": admin.star_prompt_dismissed_at is None
+            and db.scalar(real_report_query()) is not None
         }
 
     @router.post("/dismiss", status_code=204)

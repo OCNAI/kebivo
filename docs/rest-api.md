@@ -92,7 +92,7 @@ The `request_id` is also in the `X-Request-ID` response header; include it when 
 | --- | --- | --- | --- |
 | 400 | `bad_request`, `invalid_idempotency_key` | Malformed JSON, a body that is not an object, or an invalid `Idempotency-Key`. | No. Fix the request. |
 | 401 | `unauthorized` | Token missing, invalid, expired or revoked, or the project is disabled or archived. | No. Fix the token. |
-| 403 | `scope_required`, `corrections_disabled` | The token lacks the scope for this event type, or the project does not accept corrections. | No. |
+| 403 | `scope_required`, `corrections_disabled` | The token lacks the scope named in `details.required_scope`, or the project does not accept corrections. | No. For a missing scope, create a new token with that scope on the Projects page. |
 | 409 | `idempotency_conflict` | The key was used for different content. | No. Use a new key for a new report. |
 | 413 | `payload_too_large` | The body exceeds 131,072 bytes. | No. Shorten it. |
 | 415 | `unsupported_media_type` | `Content-Type` is not `application/json`. | No. |
@@ -115,7 +115,11 @@ Reporting feedback should never break your user's conversation. Send it in the b
 
 A token with the `gaps:read` scope can list its project's knowledge gaps, for example from a nightly job that writes the top questions into your docs repo. Correction groups are not included.
 
+Create a read token in the admin UI (project → **Project tokens**, with only `gaps:read` turned on) and paste it in place of `<READ_TOKEN>`:
+
 ```bash
+export KEBIVO_URL=http://127.0.0.1:8000
+export KEBIVO_READ_TOKEN='<READ_TOKEN>'
 curl -s "$KEBIVO_URL/api/v1/groups?status=open&sort=occurrences&limit=2" \
   -H "Authorization: Bearer $KEBIVO_READ_TOKEN"
 ```

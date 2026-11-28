@@ -122,9 +122,11 @@ test('02 inbox default filters', async () => {
   await expect(mobilePage.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeVisible();
   await mobilePage.goto('/inbox');
   await expect(mobilePage.getByRole('heading', { name: 'Group inbox', level: 1 })).toBeVisible();
-  const mobileShot = path.resolve(process.cwd(), '../artifacts/mobile-inbox-390.png');
-  mkdirSync(path.dirname(mobileShot), { recursive: true });
-  await mobilePage.screenshot({ path: mobileShot, fullPage: true });
+  // The phone shot shows the list, not the one-time star prompt (dismissing it lasts for this admin).
+  await mobilePage.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(mobilePage.getByRole('link', { name: 'Star on GitHub' })).toHaveCount(0);
+  await mobilePage.waitForLoadState('networkidle');
+  await mobilePage.screenshot({ path: path.join(OUT, '11-inbox-phone.png') });
   await mobile.close();
 });
 
