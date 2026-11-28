@@ -49,5 +49,5 @@ Out of scope: vulnerabilities in your reverse proxy, Docker host, LLM provider o
 - Project tokens are scoped (`feedback:gap`, `feedback:correction`), stored as keyed digests, shown once, can expire and can be revoked. They never authorize admin APIs.
 - Destination secrets and LLM provider keys are encrypted with AES-256-GCM using `ENCRYPTION_KEY`, are write-only in the API, and never appear in logs.
 - Webhooks and LLM provider calls block private, loopback and metadata addresses unless the destination or provider opts into private networks; metadata and link-local addresses are always blocked, also for SMTP. DNS is checked for each attempt and webhook redirects are not followed.
-- Logs contain request metadata and error categories, never feedback content or credentials.
+- Logs contain request metadata and error categories, never feedback content or credentials. Until an administrator exists, the startup log also prints a one-time `Kebivo setup: …/setup#token=…` URL that creates the administrator: keep it private until setup is done.
 - Feedback content is **not** encrypted at rest. Protect the data volume and backups as described in the [self-hosting guide](docs/self-hosting.md#secrets-and-what-to-protect).

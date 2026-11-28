@@ -7,6 +7,7 @@ import smtplib
 import socket
 import ssl
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from email.message import EmailMessage
 from email.policy import SMTP
@@ -138,6 +139,16 @@ def _mail(message: dict[str, Any], config: dict[str, Any]) -> EmailMessage:
     return mail
 
 
+RESOLVE_TIMEOUT = 5
+_RESOLVER = ThreadPoolExecutor(max_workers=4, thread_name_prefix="kebivo-smtp-dns")
+
+
+def _resolve(host: str, port: int) -> list[Any]:
+    # getaddrinfo has no timeout; bound it like the webhook path does.
+    future = _RESOLVER.submit(socket.getaddrinfo, host, port, type=socket.SOCK_STREAM)
+    return future.result(timeout=RESOLVE_TIMEOUT)
+
+
 class SmtpAdapter:
     async def send(
         self,
@@ -163,9 +174,7 @@ class SmtpAdapter:
                     raise ValueError
                 private = config.get("allow_private_network") is True
                 # Resolve once; every answer must pass, and only those answers are dialed.
-                results = socket.getaddrinfo(
-                    config["host"], config["port"], type=socket.SOCK_STREAM
-                )
+                results = _resolve(config["host"], config["port"])
                 if any(not isinstance(item[4][0], str) for item in results):
                     return failure("permanent", "blocked_destination")
                 addresses = list(

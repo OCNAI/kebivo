@@ -1,14 +1,15 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from starlette.requests import Request
 
 from kebivo.app import create_app
-from kebivo.auth import COOKIE_NAME, _digest, _peer_ip, create_admin
-from kebivo.models import AdminSession, AdminUser, AuditEvent, Base
+from kebivo.auth import COOKIE_NAME, _digest, _peer_ip, _private_digest, create_admin
+from kebivo.models import AdminSession, AdminUser, AuditEvent, Base, LoginAttempt
 from kebivo.settings import Settings
 
 ORIGIN = "https://admin.example.test"
@@ -128,21 +129,95 @@ def test_expired_session_and_wrong_origin_are_rejected(tmp_path: Path) -> None:
     app.state.engine.dispose()
 
 
-def test_login_throttle_is_bounded_by_identity_and_ip(tmp_path: Path) -> None:
-    client, app = make_client(tmp_path)
-    for _ in range(5):
-        response = client.post(
-            "/api/v1/auth/login",
-            json={"email": "unknown@example.test", "password": "wrong"},
-            headers={"Origin": ORIGIN},
-        )
-        assert response.status_code == 401
-    limited = client.post(
+def login_from(app: FastAPI, address: str, email: str, password: str) -> Any:
+    client = TestClient(app, base_url=ORIGIN, client=(address, 50000))
+    return client.post(
         "/api/v1/auth/login",
-        json={"email": "unknown@example.test", "password": "wrong"},
+        json={"email": email, "password": password},
         headers={"Origin": ORIGIN},
     )
+
+
+def test_login_lock_holds_one_address_without_locking_the_account(tmp_path: Path) -> None:
+    _, app = make_client(tmp_path)
+    for _ in range(5):
+        assert login_from(app, "192.0.2.10", "admin@example.test", "wrong").status_code == 401
+    limited = login_from(app, "192.0.2.10", "admin@example.test", "wrong")
     assert limited.status_code == 429
+    assert 890 <= int(limited.headers["retry-after"]) <= 901
+    assert limited.headers["retry-after"] in limited.json()["error"]["message"]
+    right = login_from(app, "192.0.2.10", "admin@example.test", "long-test-password")
+    assert right.status_code == 429
+    elsewhere = login_from(app, "192.0.2.20", "admin@example.test", "long-test-password")
+    assert elsewhere.status_code == 200
+    app.state.engine.dispose()
+
+
+def test_one_address_trying_many_emails_is_capped(tmp_path: Path) -> None:
+    _, app = make_client(tmp_path)
+    for index in range(20):
+        response = login_from(app, "192.0.2.10", f"user{index}@example.test", "wrong")
+        assert response.status_code == 401
+    limited = login_from(app, "192.0.2.10", "admin@example.test", "long-test-password")
+    assert limited.status_code == 429 and "retry-after" in limited.headers
+    assert login_from(app, "192.0.2.20", "admin@example.test", "long-test-password").status_code == 200
+    app.state.engine.dispose()
+
+
+def test_guessing_one_email_from_many_addresses_is_slowed(tmp_path: Path) -> None:
+    _, app = make_client(tmp_path)
+    for index in range(10):
+        response = login_from(app, f"198.51.100.{index}", "admin@example.test", "wrong")
+        assert response.status_code == 401
+    slowed = login_from(app, "198.51.100.200", "admin@example.test", "wrong")
+    assert slowed.status_code == 429 and slowed.headers["retry-after"] == "1"
+
+    settings = app.state.settings
+    identity = _private_digest(settings, "email:admin@example.test")
+    now = datetime.now(UTC)
+    with app.state.session_factory.begin() as db:
+        db.add_all(
+            LoginAttempt(
+                email=identity,
+                ip_address=_private_digest(settings, f"ip:203.0.113.{index}")[:40],
+                succeeded=False,
+                attempted_at=now - timedelta(seconds=30 - index),
+            )
+            for index in range(20)
+        )
+    capped = login_from(app, "198.51.100.201", "admin@example.test", "long-test-password")
+    assert capped.status_code == 429
+    assert 50 <= int(capped.headers["retry-after"]) <= 60
+
+    with app.state.session_factory.begin() as db:
+        db.execute(
+            update(LoginAttempt).values(attempted_at=now - timedelta(seconds=61))
+        )
+    allowed = login_from(app, "198.51.100.201", "admin@example.test", "long-test-password")
+    assert allowed.status_code == 200
+    app.state.engine.dispose()
+
+
+def test_wrong_origin_without_allowed_origins_points_to_https_or_a_tunnel(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(
+        "Kebivo", "test", "test-secret-key-for-auth-tests-000000", str(tmp_path / "lan.db")
+    )
+    app = create_app(settings)
+    Base.metadata.create_all(app.state.engine)
+    lan = "http://192.168.1.20:8000"
+    client = TestClient(app, base_url=lan)
+    for path, body in (
+        ("/api/v1/auth/login", {"email": "a@example.test", "password": "long-test-password"}),
+        ("/api/v1/auth/setup", {"token": "x", "email": "a@example.test", "password": "x" * 12}),
+    ):
+        response = client.post(path, json=body, headers={"Origin": lan})
+        assert response.status_code == 403
+        message = response.json()["error"]["message"]
+        assert "HTTPS reverse proxy" in message and "SSH or VPN tunnel" in message
+        assert "127.0.0.1" in message and "docs.kebivo.com/self-hosting" in message
+        assert "http:// origin" not in message and "APP_ENV" not in message
     app.state.engine.dispose()
 
 

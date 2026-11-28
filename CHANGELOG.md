@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Five failed sign-ins now lock one e-mail on one IP address for 15 minutes, not the account everywhere, so someone who only knows the administrator's e-mail can no longer keep them out. Twenty failures from one address lock that address. Failures for one e-mail from many addresses add a delay of up to 60 seconds between attempts. A throttled sign-in returns `429` with `Retry-After`, and the sign-in page says how long to wait. See [administrator access](docs/self-hosting.md#administrator-access).
+- Opening Kebivo at a plain-HTTP LAN address, such as `http://192.168.1.20:8000`, now tells you what works: an HTTPS reverse proxy, or an SSH or VPN tunnel to `127.0.0.1`. The startup error for an `http://` origin in `ALLOWED_ORIGINS` says the same. The self-hosting guide has a new [tunnel section](docs/self-hosting.md#no-certificate-use-a-tunnel) with an `ssh -L` example, and its Nginx example sets `Strict-Transport-Security`.
+- Email delivery gives up on a stalled DNS lookup after 5 seconds and retries later, as webhooks already did.
 - Scope errors now include `details.required_scope` and tell you to create a new token with that scope; the example MCP client gives one-line token and connection errors without a traceback.
 
 ## 0.5.0 — 2026-11-27
